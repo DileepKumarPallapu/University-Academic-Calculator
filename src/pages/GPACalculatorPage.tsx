@@ -204,17 +204,27 @@ export const GPACalculatorPage: React.FC = () => {
               </form>
             </div>
 
-            {/* Desktop & Tablet Subject Table */}
+            {/* Desktop & Tablet Subject Table with Stable, Centered Credits Column */}
             <div className="hidden md:block overflow-x-auto rounded-xl border border-[var(--border-primary)]">
-              <table className="w-full text-left text-sm">
+              <table className="w-full text-left text-sm border-collapse">
                 <thead>
-                  <tr className="apple-table-header">
-                    <th className="py-3 px-3.5">Subject</th>
-                    <th className="py-3 px-3 text-center w-20">Credits</th>
-                    <th className="py-3 px-3 w-28">Grade</th>
-                    <th className="py-3 px-3 text-center w-24">Grade Point</th>
-                    <th className="py-3 px-3 text-right w-24">Credits × GP</th>
-                    <th className="py-3 px-3 text-center w-12"></th>
+                  <tr className="bg-[var(--bg-primary)] border-b border-[var(--border-primary)]">
+                    <th className="py-3.5 px-4 font-semibold text-[14px] text-[var(--text-primary)]">
+                      Subject
+                    </th>
+                    <th className="py-3.5 px-3 font-semibold text-[14px] text-[var(--text-primary)] text-center w-[110px] min-w-[100px]">
+                      Credits
+                    </th>
+                    <th className="py-3.5 px-3 font-semibold text-[14px] text-[var(--text-primary)] text-center w-[110px] min-w-[100px]">
+                      Grade
+                    </th>
+                    <th className="py-3.5 px-3 font-semibold text-[14px] text-[var(--text-primary)] text-center w-[130px] min-w-[110px]">
+                      Grade Point
+                    </th>
+                    <th className="py-3.5 px-4 font-semibold text-[14px] text-[var(--text-primary)] text-right w-[150px] min-w-[130px]">
+                      Credits × GP
+                    </th>
+                    <th className="py-3.5 px-3 text-center w-[80px]"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -222,17 +232,20 @@ export const GPACalculatorPage: React.FC = () => {
                     const cred = Number(s.credits) || 0;
                     const pts = s.gradePoint ?? 0;
                     return (
-                      <tr key={s.id} className="apple-table-row">
-                        <td className="py-2.5 px-3.5">
+                      <tr key={s.id} className="bg-[var(--surface)] border-b border-[var(--border-secondary)] hover:bg-[var(--bg-tertiary)] transition-colors">
+                        {/* Subject Title */}
+                        <td className="py-3.5 px-4">
                           <input
                             type="text"
                             value={s.name}
                             placeholder={`Subject ${idx + 1}`}
                             onChange={(e) => handleSubjectChange(s.id, 'name', e.target.value)}
-                            className="w-full bg-transparent border-b border-transparent focus:border-[var(--text-primary)] outline-none text-[var(--text-primary)] font-medium placeholder:text-[var(--text-tertiary)]"
+                            className="w-full bg-transparent border-b border-transparent focus:border-[var(--text-primary)] outline-none text-[var(--text-primary)] font-medium placeholder:text-[var(--text-tertiary)] text-[15px]"
                           />
                         </td>
-                        <td className="py-2.5 px-3 text-center">
+
+                        {/* Credits Input Cell: 48px, High-contrast, Centered */}
+                        <td className="py-3 px-3 text-center w-[110px] min-w-[100px]">
                           <input
                             type="number"
                             inputMode="decimal"
@@ -242,14 +255,16 @@ export const GPACalculatorPage: React.FC = () => {
                             placeholder="0"
                             value={s.credits}
                             onChange={(e) => handleSubjectChange(s.id, 'credits', e.target.value)}
-                            className="apple-input text-center h-9 text-sm px-1"
+                            className="h-[48px] w-full max-w-[84px] mx-auto rounded-[10px] bg-[var(--surface)] text-[var(--text-primary)] border border-[var(--input-border)] text-center text-[16px] font-medium placeholder:text-[var(--text-tertiary)] outline-none focus:border-2 focus:border-[var(--text-primary)] focus:ring-2 focus:ring-black/10 dark:focus:ring-white/10 transition-all shadow-sm"
                           />
                         </td>
-                        <td className="py-2.5 px-3">
+
+                        {/* Grade Select */}
+                        <td className="py-3 px-3 text-center w-[110px] min-w-[100px]">
                           <select
                             value={s.grade}
                             onChange={(e) => handleSubjectChange(s.id, 'grade', e.target.value)}
-                            className="apple-input h-9 text-sm px-2 cursor-pointer font-semibold"
+                            className="h-[48px] w-full rounded-[10px] bg-[var(--surface)] text-[var(--text-primary)] border border-[var(--input-border)] text-center text-[15px] font-semibold cursor-pointer outline-none focus:border-2 focus:border-[var(--text-primary)] shadow-sm"
                           >
                             {gradeOptions.map((opt) => (
                               <option key={opt.grade} value={opt.grade}>
@@ -258,18 +273,24 @@ export const GPACalculatorPage: React.FC = () => {
                             ))}
                           </select>
                         </td>
-                        <td className="py-2.5 px-3 text-center font-semibold text-[var(--text-primary)] tabular-nums">
+
+                        {/* Grade Point */}
+                        <td className="py-3.5 px-3 text-center font-medium text-[16px] text-[var(--text-primary)] tabular-nums w-[130px] min-w-[110px]">
                           {pts}
                         </td>
-                        <td className="py-2.5 px-3 text-right font-bold text-[var(--text-primary)] tabular-nums">
+
+                        {/* Credits × GP */}
+                        <td className="py-3.5 px-4 text-right font-semibold text-[16px] text-[var(--text-primary)] tabular-nums w-[150px] min-w-[130px]">
                           {(cred * pts).toFixed(1)}
                         </td>
-                        <td className="py-2.5 px-3 text-center">
+
+                        {/* Remove Action */}
+                        <td className="py-3.5 px-3 text-center w-[80px]">
                           {subjects.length > 1 && (
                             <button
                               type="button"
                               onClick={() => handleRemoveSubject(s.id)}
-                              className="text-[var(--text-tertiary)] hover:text-[var(--danger)] transition-colors p-1"
+                              className="text-[var(--text-tertiary)] hover:text-[var(--danger)] transition-colors p-2 rounded-lg hover:bg-[var(--bg-primary)]"
                               aria-label={`Remove subject ${idx + 1}`}
                             >
                               <Trash2 className="w-4 h-4" />
@@ -291,7 +312,7 @@ export const GPACalculatorPage: React.FC = () => {
                 return (
                   <div
                     key={s.id}
-                    className="p-4 rounded-xl bg-[var(--surface)] border border-[var(--border-primary)] flex flex-col gap-3"
+                    className="p-5 rounded-xl bg-[var(--surface)] border border-[var(--border-primary)] flex flex-col gap-4 shadow-sm"
                   >
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
@@ -301,7 +322,7 @@ export const GPACalculatorPage: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => handleRemoveSubject(s.id)}
-                          className="text-[var(--text-tertiary)] hover:text-[var(--danger)] p-1"
+                          className="text-[var(--text-tertiary)] hover:text-[var(--danger)] p-1.5"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -313,12 +334,12 @@ export const GPACalculatorPage: React.FC = () => {
                       value={s.name}
                       placeholder={`Subject ${idx + 1}`}
                       onChange={(e) => handleSubjectChange(s.id, 'name', e.target.value)}
-                      className="apple-input h-10 text-sm"
+                      className="apple-input h-11 text-base font-medium"
                     />
 
                     <div className="grid grid-cols-2 gap-3 items-center">
-                      <div className="flex flex-col gap-1">
-                        <label className="text-xs font-medium text-[var(--text-secondary)]">
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-semibold text-[var(--text-primary)]">
                           Credits
                         </label>
                         <input
@@ -329,18 +350,18 @@ export const GPACalculatorPage: React.FC = () => {
                           placeholder="0"
                           value={s.credits}
                           onChange={(e) => handleSubjectChange(s.id, 'credits', e.target.value)}
-                          className="apple-input h-10 text-sm text-center"
+                          className="h-[48px] rounded-[10px] bg-[var(--surface)] text-[var(--text-primary)] border border-[var(--input-border)] text-center text-[16px] font-medium outline-none focus:border-2 focus:border-[var(--text-primary)] shadow-sm"
                         />
                       </div>
 
-                      <div className="flex flex-col gap-1">
-                        <label className="text-xs font-medium text-[var(--text-secondary)]">
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-semibold text-[var(--text-primary)]">
                           Grade
                         </label>
                         <select
                           value={s.grade}
                           onChange={(e) => handleSubjectChange(s.id, 'grade', e.target.value)}
-                          className="apple-input h-10 text-sm font-semibold cursor-pointer"
+                          className="h-[48px] rounded-[10px] bg-[var(--surface)] text-[var(--text-primary)] border border-[var(--input-border)] text-center text-[15px] font-semibold cursor-pointer outline-none focus:border-2 focus:border-[var(--text-primary)] shadow-sm"
                         >
                           {gradeOptions.map((opt) => (
                             <option key={opt.grade} value={opt.grade}>
@@ -351,11 +372,11 @@ export const GPACalculatorPage: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="pt-2 border-t border-[var(--border-secondary)] flex justify-between text-xs font-semibold">
-                      <span className="text-[var(--text-secondary)]">
-                        Grade Point: {pts}
+                    <div className="pt-3 border-t border-[var(--border-secondary)] flex justify-between items-center text-sm">
+                      <span className="text-[var(--text-secondary)] font-medium">
+                        Grade Point: <strong className="text-[var(--text-primary)]">{pts}</strong>
                       </span>
-                      <span className="text-[var(--text-primary)]">
+                      <span className="text-[var(--text-primary)] font-semibold">
                         Credits × GP = {(cred * pts).toFixed(1)}
                       </span>
                     </div>
@@ -414,7 +435,7 @@ export const GPACalculatorPage: React.FC = () => {
                 <span className="text-xs text-[var(--text-secondary)] font-medium">
                   Total Credits
                 </span>
-                <div className="text-2xl font-bold text-[var(--text-primary)] mt-1 tabular-nums">
+                <div className="text-[20px] sm:text-2xl font-semibold text-[var(--text-primary)] mt-1 tabular-nums">
                   {gpaResult.totalCredits}
                 </div>
               </div>
@@ -422,7 +443,7 @@ export const GPACalculatorPage: React.FC = () => {
                 <span className="text-xs text-[var(--text-secondary)] font-medium">
                   Subject Count
                 </span>
-                <div className="text-2xl font-bold text-[var(--text-primary)] mt-1 tabular-nums">
+                <div className="text-[20px] sm:text-2xl font-semibold text-[var(--text-primary)] mt-1 tabular-nums">
                   {subjects.length}
                 </div>
               </div>

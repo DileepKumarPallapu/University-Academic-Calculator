@@ -157,14 +157,22 @@ export const CGPACalculatorPage: React.FC = () => {
 
             {/* Desktop / Tablet Table */}
             <div className="hidden md:block overflow-x-auto rounded-xl border border-[var(--border-primary)]">
-              <table className="w-full text-left text-sm">
+              <table className="w-full text-left text-sm border-collapse">
                 <thead>
-                  <tr className="apple-table-header">
-                    <th className="py-3 px-4">Semester</th>
-                    <th className="py-3 px-3 text-center w-32">Semester SGPA</th>
-                    <th className="py-3 px-3 text-center w-32">Total Credits</th>
-                    <th className="py-3 px-4 text-right w-32">SGPA × Credits</th>
-                    <th className="py-3 px-3 text-center w-12"></th>
+                  <tr className="bg-[var(--bg-primary)] border-b border-[var(--border-primary)]">
+                    <th className="py-3.5 px-4 font-semibold text-[14px] text-[var(--text-primary)]">
+                      Semester
+                    </th>
+                    <th className="py-3.5 px-3 font-semibold text-[14px] text-[var(--text-primary)] text-center w-[140px] min-w-[120px]">
+                      Semester SGPA
+                    </th>
+                    <th className="py-3.5 px-3 font-semibold text-[14px] text-[var(--text-primary)] text-center w-[130px] min-w-[110px]">
+                      Total Credits
+                    </th>
+                    <th className="py-3.5 px-4 font-semibold text-[14px] text-[var(--text-primary)] text-right w-[150px] min-w-[130px]">
+                      SGPA × Credits
+                    </th>
+                    <th className="py-3.5 px-3 text-center w-[80px]"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -172,11 +180,11 @@ export const CGPACalculatorPage: React.FC = () => {
                     const g = typeof s.gpa === 'number' ? s.gpa : (parseFloat(s.gpa as string) || 0);
                     const c = typeof s.credits === 'number' ? s.credits : (parseFloat(s.credits as string) || 0);
                     return (
-                      <tr key={s.id} className="apple-table-row">
-                        <td className="py-2.5 px-4 font-semibold text-[var(--text-primary)]">
+                      <tr key={s.id} className="bg-[var(--surface)] border-b border-[var(--border-secondary)] hover:bg-[var(--bg-tertiary)] transition-colors">
+                        <td className="py-3.5 px-4 font-semibold text-[15px] text-[var(--text-primary)]">
                           Semester {s.semesterNumber}
                         </td>
-                        <td className="py-2.5 px-3 text-center">
+                        <td className="py-3 px-3 text-center w-[140px] min-w-[120px]">
                           <input
                             type="number"
                             inputMode="decimal"
@@ -186,10 +194,10 @@ export const CGPACalculatorPage: React.FC = () => {
                             placeholder="0"
                             value={s.gpa}
                             onChange={(e) => handleSemesterChange(s.id, 'gpa', e.target.value)}
-                            className="apple-input text-center h-9 text-sm px-2 font-semibold"
+                            className="h-[48px] w-full max-w-[100px] mx-auto rounded-[10px] bg-[var(--surface)] text-[var(--text-primary)] border border-[var(--input-border)] text-center text-[16px] font-semibold placeholder:text-[var(--text-tertiary)] outline-none focus:border-2 focus:border-[var(--text-primary)] focus:ring-2 focus:ring-black/10 dark:focus:ring-white/10 transition-all shadow-sm"
                           />
                         </td>
-                        <td className="py-2.5 px-3 text-center">
+                        <td className="py-3 px-3 text-center w-[130px] min-w-[110px]">
                           <input
                             type="number"
                             inputMode="decimal"
@@ -199,18 +207,18 @@ export const CGPACalculatorPage: React.FC = () => {
                             placeholder="0"
                             value={s.credits}
                             onChange={(e) => handleSemesterChange(s.id, 'credits', e.target.value)}
-                            className="apple-input text-center h-9 text-sm px-2 font-medium"
+                            className="h-[48px] w-full max-w-[90px] mx-auto rounded-[10px] bg-[var(--surface)] text-[var(--text-primary)] border border-[var(--input-border)] text-center text-[16px] font-medium placeholder:text-[var(--text-tertiary)] outline-none focus:border-2 focus:border-[var(--text-primary)] focus:ring-2 focus:ring-black/10 dark:focus:ring-white/10 transition-all shadow-sm"
                           />
                         </td>
-                        <td className="py-2.5 px-4 text-right font-bold text-[var(--text-primary)] tabular-nums">
+                        <td className="py-3.5 px-4 text-right font-semibold text-[16px] text-[var(--text-primary)] tabular-nums w-[150px] min-w-[130px]">
                           {(g * c).toFixed(1)}
                         </td>
-                        <td className="py-2.5 px-3 text-center">
+                        <td className="py-3.5 px-3 text-center w-[80px]">
                           {semesters.length > 1 && (
                             <button
                               type="button"
                               onClick={() => handleRemoveSemester(s.id)}
-                              className="text-[var(--text-tertiary)] hover:text-[var(--danger)] transition-colors p-1"
+                              className="text-[var(--text-tertiary)] hover:text-[var(--danger)] transition-colors p-2 rounded-lg hover:bg-[var(--bg-primary)]"
                               aria-label={`Remove semester ${s.semesterNumber}`}
                             >
                               <Trash2 className="w-4 h-4" />
@@ -232,7 +240,7 @@ export const CGPACalculatorPage: React.FC = () => {
                 return (
                   <div
                     key={s.id}
-                    className="p-4 rounded-xl bg-[var(--surface)] border border-[var(--border-primary)] flex flex-col gap-3"
+                    className="p-5 rounded-xl bg-[var(--surface)] border border-[var(--border-primary)] flex flex-col gap-4 shadow-sm"
                   >
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-bold text-[var(--text-primary)]">
@@ -242,7 +250,7 @@ export const CGPACalculatorPage: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => handleRemoveSemester(s.id)}
-                          className="text-[var(--text-tertiary)] hover:text-[var(--danger)] p-1"
+                          className="text-[var(--text-tertiary)] hover:text-[var(--danger)] p-1.5"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -250,8 +258,8 @@ export const CGPACalculatorPage: React.FC = () => {
                     </div>
 
                     <div className="grid grid-cols-2 gap-3 items-center">
-                      <div className="flex flex-col gap-1">
-                        <label className="text-xs font-medium text-[var(--text-secondary)]">
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-semibold text-[var(--text-primary)]">
                           Semester SGPA
                         </label>
                         <input
@@ -263,12 +271,12 @@ export const CGPACalculatorPage: React.FC = () => {
                           placeholder="0"
                           value={s.gpa}
                           onChange={(e) => handleSemesterChange(s.id, 'gpa', e.target.value)}
-                          className="apple-input h-10 text-sm text-center"
+                          className="h-[48px] rounded-[10px] bg-[var(--surface)] text-[var(--text-primary)] border border-[var(--input-border)] text-center text-[16px] font-semibold outline-none focus:border-2 focus:border-[var(--text-primary)] shadow-sm"
                         />
                       </div>
 
-                      <div className="flex flex-col gap-1">
-                        <label className="text-xs font-medium text-[var(--text-secondary)]">
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-semibold text-[var(--text-primary)]">
                           Credits
                         </label>
                         <input
@@ -279,13 +287,13 @@ export const CGPACalculatorPage: React.FC = () => {
                           placeholder="0"
                           value={s.credits}
                           onChange={(e) => handleSemesterChange(s.id, 'credits', e.target.value)}
-                          className="apple-input h-10 text-sm text-center"
+                          className="h-[48px] rounded-[10px] bg-[var(--surface)] text-[var(--text-primary)] border border-[var(--input-border)] text-center text-[16px] font-medium outline-none focus:border-2 focus:border-[var(--text-primary)] shadow-sm"
                         />
                       </div>
                     </div>
 
-                    <div className="pt-2 border-t border-[var(--border-secondary)] flex justify-between text-xs font-semibold">
-                      <span className="text-[var(--text-secondary)]">
+                    <div className="pt-3 border-t border-[var(--border-secondary)] flex justify-between items-center text-sm font-semibold">
+                      <span className="text-[var(--text-secondary)] font-medium">
                         Points Contribution
                       </span>
                       <span className="text-[var(--text-primary)]">
@@ -347,7 +355,7 @@ export const CGPACalculatorPage: React.FC = () => {
                 <span className="text-xs text-[var(--text-secondary)] font-medium">
                   Total Credits
                 </span>
-                <div className="text-2xl font-bold text-[var(--text-primary)] mt-1 tabular-nums">
+                <div className="text-[20px] sm:text-2xl font-semibold text-[var(--text-primary)] mt-1 tabular-nums">
                   {cgpaResult.totalCredits}
                 </div>
               </div>
@@ -355,7 +363,7 @@ export const CGPACalculatorPage: React.FC = () => {
                 <span className="text-xs text-[var(--text-secondary)] font-medium">
                   Semesters
                 </span>
-                <div className="text-2xl font-bold text-[var(--text-primary)] mt-1 tabular-nums">
+                <div className="text-[20px] sm:text-2xl font-semibold text-[var(--text-primary)] mt-1 tabular-nums">
                   {semesters.length}
                 </div>
               </div>
