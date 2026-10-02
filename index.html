@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M22 10v6M2 10l10-5 10 5-10 5z'/><path d='M6 12v5c0 2 2 3 6 3s6-1 6-3v-5'/></svg>" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+    <meta name="theme-color" content="#ffffff" id="theme-color-meta" />
+    <title>Academic Calculator — Internals, GPA & CGPA</title>
+    <meta name="description" content="Calculate university internal marks, GPA and CGPA with a clean, accurate academic calculator." />
+    
+    <!-- Open Graph Metadata -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Academic Calculator — Internals, GPA & CGPA" />
+    <meta property="og:description" content="Calculate university internal marks, GPA and CGPA with a clean, accurate academic calculator." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Academic Calculator — Internals, GPA & CGPA" />
+    <meta name="twitter:description" content="Calculate university internal marks, GPA and CGPA with a clean, accurate academic calculator." />
+    <script>
+      (function() {
+        try {
+          var saved = localStorage.getItem('academic_calculator_theme') || localStorage.getItem('academic_calc_theme');
+          var theme = (saved === 'light' || saved === 'dark') ? saved : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          document.documentElement.setAttribute('data-theme', theme);
+          if (theme === 'dark') {
+            document.documentElement.classList.add('dark');
+            document.documentElement.classList.remove('light');
+          } else {
+            document.documentElement.classList.remove('dark');
+            document.documentElement.classList.add('light');
+          }
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
