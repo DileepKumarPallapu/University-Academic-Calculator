@@ -19,6 +19,7 @@ export function App() {
             <Route path="/" element={<LandingPage />} />
             <Route path="/internals" element={<InternalCalculatorPage />} />
             <Route path="/gpa" element={<GPACalculatorPage />} />
+            <Route path="/sgpa" element={<GPACalculatorPage />} />
             <Route path="/cgpa" element={<CGPACalculatorPage />} />
             <Route path="/attendance" element={<AttendancePage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
