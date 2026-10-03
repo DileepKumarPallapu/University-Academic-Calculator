@@ -4,6 +4,7 @@ import {
   extractSubjectsFromText,
   computeAmsAuditSummary,
   normalizeSubjectCode,
+  parseStructuredAmsTextTable,
 } from './amsExtractor';
 
 describe('AMS Result Extractor', () => {
@@ -274,23 +275,111 @@ describe('AMS Result Extractor', () => {
     expect(finalAudit.sgpa).toBeCloseTo(182.5 / 23.5, 4);
   });
 
-  it('extracts student metadata from repeating tabular row layout', () => {
+  it('extracts student metadata from repeating tabular row layout with distinct Stu Id and Register No', () => {
     const tabularLine = `
-      1 24UECS0805 24UECS0805 PALLAPU DILEEP KUMAR B.Tech CSE (AIML) 2024-2025 10210BM101 Biology for Engineers Pass C
+      1 VTU29962 24UECS0805 PALLAPU DILEEP KUMAR B.Tech CSE (AIML) 2024-2025 10210BM101 Biology for Engineers Pass C
     `;
     const info = extractStudentInfo(tabularLine);
+    expect(info.studentId).toBe('VTU29962');
     expect(info.registerNumber).toBe('24UECS0805');
     expect(info.name).toBe('PALLAPU DILEEP KUMAR');
     expect(info.degree).toBe('B.Tech');
     expect(info.branch).toBe('CSE (AIML)');
     expect(info.batch).toBe('2024-2025');
+    expect(info.nameVerified).toBe(true);
 
     const subjects = extractSubjectsFromText(tabularLine, 'VTR21');
     expect(subjects.length).toBe(1);
+    expect(subjects[0].sno).toBe(1);
     expect(subjects[0].subjectCode).toBe('10210BM101');
     expect(subjects[0].subjectName).toBe('Biology for Engineers');
     expect(subjects[0].grade).toBe('C');
     expect(subjects[0].credits).toBe('');
+  });
+
+  it('merges multi-line wrapped course names across lines within SNo blocks', () => {
+    const multiLineAmsText = `
+      SNo Stu Id Register No Name Degree Branch Batch Coursecode Coursename Result Grade
+      1 VTU29962 24UECS0805 PALLAPU DILEEP KUMAR B.Tech CSE (AIML) 2024-2025 10210BM101 Biology for Engineers Pass C
+      2 VTU29962 24UECS0805 PALLAPU DILEEP KUMAR B.Tech CSE (AIML) 2024-2025 10210CS102 Computational Thinking for Problem
+      Solving Pass C
+      3 VTU29962 24UECS0805 PALLAPU DILEEP KUMAR B.Tech CSE (AIML) 2024-2025 10210CS302 Computational Thinking Laboratory Pass S
+      4 VTU29962 24UECS0805 PALLAPU DILEEP KUMAR B.Tech CSE (AIML) 2024-2025 10210EE201 Basic Electrical, Electronics & Measurement
+      Engineering Pass A
+    `;
+
+    const tableResult = parseStructuredAmsTextTable(multiLineAmsText, 'VTR21');
+
+    expect(tableResult.tableDetected).toBe(true);
+    expect(tableResult.detectedColumns).toContain('SNo');
+    expect(tableResult.detectedColumns).toContain('Coursecode');
+    expect(tableResult.detectedColumns).toContain('Coursename');
+    expect(tableResult.subjects.length).toBe(4);
+
+    // Multi-line merged title for row 2
+    expect(tableResult.subjects[1].sno).toBe(2);
+    expect(tableResult.subjects[1].subjectCode).toBe('10210CS102');
+    expect(tableResult.subjects[1].subjectName).toBe('Computational Thinking for Problem Solving');
+    expect(tableResult.subjects[1].grade).toBe('C');
+
+    // Multi-line merged title for row 4
+    expect(tableResult.subjects[3].sno).toBe(4);
+    expect(tableResult.subjects[3].subjectCode).toBe('10210EE201');
+    expect(tableResult.subjects[3].subjectName).toBe('Basic Electrical, Electronics & Measurement Engineering');
+    expect(tableResult.subjects[3].grade).toBe('A');
+
+    // Row accounting: rows 1..4 verified
+    expect(tableResult.detectedRowsCount).toBe(4);
+    expect(tableResult.extractedRowsCount).toBe(4);
+    expect(tableResult.missingRowNumbers).toEqual([]);
+    expect(tableResult.rowAccountingVerified).toBe(true);
+  });
+
+  it('detects missing row numbers when sequential SNo integrity is broken', () => {
+    const tableWithMissingRow = `
+      SNo Stu Id Register No Name Degree Branch Batch Coursecode Coursename Result Grade
+      1 VTU29962 24UECS0805 PALLAPU DILEEP KUMAR B.Tech CSE (AIML) 2024-2025 10210BM101 Biology for Engineers Pass C
+      2 VTU29962 24UECS0805 PALLAPU DILEEP KUMAR B.Tech CSE (AIML) 2024-2025 10210CS102 Computational Thinking Pass C
+      4 VTU29962 24UECS0805 PALLAPU DILEEP KUMAR B.Tech CSE (AIML) 2024-2025 10210EE201 Basic Electrical Engineering Pass A
+    `;
+
+    const tableResult = parseStructuredAmsTextTable(tableWithMissingRow, 'VTR21');
+
+    expect(tableResult.detectedRowsCount).toBe(3);
+    expect(tableResult.extractedRowsCount).toBe(3);
+    // Row 3 is missing between 2 and 4!
+    expect(tableResult.missingRowNumbers).toEqual([3]);
+    expect(tableResult.rowAccountingVerified).toBe(false);
+  });
+
+  it('treats Course Code as strictly optional without breaking extraction or SGPA calculation', () => {
+    const tableWithoutCourseCodes = `
+      1 Biology for Engineers Pass C
+      2 Computational Thinking Pass S
+    `;
+
+    const subjects = extractSubjectsFromText(tableWithoutCourseCodes, 'VTR21');
+    expect(subjects.length).toBe(2);
+
+    expect(subjects[0].sno).toBe(1);
+    expect(subjects[0].subjectCode).toBeNull();
+    expect(subjects[0].subjectName).toBe('Biology for Engineers');
+    expect(subjects[0].grade).toBe('C');
+    expect(subjects[0].gradePoint).toBe(7); // VTR21: C -> 7
+
+    expect(subjects[1].sno).toBe(2);
+    expect(subjects[1].subjectCode).toBeNull();
+    expect(subjects[1].subjectName).toBe('Computational Thinking');
+    expect(subjects[1].grade).toBe('S');
+    expect(subjects[1].gradePoint).toBe(10); // VTR21: S -> 10
+
+    // Provide credits: calculation works normally without course code
+    subjects[0].credits = 3;
+    subjects[1].credits = 4;
+    const audit = computeAmsAuditSummary(subjects);
+    expect(audit.totalCredits).toBe(7);
+    expect(audit.totalQualityPoints).toBe(3 * 7 + 4 * 10); // 21 + 40 = 61
+    expect(audit.sgpa).toBeCloseTo(61 / 7, 3);
   });
 });
 

@@ -21,11 +21,14 @@ export interface AmsStudentInfo {
   regulation: RegulationId | null;
   regulationConfidence: ConfidenceLevel;
   college: string;
+  studentNameMismatch?: boolean;
+  nameVerified?: boolean;
 }
 
 export interface AmsSubject {
   id: string;
-  subjectCode: string;
+  sno?: number;
+  subjectCode: string | null;
   subjectName: string;
   credits: number | '' | null;
   grade: string;
@@ -38,7 +41,7 @@ export interface AmsSubject {
   isExcluded: boolean;
   isManuallyEdited: boolean;
   originalValues?: {
-    subjectCode: string;
+    subjectCode: string | null;
     subjectName: string;
     credits: number | '' | null;
     grade: string;
@@ -66,6 +69,12 @@ export interface AmsExtractionResult {
   rawText: string;
   imageQualityWarning?: string;
   importedAt: number;
+  tableDetected?: boolean;
+  detectedColumns?: string[];
+  detectedRowsCount?: number;
+  extractedRowsCount?: number;
+  missingRowNumbers?: number[];
+  rowAccountingVerified?: boolean;
 }
 
 export interface AmsAuditSummary {
@@ -82,4 +91,10 @@ export interface AmsAuditSummary {
   sgpa: number | null;
   fieldsDetectedAutomatically?: string[];
   fieldsEnteredByUser?: string[];
+  detectedRowsCount?: number;
+  extractedRowsCount?: number;
+  missingRowNumbers?: number[];
+  rowAccountingVerified?: boolean;
+  studentNameVerified?: boolean;
+  creditsDetectedInSource?: boolean;
 }

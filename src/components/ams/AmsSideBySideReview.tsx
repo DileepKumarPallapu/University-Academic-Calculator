@@ -539,11 +539,15 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-semibold text-[var(--text-primary)] flex items-center justify-between">
                   <span>Student Name</span>
-                  {studentInfo.nameConfidence === 'high' ? (
+                  {studentInfo.nameVerified ? (
+                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5 font-medium">
+                      <Check className="w-3 h-3" /> Verified across table
+                    </span>
+                  ) : studentInfo.nameConfidence === 'high' ? (
                     <span className="text-[10px] text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5">
                       <Check className="w-3 h-3" /> Confidently detected
                     </span>
@@ -570,7 +574,7 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
 
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-semibold text-[var(--text-primary)] flex items-center justify-between">
-                  <span>Register Number / Roll No</span>
+                  <span>Register Number</span>
                   {studentInfo.regConfidence === 'high' ? (
                     <span className="text-[10px] text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5">
                       <Check className="w-3 h-3" /> Confidently detected
@@ -592,11 +596,34 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
                     }))
                   }
                   placeholder="e.g. 24UECS0805"
-                  className="apple-input text-sm h-10"
+                  className="apple-input text-sm h-10 font-mono"
                 />
               </div>
 
               <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-[var(--text-primary)] flex items-center justify-between">
+                  <span>Student ID (Stu Id)</span>
+                  {studentInfo.studentId && studentInfo.studentId.startsWith('VTU') && (
+                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono">
+                      VTU Portal
+                    </span>
+                  )}
+                </label>
+                <input
+                  type="text"
+                  value={studentInfo.studentId || ''}
+                  onChange={(e) =>
+                    setStudentInfo((prev) => ({
+                      ...prev,
+                      studentId: e.target.value,
+                    }))
+                  }
+                  placeholder="e.g. VTU29962"
+                  className="apple-input text-sm h-10 font-mono"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5 sm:col-span-2 lg:col-span-1">
                 <label className="text-xs font-semibold text-[var(--text-primary)]">
                   Degree & Branch
                 </label>
@@ -719,13 +746,32 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
           {/* Subjects Table Card */}
           <div className="apple-main-container p-6 flex flex-col gap-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[var(--border-secondary)] pb-3">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
                   Extracted Subjects ({subjects.length})
                 </span>
                 <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-[var(--bg-tertiary)] text-[var(--text-secondary)]">
                   {audit.creditBearingCount} Credit-bearing • {audit.nonCreditCount} Non-credit
                 </span>
+                {(audit.detectedRowsCount ?? 0) > 0 && (
+                  <span
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                      audit.rowAccountingVerified
+                        ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                        : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
+                    }`}
+                  >
+                    {audit.rowAccountingVerified ? (
+                      <>
+                        <Check className="w-3 h-3" /> All {audit.detectedRowsCount} rows accounted for
+                      </>
+                    ) : (
+                      <>
+                        <AlertTriangle className="w-3 h-3" /> Missing row(s): {(audit.missingRowNumbers ?? []).join(', ')}
+                      </>
+                    )}
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-2 self-start sm:self-auto">
                 <button
@@ -753,7 +799,8 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="border-b border-[var(--border-secondary)] text-[var(--text-secondary)] font-bold uppercase tracking-wider text-[10px]">
-                    <th className="py-2.5 px-2">Code</th>
+                    <th className="py-2.5 px-2 text-center w-10">#</th>
+                    <th className="py-2.5 px-2 w-28">Code</th>
                     <th className="py-2.5 px-2">Subject Name</th>
                     <th className="py-2.5 px-2 text-center w-20">Credits</th>
                     <th className="py-2.5 px-2 text-center w-20">Grade</th>
@@ -763,7 +810,7 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--border-secondary)]">
-                  {subjects.map((s) => {
+                  {subjects.map((s, idx) => {
                     const c = Number(s.credits) || 0;
                     const gp = s.gradePoint ?? 0;
                     const cp = c * gp;
@@ -779,16 +826,26 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
                             : 'hover:bg-[var(--bg-tertiary)]'
                         }`}
                       >
+                        {/* S.No */}
+                        <td className="py-2.5 px-2 text-center font-mono text-[11px] text-[var(--text-tertiary)]">
+                          {s.sno || idx + 1}
+                        </td>
+
                         {/* Code */}
                         <td className="py-2.5 px-2 font-mono font-semibold text-[var(--text-primary)]">
                           <input
                             type="text"
-                            value={s.subjectCode}
+                            value={s.subjectCode || ''}
                             onChange={(e) =>
-                              handleSubjectFieldChange(s.id, 'subjectCode', e.target.value.toUpperCase())
+                              handleSubjectFieldChange(
+                                s.id,
+                                'subjectCode',
+                                e.target.value.trim() ? e.target.value.toUpperCase() : null
+                              )
                             }
-                            placeholder="CODE"
-                            className="w-20 bg-transparent border-b border-transparent focus:border-[var(--text-primary)] outline-none font-mono font-bold text-xs"
+                            placeholder="—"
+                            className="w-24 bg-transparent border-b border-transparent focus:border-[var(--text-primary)] outline-none font-mono font-bold text-xs"
+                            title="Course code (optional)"
                           />
                         </td>
 
@@ -905,9 +962,14 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="font-mono text-xs font-bold text-[var(--text-primary)]">
-                        {s.subjectCode || `Row ${idx + 1}`}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[var(--bg-tertiary)] text-[var(--text-tertiary)] font-mono">
+                          #{s.sno || idx + 1}
+                        </span>
+                        <span className="font-mono text-xs font-bold text-[var(--text-primary)]">
+                          {s.subjectCode || '—'}
+                        </span>
+                      </div>
                       <button
                         type="button"
                         onClick={() => handleDeleteRow(s.id)}
