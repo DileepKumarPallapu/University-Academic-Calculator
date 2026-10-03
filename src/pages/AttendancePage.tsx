@@ -11,6 +11,7 @@ import { AcademicPrintReport } from '../components/common/AcademicPrintReport';
 import { useStudentProfile } from '../hooks/useStudentProfile';
 import { StudentNameInput } from '../components/common/StudentNameInput';
 import { ResultActionButtons } from '../components/common/ResultActionButtons';
+import { ResetConfirmModal } from '../components/common/ResetConfirmModal';
 import { saveRecentCalculation } from '../utils/recentCalculations';
 
 interface AttendanceRecord {
@@ -81,15 +82,37 @@ export const AttendancePage: React.FC = () => {
   const isValid = !errorMsg && attended <= (facultySessions || 0);
   const attendanceResult = calculateAttendance({ totalSessions, facultySessions, attended });
 
-  // Status Indicator
-  const getAttendanceStatus = (pct: number) => {
-    if (pct >= 90) return { label: 'Excellent Attendance', style: 'text-emerald-700 dark:text-emerald-400' };
-    if (pct >= 85) return { label: 'Good Attendance', style: 'text-emerald-700 dark:text-emerald-400' };
-    if (pct >= 75) return { label: 'Attendance Requirement Range', style: 'text-amber-700 dark:text-amber-400' };
-    return { label: 'Below 75%', style: 'text-red-700 dark:text-red-400' };
+  // Status Indicator - Regulatory Thresholds (No subjective labels)
+  const getAttendanceStatus = (pct: number, hasFaculty: boolean) => {
+    if (!hasFaculty) {
+      return {
+        label: 'No sessions recorded',
+        sublabel: 'Enter sessions to calculate eligibility',
+        style: 'text-[var(--text-secondary)]',
+      };
+    }
+    if (pct >= 75) {
+      return {
+        label: 'Eligible (≥ 75%)',
+        sublabel: 'Meets university minimum attendance requirement',
+        style: 'text-emerald-700 dark:text-emerald-400',
+      };
+    }
+    if (pct >= 65) {
+      return {
+        label: 'Condonation Range (65%–74%)',
+        sublabel: 'Subject to official condonation approval',
+        style: 'text-amber-700 dark:text-amber-400',
+      };
+    }
+    return {
+      label: 'Below Required Threshold (< 65%)',
+      sublabel: 'Below minimum condonation threshold',
+      style: 'text-red-700 dark:text-red-400',
+    };
   };
 
-  const status = getAttendanceStatus(attendanceResult.percentage);
+  const status = getAttendanceStatus(attendanceResult.percentage, facultySessions > 0);
 
   // Target Attendance Projection
   const targetPct = parseFloat(targetPercentageInput) || 75;
@@ -131,6 +154,10 @@ export const AttendancePage: React.FC = () => {
     setHistory((prev) => [newRecord, ...prev.slice(0, 9)]);
   };
 
+  // Reset confirmation state
+  const [showResetModal, setShowResetModal] = useState(false);
+  const isDirty = totalSessionsInput !== '0' || facultySessionsInput !== '0' || attendedInput !== '0' || futureSessionsInput !== '0' || futureAbsencesInput !== '0';
+
   // Reset action - sets everything to 0
   const handleReset = () => {
     setTotalSessionsInput('0');
@@ -140,6 +167,15 @@ export const AttendancePage: React.FC = () => {
     setFutureSessionsInput('0');
     setFutureAbsencesInput('0');
     setErrorMsg(null);
+    setShowResetModal(false);
+  };
+
+  const handleResetClick = () => {
+    if (isDirty) {
+      setShowResetModal(true);
+    } else {
+      handleReset();
+    }
   };
 
   return (
@@ -176,7 +212,7 @@ export const AttendancePage: React.FC = () => {
               </span>
               <button
                 type="button"
-                onClick={handleReset}
+                onClick={handleResetClick}
                 className="text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center gap-1.5"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
@@ -451,10 +487,15 @@ export const AttendancePage: React.FC = () => {
             </div>
 
             {/* Attendance Status Badge */}
-            <div className="flex items-center justify-between text-xs pt-1">
-              <span className={`font-semibold ${status.style}`}>{status.label}</span>
-              <span className="text-[var(--text-secondary)] text-[11px]">
-                {attendanceResult.percentage >= 75 ? 'Requirement range' : 'Under 75%'}
+            <div className="flex flex-col gap-1 text-xs pt-1">
+              <div className="flex items-center justify-between">
+                <span className={`font-semibold ${status.style}`}>{status.label}</span>
+                <span className="text-[var(--text-secondary)] text-[11px]">
+                  {facultySessions > 0 ? `${formatFixed(attendanceResult.percentage, 1)}%` : '—'}
+                </span>
+              </div>
+              <span className="text-[11px] text-[var(--text-secondary)]">
+                {status.sublabel}
               </span>
             </div>
 
@@ -544,6 +585,7 @@ export const AttendancePage: React.FC = () => {
     <AcademicPrintReport
       reportTitle="Attendance Report"
       calculatorName="Attendance Calculator"
+      reportType="ATTENDANCE"
       studentName={studentName}
       profile={profile}
       resultLabel="ATTENDANCE PERCENTAGE"
@@ -590,6 +632,14 @@ export const AttendancePage: React.FC = () => {
         </tfoot>
       </table>
     </AcademicPrintReport>
+
+    <ResetConfirmModal
+      isOpen={showResetModal}
+      onClose={() => setShowResetModal(false)}
+      onConfirm={handleReset}
+      title="Reset attendance calculation?"
+      description="Are you sure you want to reset all attendance session fields to 0? This action cannot be undone."
+    />
     </>
   );
 };

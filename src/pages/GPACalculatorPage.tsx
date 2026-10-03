@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, RotateCcw } from 'lucide-react';
 import { calculateGPA, formatFixed } from '../utils/calculations';
 import { REGULATIONS, type RegulationId } from '../config/university';
 import type { SubjectItem } from '../types';
@@ -9,6 +9,7 @@ import { useStudentProfile } from '../hooks/useStudentProfile';
 import { StudentNameInput } from '../components/common/StudentNameInput';
 import { GradeScaleModal } from '../components/common/GradeScaleModal';
 import { ResultActionButtons } from '../components/common/ResultActionButtons';
+import { ResetConfirmModal } from '../components/common/ResetConfirmModal';
 import { saveRecentCalculation } from '../utils/recentCalculations';
 import { useAppToast } from '../components/layout/AppShell';
 
@@ -123,6 +124,33 @@ export const GPACalculatorPage: React.FC = () => {
   const handleRemoveSubject = (id: string) => {
     if (subjects.length <= 1) return;
     setSubjects((prev) => prev.filter((s) => s.id !== id));
+  };
+
+  const [showResetModal, setShowResetModal] = useState(false);
+  const isDirty =
+    subjects.some((s, idx) => Number(s.credits) > 0 || (s.name && s.name !== `Subject ${idx + 1}`)) ||
+    subjects.length !== 6;
+
+  const handleReset = () => {
+    const defaultGrade = gradeOptions[0];
+    setSubjects([
+      { id: 'sub-1', name: 'Subject 1', credits: 0, grade: defaultGrade.grade, gradePoint: defaultGrade.points },
+      { id: 'sub-2', name: 'Subject 2', credits: 0, grade: defaultGrade.grade, gradePoint: defaultGrade.points },
+      { id: 'sub-3', name: 'Subject 3', credits: 0, grade: defaultGrade.grade, gradePoint: defaultGrade.points },
+      { id: 'sub-4', name: 'Subject 4', credits: 0, grade: defaultGrade.grade, gradePoint: defaultGrade.points },
+      { id: 'sub-5', name: 'Subject 5', credits: 0, grade: defaultGrade.grade, gradePoint: defaultGrade.points },
+      { id: 'sub-6', name: 'Subject 6', credits: 0, grade: defaultGrade.grade, gradePoint: defaultGrade.points },
+    ]);
+    setNameError(null);
+    setShowResetModal(false);
+  };
+
+  const handleResetClick = () => {
+    if (isDirty) {
+      setShowResetModal(true);
+    } else {
+      handleReset();
+    }
   };
 
   const gpaResult = calculateGPA(subjects);
@@ -463,16 +491,27 @@ export const GPACalculatorPage: React.FC = () => {
               })}
             </div>
 
-            {/* Action Buttons: Add Subject & Calculate SGPA */}
+            {/* Action Buttons: Add Subject, Reset & Calculate SGPA */}
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-[var(--border-primary)]">
-              <button
-                type="button"
-                onClick={handleAddSubject}
-                className="apple-btn-secondary w-full sm:w-auto h-[52px] text-[15px] font-semibold gap-2"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Add Subject</span>
-              </button>
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={handleAddSubject}
+                  className="apple-btn-secondary flex-1 sm:flex-initial h-[52px] text-[15px] font-semibold gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Add Subject</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResetClick}
+                  className="apple-btn-secondary h-[52px] px-4 text-[14px] font-semibold gap-1.5 text-[var(--text-secondary)] hover:text-rose-600"
+                  title="Reset calculation"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  <span>Reset</span>
+                </button>
+              </div>
               <button
                 type="button"
                 onClick={() => {
@@ -611,6 +650,7 @@ export const GPACalculatorPage: React.FC = () => {
     <AcademicPrintReport
       reportTitle="SGPA Report"
       calculatorName="SGPA Calculator"
+      reportType="SGPA"
       studentName={studentName}
       profile={profile}
       regulation={regulation}
@@ -694,6 +734,15 @@ export const GPACalculatorPage: React.FC = () => {
       isOpen={isGradeScaleOpen}
       onClose={() => setIsGradeScaleOpen(false)}
       regulation={regulation}
+    />
+
+    {/* Reset Confirmation Modal */}
+    <ResetConfirmModal
+      isOpen={showResetModal}
+      onClose={() => setShowResetModal(false)}
+      onConfirm={handleReset}
+      title="Reset SGPA calculation?"
+      description="Are you sure you want to reset all subjects to default starting values? This action cannot be undone."
     />
     </>
   );

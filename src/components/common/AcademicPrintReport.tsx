@@ -1,5 +1,5 @@
-import React from 'react';
-import { getFormattedCurrentDate } from '../../utils/date';
+import React, { useMemo } from 'react';
+import { getFormattedCurrentDate, generateReportId } from '../../utils/date';
 import { PrintQRCode } from './PrintQRCode';
 import type { StudentProfile } from '../../hooks/useStudentProfile';
 
@@ -49,6 +49,8 @@ interface AcademicPrintReportProps {
   regulation?: string;
   semester?: string | number;
   calculationType?: string;
+  reportType?: string;
+  reportId?: string;
   metaItems?: MetaItem[];
   resultLabel: string;
   resultValue: string | number;
@@ -69,6 +71,8 @@ export const AcademicPrintReport: React.FC<AcademicPrintReportProps> = ({
   regulation,
   semester,
   calculationType,
+  reportType,
+  reportId,
   metaItems = [],
   resultLabel,
   resultValue,
@@ -83,12 +87,26 @@ export const AcademicPrintReport: React.FC<AcademicPrintReportProps> = ({
   const currentDate = getFormattedCurrentDate();
   const displayName = (profile?.name || studentName || '').trim() || 'Student';
 
+  const finalReportId = useMemo(() => {
+    if (reportId) return reportId;
+    const typeCode = reportType || (calculatorName ? calculatorName.replace(/\s+/g, '') : 'REPORT');
+    return generateReportId(typeCode);
+  }, [reportId, reportType, calculatorName]);
+
   // Details for Student Information table
   const infoRows: { label: string; value: React.ReactNode; isPrimary?: boolean }[] = [
     {
       label: 'Student Name',
       value: displayName,
       isPrimary: true,
+    },
+    {
+      label: 'Report ID',
+      value: <span className="font-mono text-[11px] tracking-tight">{finalReportId}</span>,
+    },
+    {
+      label: 'Generated On',
+      value: currentDate,
     },
     ...(profile?.rollNumber
       ? [
@@ -146,17 +164,13 @@ export const AcademicPrintReport: React.FC<AcademicPrintReportProps> = ({
         ]
       : []),
     ...metaItems.map((m) => ({ label: m.label, value: m.value })),
-    {
-      label: 'Date',
-      value: currentDate,
-    },
   ];
 
   return (
     <div className="print-report-container print-report w-full bg-white text-[#1D1D1F] p-0 m-0">
       {/* Upper Content Section */}
       <div className="report-content w-full">
-        {/* 1. Header: Brand, Document Category, Date & Small Verification QR */}
+        {/* 1. Header: Brand, Document Category, Date, Report ID & Small Verification QR */}
         <header className="print-header border-b border-[#D2D2D7] pb-3 mb-4">
           <div className="flex justify-between items-start gap-4">
             <div>
@@ -169,12 +183,15 @@ export const AcademicPrintReport: React.FC<AcademicPrintReportProps> = ({
             </div>
 
             <div className="flex items-start gap-3.5 text-right">
-              <div className="flex flex-col items-end pt-1">
+              <div className="flex flex-col items-end pt-0.5">
                 <span className="text-[10px] font-bold text-[#86868B] uppercase tracking-wider block">
                   Official Academic Report
                 </span>
                 <span className="text-[11px] font-semibold text-[#1D1D1F] mt-0.5">
                   {currentDate}
+                </span>
+                <span className="text-[9px] text-[#86868B] font-mono tracking-wide mt-0.5">
+                  {finalReportId}
                 </span>
               </div>
               <PrintQRCode />

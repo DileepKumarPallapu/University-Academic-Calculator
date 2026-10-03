@@ -12,6 +12,7 @@ import { AcademicPrintReport } from '../components/common/AcademicPrintReport';
 import { useStudentProfile } from '../hooks/useStudentProfile';
 import { StudentNameInput } from '../components/common/StudentNameInput';
 import { ResultActionButtons } from '../components/common/ResultActionButtons';
+import { ResetConfirmModal } from '../components/common/ResetConfirmModal';
 import { saveRecentCalculation } from '../utils/recentCalculations';
 
 export const InternalCalculatorPage: React.FC = () => {
@@ -61,6 +62,12 @@ export const InternalCalculatorPage: React.FC = () => {
     setIntegrated((prev) => ({ ...prev, [field]: Math.max(0, Math.min(max, num)) }));
   };
 
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [resetTarget, setResetTarget] = useState<'theory' | 'integrated'>('theory');
+
+  const isTheoryDirty = Number(theory.test1) > 0 || Number(theory.test2) > 0 || Number(theory.test3) > 0 || Number(theory.attendance) > 0 || Number(theory.assignment) > 0;
+  const isIntegratedDirty = Number(integrated.mid1) > 0 || Number(integrated.mid2) > 0 || Number(integrated.lab) > 0 || Number(integrated.attendance) > 0 || Number(integrated.assignment) > 0;
+
   const loadTheoryExample = () => {
     setTheory({
       test1: 24,
@@ -79,6 +86,16 @@ export const InternalCalculatorPage: React.FC = () => {
       attendance: 0,
       assignment: 0,
     });
+    setShowResetModal(false);
+  };
+
+  const handleResetTheoryClick = () => {
+    if (isTheoryDirty) {
+      setResetTarget('theory');
+      setShowResetModal(true);
+    } else {
+      resetTheory();
+    }
   };
 
   const loadIntegratedExample = () => {
@@ -99,6 +116,16 @@ export const InternalCalculatorPage: React.FC = () => {
       attendance: 0,
       assignment: 0,
     });
+    setShowResetModal(false);
+  };
+
+  const handleResetIntegratedClick = () => {
+    if (isIntegratedDirty) {
+      setResetTarget('integrated');
+      setShowResetModal(true);
+    } else {
+      resetIntegrated();
+    }
   };
 
   const theoryResult = calculateTheoryInternal(theory);
@@ -187,7 +214,7 @@ export const InternalCalculatorPage: React.FC = () => {
                     <span className="text-[var(--text-tertiary)] text-xs">•</span>
                     <button
                       type="button"
-                      onClick={resetTheory}
+                      onClick={handleResetTheoryClick}
                       className="text-xs font-semibold text-[var(--text-primary)] hover:underline"
                     >
                       Reset to 0
@@ -347,7 +374,7 @@ export const InternalCalculatorPage: React.FC = () => {
                     <span className="text-[var(--text-tertiary)] text-xs">•</span>
                     <button
                       type="button"
-                      onClick={resetIntegrated}
+                      onClick={handleResetIntegratedClick}
                       className="text-xs font-semibold text-[var(--text-primary)] hover:underline"
                     >
                       Reset to 0
@@ -675,6 +702,7 @@ export const InternalCalculatorPage: React.FC = () => {
     <AcademicPrintReport
       reportTitle="Internal Marks Report"
       calculatorName="Internal Marks Calculator"
+      reportType="INTERNAL"
       studentName={studentName}
       profile={profile}
       calculationType={activeTab === 'theory' ? 'Theory Internal' : 'Integrated Internal'}
@@ -780,6 +808,14 @@ export const InternalCalculatorPage: React.FC = () => {
         </tfoot>
       </table>
     </AcademicPrintReport>
+
+    <ResetConfirmModal
+      isOpen={showResetModal}
+      onClose={() => setShowResetModal(false)}
+      onConfirm={resetTarget === 'theory' ? resetTheory : resetIntegrated}
+      title={`Reset ${resetTarget === 'theory' ? 'Theory' : 'Integrated'} marks?`}
+      description={`Are you sure you want to reset all entered ${resetTarget === 'theory' ? 'Theory' : 'Integrated'} assessment marks to 0? This action cannot be undone.`}
+    />
     </>
   );
 };

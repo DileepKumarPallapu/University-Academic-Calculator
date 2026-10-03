@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, RotateCcw } from 'lucide-react';
 import { calculateCGPA, formatFixed } from '../utils/calculations';
 import { REGULATIONS, type RegulationId } from '../config/university';
 import type { SemesterItem } from '../types';
@@ -9,6 +9,7 @@ import { useStudentProfile } from '../hooks/useStudentProfile';
 import { StudentNameInput } from '../components/common/StudentNameInput';
 import { GradeScaleModal } from '../components/common/GradeScaleModal';
 import { ResultActionButtons } from '../components/common/ResultActionButtons';
+import { ResetConfirmModal } from '../components/common/ResetConfirmModal';
 import { saveRecentCalculation } from '../utils/recentCalculations';
 
 export const CGPACalculatorPage: React.FC = () => {
@@ -91,6 +92,28 @@ export const CGPACalculatorPage: React.FC = () => {
   const handleRemoveSemester = (id: string) => {
     if (semesters.length <= 1) return;
     setSemesters((prev) => prev.filter((s) => s.id !== id));
+  };
+
+  const [showResetModal, setShowResetModal] = useState(false);
+  const isDirty = semesters.some((s) => Number(s.gpa) > 0 || Number(s.credits) > 0) || semesters.length !== 5;
+
+  const handleReset = () => {
+    setSemesters([
+      { id: 'sem-1', semesterNumber: 1, gpa: 0, credits: 0 },
+      { id: 'sem-2', semesterNumber: 2, gpa: 0, credits: 0 },
+      { id: 'sem-3', semesterNumber: 3, gpa: 0, credits: 0 },
+      { id: 'sem-4', semesterNumber: 4, gpa: 0, credits: 0 },
+      { id: 'sem-5', semesterNumber: 5, gpa: 0, credits: 0 },
+    ]);
+    setShowResetModal(false);
+  };
+
+  const handleResetClick = () => {
+    if (isDirty) {
+      setShowResetModal(true);
+    } else {
+      handleReset();
+    }
   };
 
   const cgpaResult = calculateCGPA(semesters);
@@ -346,16 +369,27 @@ export const CGPACalculatorPage: React.FC = () => {
               })}
             </div>
 
-            {/* Action Buttons: Add Semester & Calculate CGPA */}
+            {/* Action Buttons: Add Semester, Reset & Calculate CGPA */}
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-[var(--border-primary)]">
-              <button
-                type="button"
-                onClick={handleAddSemester}
-                className="apple-btn-secondary w-full sm:w-auto h-[52px] text-[15px] font-semibold gap-2"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Add Semester</span>
-              </button>
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={handleAddSemester}
+                  className="apple-btn-secondary flex-1 sm:flex-initial h-[52px] text-[15px] font-semibold gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Add Semester</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResetClick}
+                  className="apple-btn-secondary h-[52px] px-4 text-[14px] font-semibold gap-1.5 text-[var(--text-secondary)] hover:text-rose-600"
+                  title="Reset calculation"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  <span>Reset</span>
+                </button>
+              </div>
               <button
                 type="button"
                 onClick={() => {
@@ -460,6 +494,7 @@ export const CGPACalculatorPage: React.FC = () => {
     <AcademicPrintReport
       reportTitle="CGPA Report"
       calculatorName="CGPA Calculator"
+      reportType="CGPA"
       studentName={studentName}
       profile={profile}
       regulation={regulation}
@@ -524,6 +559,15 @@ export const CGPACalculatorPage: React.FC = () => {
       isOpen={isGradeScaleOpen}
       onClose={() => setIsGradeScaleOpen(false)}
       regulation={regulation}
+    />
+
+    {/* Reset Confirmation Modal */}
+    <ResetConfirmModal
+      isOpen={showResetModal}
+      onClose={() => setShowResetModal(false)}
+      onConfirm={handleReset}
+      title="Reset CGPA calculation?"
+      description="Are you sure you want to reset all semester grades and credits to 0? This action cannot be undone."
     />
     </>
   );

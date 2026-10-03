@@ -15,7 +15,16 @@ export const LandingPage: React.FC = () => {
           Simple tools for your academic calculations.
         </p>
 
-        <div className="mt-8">
+        {/* Feature badge */}
+        <div className="inline-flex items-center gap-2 mt-4 px-3.5 py-1.5 rounded-full bg-[var(--surface)] border border-[var(--border-primary)] text-[12px] font-medium text-[var(--text-secondary)] shadow-xs">
+          <span>Works offline</span>
+          <span className="text-[var(--text-tertiary)]">•</span>
+          <span>Mobile friendly</span>
+          <span className="text-[var(--text-tertiary)]">•</span>
+          <span>PDF reports</span>
+        </div>
+
+        <div className="mt-7">
           <Link to="/internals" className="apple-btn-primary gap-2.5">
             <span>Start Calculating</span>
             <ArrowRight className="w-4 h-4" />
@@ -114,6 +123,44 @@ export const LandingPage: React.FC = () => {
               <ArrowRight className="w-4 h-4 text-[var(--text-primary)] transition-transform group-hover:translate-x-1" />
             </div>
           </Link>
+        </div>
+      </section>
+
+      {/* How It Works Section */}
+      <section className="w-full">
+        <div className="text-center mb-8">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)] block">
+            Workflow
+          </span>
+          <h3 className="text-[24px] sm:text-[28px] font-semibold text-[var(--text-primary)] tracking-tight mt-1">
+            How it works
+          </h3>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="apple-card p-6 flex flex-col gap-2.5">
+            <span className="text-[24px] font-bold text-[var(--text-tertiary)] font-mono">01</span>
+            <h4 className="text-[17px] font-semibold text-[var(--text-primary)]">Enter</h4>
+            <p className="text-[14px] text-[var(--text-secondary)] leading-relaxed">
+              Enter your academic details, course marks, credits, or session attendance.
+            </p>
+          </div>
+
+          <div className="apple-card p-6 flex flex-col gap-2.5">
+            <span className="text-[24px] font-bold text-[var(--text-tertiary)] font-mono">02</span>
+            <h4 className="text-[17px] font-semibold text-[var(--text-primary)]">Calculate</h4>
+            <p className="text-[14px] text-[var(--text-secondary)] leading-relaxed">
+              Get your result instantly with transparent mathematical formulas and breakdowns.
+            </p>
+          </div>
+
+          <div className="apple-card p-6 flex flex-col gap-2.5">
+            <span className="text-[24px] font-bold text-[var(--text-tertiary)] font-mono">03</span>
+            <h4 className="text-[17px] font-semibold text-[var(--text-primary)]">Download</h4>
+            <p className="text-[14px] text-[var(--text-secondary)] leading-relaxed">
+              Save a professional A4 PDF report complete with official Report ID and verification QR.
+            </p>
+          </div>
         </div>
       </section>
 
