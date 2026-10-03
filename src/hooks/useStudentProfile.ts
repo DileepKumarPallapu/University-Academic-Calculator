@@ -52,6 +52,7 @@ export const useStudentProfile = () => {
         if (updates.name !== undefined) {
           localStorage.setItem(LEGACY_NAME_STORAGE_KEY, updates.name);
         }
+        window.dispatchEvent(new Event('student-profile-updated'));
       } catch {
         // ignore
       }
@@ -59,22 +60,50 @@ export const useStudentProfile = () => {
     });
   }, []);
 
-  // Sync if storage changes in another tab
+  const clearProfile = useCallback(() => {
+    setProfileState(defaultProfile);
+    setNameError(null);
+    try {
+      localStorage.removeItem(STUDENT_PROFILE_STORAGE_KEY);
+      localStorage.removeItem(LEGACY_NAME_STORAGE_KEY);
+      window.dispatchEvent(new Event('student-profile-updated'));
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  // Sync if storage changes in another tab or in same window
   useEffect(() => {
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === STUDENT_PROFILE_STORAGE_KEY && e.newValue) {
-        try {
-          setProfileState(JSON.parse(e.newValue));
-        } catch {
-          // ignore
+    const reloadFromStorage = () => {
+      try {
+        const saved = localStorage.getItem(STUDENT_PROFILE_STORAGE_KEY);
+        if (saved) {
+          setProfileState({ ...defaultProfile, ...JSON.parse(saved) });
+          return;
         }
-      } else if (e.key === LEGACY_NAME_STORAGE_KEY && e.newValue !== null) {
-        setProfileState((prev) => ({ ...prev, name: e.newValue || '' }));
+        const legacyName = localStorage.getItem(LEGACY_NAME_STORAGE_KEY);
+        if (legacyName) {
+          setProfileState({ ...defaultProfile, name: legacyName });
+          return;
+        }
+        setProfileState(defaultProfile);
+      } catch {
+        // ignore
+      }
+    };
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === STUDENT_PROFILE_STORAGE_KEY || e.key === LEGACY_NAME_STORAGE_KEY) {
+        reloadFromStorage();
       }
     };
 
     window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
+    window.addEventListener('student-profile-updated', reloadFromStorage);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('student-profile-updated', reloadFromStorage);
+    };
   }, []);
 
   const validateForPrint = useCallback((): boolean => {
@@ -91,6 +120,8 @@ export const useStudentProfile = () => {
     studentName: profile.name,
     setStudentName: (name: string) => updateProfile({ name }),
     updateProfile,
+    clearProfile,
+    hasProfile: Boolean(profile.name.trim()),
     nameError,
     setNameError,
     validateForPrint,

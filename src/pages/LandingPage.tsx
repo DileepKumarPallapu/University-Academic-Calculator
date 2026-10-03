@@ -1,9 +1,22 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Calculator, Award, Layers, Clock, ShieldCheck } from 'lucide-react';
+import { ArrowRight, Calculator, Award, Layers, Clock, ShieldCheck, Trash2 } from 'lucide-react';
+import { AcademicSummaryCard } from '../components/common/AcademicSummaryCard';
 import { RecentCalculationsList } from '../components/common/RecentCalculationsList';
+import { ResetConfirmModal } from '../components/common/ResetConfirmModal';
+import { clearAllLocalAcademicData } from '../utils/recentCalculations';
+import { useAppToast } from '../components/layout/AppShell';
 
 export const LandingPage: React.FC = () => {
+  const [showClearModal, setShowClearModal] = useState(false);
+  const { showToast } = useAppToast();
+
+  const handleClearAll = () => {
+    clearAllLocalAcademicData();
+    setShowClearModal(false);
+    showToast('All locally stored academic data cleared.', 'info');
+  };
+
   return (
     <div className="apple-page-enter flex flex-col items-center gap-12 sm:gap-16 max-w-[1200px] mx-auto">
       {/* Hero Section */}
@@ -126,6 +139,16 @@ export const LandingPage: React.FC = () => {
         </div>
       </section>
 
+      {/* Academic Summary Section */}
+      <section className="w-full">
+        <AcademicSummaryCard />
+      </section>
+
+      {/* Recent Calculations Section */}
+      <section className="w-full">
+        <RecentCalculationsList />
+      </section>
+
       {/* How It Works Section */}
       <section className="w-full">
         <div className="text-center mb-8">
@@ -164,18 +187,34 @@ export const LandingPage: React.FC = () => {
         </div>
       </section>
 
-      {/* Recent Calculations Section */}
-      <section className="w-full">
-        <RecentCalculationsList />
-      </section>
-
-      {/* Privacy Notice */}
-      <section className="w-full max-w-[700px] -mt-4">
-        <div className="flex items-center justify-center gap-2.5 text-xs text-[var(--text-secondary)] text-center py-3 px-5 rounded-xl bg-[var(--surface)] border border-[var(--border-primary)]">
-          <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-          <span>Your calculations are processed locally in your browser. No account is required.</span>
+      {/* Privacy Notice & Clear Local Data */}
+      <section className="w-full max-w-[760px] -mt-4 flex flex-col items-center gap-3">
+        <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[var(--text-secondary)] py-3.5 px-5 rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)]">
+          <div className="flex items-center gap-2.5 text-left">
+            <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <span>
+              All student data, grades, and recent calculations are stored locally in your browser. No server storage or account is required.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowClearModal(true)}
+            className="text-xs font-semibold text-[var(--text-secondary)] hover:text-rose-600 flex items-center gap-1.5 whitespace-nowrap px-2.5 py-1 rounded-lg border border-[var(--border-secondary)] hover:border-rose-300 dark:hover:border-rose-800 transition-colors cursor-pointer"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Clear Local Data</span>
+          </button>
         </div>
       </section>
+
+      {/* Clear Data Confirmation Modal */}
+      <ResetConfirmModal
+        isOpen={showClearModal}
+        onClose={() => setShowClearModal(false)}
+        onConfirm={handleClearAll}
+        title="Clear all local academic data?"
+        description="This will permanently remove your stored academic profile, calculation history, attendance logs, and local preferences from this device."
+      />
     </div>
   );
 };

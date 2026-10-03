@@ -2,8 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ChevronDown, RotateCcw, BookmarkPlus, Calendar } from 'lucide-react';
 import {
   calculateAttendance,
-  calculateRequiredAttendance,
-  calculateProjectedAttendance,
+  roundTo,
   formatFixed,
 } from '../utils/calculations';
 import { PrintButton } from '../components/common/PrintButton';
@@ -40,7 +39,6 @@ export const AttendancePage: React.FC = () => {
   const [planExpanded, setPlanExpanded] = useState<boolean>(false);
   const [targetPercentageInput, setTargetPercentageInput] = useState<string>('75');
   const [futureSessionsInput, setFutureSessionsInput] = useState<string>('0');
-  const [futureAbsencesInput, setFutureAbsencesInput] = useState<string>('0');
 
   // History state saved in localStorage
   const [history, setHistory] = useState<AttendanceRecord[]>(() => {
@@ -114,28 +112,6 @@ export const AttendancePage: React.FC = () => {
 
   const status = getAttendanceStatus(attendanceResult.percentage, facultySessions > 0);
 
-  // Target Attendance Projection
-  const targetPct = parseFloat(targetPercentageInput) || 75;
-  const targetCalc = isValid && facultySessions > 0
-    ? calculateRequiredAttendance({
-        currentAttended: attended,
-        currentFacultySessions: facultySessions,
-        targetPercentage: targetPct,
-      })
-    : { requiredSessions: 0, projectedPercentage: 0 };
-
-  // Future Absences Projection
-  const futureSessions = parseFloat(futureSessionsInput) || 0;
-  const futureAbsences = parseFloat(futureAbsencesInput) || 0;
-  const futureCalc = isValid
-    ? calculateProjectedAttendance({
-        attended,
-        facultySessions,
-        futureSessions,
-        futureAbsences,
-      })
-    : { futureAttended: attended, futureTotal: facultySessions, projectedPercentage: attendanceResult.percentage };
-
   // Save result to history
   const handleSaveResult = () => {
     if (!isValid || facultySessions === 0) return;
@@ -156,7 +132,7 @@ export const AttendancePage: React.FC = () => {
 
   // Reset confirmation state
   const [showResetModal, setShowResetModal] = useState(false);
-  const isDirty = totalSessionsInput !== '0' || facultySessionsInput !== '0' || attendedInput !== '0' || futureSessionsInput !== '0' || futureAbsencesInput !== '0';
+  const isDirty = totalSessionsInput !== '0' || facultySessionsInput !== '0' || attendedInput !== '0' || futureSessionsInput !== '0';
 
   // Reset action - sets everything to 0
   const handleReset = () => {
@@ -165,7 +141,6 @@ export const AttendancePage: React.FC = () => {
     setAttendedInput('0');
     setTargetPercentageInput('75');
     setFutureSessionsInput('0');
-    setFutureAbsencesInput('0');
     setErrorMsg(null);
     setShowResetModal(false);
   };
@@ -314,15 +289,20 @@ export const AttendancePage: React.FC = () => {
             </div>
           </div>
 
-          {/* Expandable Planning Section: Plan your attendance */}
+          {/* Expandable Planning Section: PLAN YOUR ATTENDANCE */}
           <div className="apple-main-container p-6 flex flex-col gap-4">
             <button
               type="button"
               onClick={() => setPlanExpanded((prev) => !prev)}
-              className="flex items-center justify-between text-base font-semibold text-[var(--text-primary)]"
+              className="flex items-center justify-between text-base font-semibold text-[var(--text-primary)] cursor-pointer"
               aria-expanded={planExpanded}
             >
-              <span>Plan your attendance</span>
+              <div className="flex items-center gap-2">
+                <span>Plan your attendance</span>
+                <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--bg-tertiary)] text-[var(--text-secondary)] font-normal">
+                  Optional
+                </span>
+              </div>
               <ChevronDown
                 className={`w-4 h-4 text-[var(--text-tertiary)] transition-transform ${
                   planExpanded ? 'rotate-180' : ''
@@ -331,93 +311,203 @@ export const AttendancePage: React.FC = () => {
             </button>
 
             {planExpanded && (
-              <div className="pt-4 border-t border-[var(--border-secondary)] flex flex-col gap-6 text-sm animate-appleFadeIn">
-                {/* 1. Target Attendance */}
-                <div className="flex flex-col gap-3">
-                  <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-                    1. Target Attendance
-                  </span>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
-                    <div className="flex flex-col gap-1.5">
-                      <label htmlFor="target-pct" className="apple-label text-xs">
-                        Target Attendance %
-                      </label>
-                      <input
-                        id="target-pct"
-                        type="number"
-                        inputMode="decimal"
-                        min={1}
-                        max={100}
-                        value={targetPercentageInput}
-                        onChange={(e) => setTargetPercentageInput(e.target.value)}
-                        className="apple-input h-11 text-sm"
-                      />
-                    </div>
-                    <div className="p-3.5 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-xs">
-                      {isValid && (
-                        <div>
-                          <div>
-                            Target: <strong className="text-[var(--text-primary)]">{targetPct}%</strong>
+              <div className="pt-4 border-t border-[var(--border-secondary)] flex flex-col gap-5 text-sm animate-appleFadeIn">
+                <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+                  Calculate the exact number of upcoming classes you must attend or can safely miss to meet your personal attendance goal.
+                </p>
+
+                {/* Planning Inputs */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="target-pct" className="apple-label text-xs">
+                      Target Attendance %
+                    </label>
+                    <input
+                      id="target-pct"
+                      type="number"
+                      inputMode="decimal"
+                      min={1}
+                      max={100}
+                      placeholder="75"
+                      value={targetPercentageInput}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === '') {
+                          setTargetPercentageInput('');
+                          return;
+                        }
+                        const num = parseFloat(val);
+                        if (!isNaN(num)) {
+                          setTargetPercentageInput(String(Math.min(100, Math.max(1, num))));
+                        }
+                      }}
+                      className="apple-input h-11 text-sm"
+                    />
+                    <span className="text-[11px] text-[var(--text-tertiary)]">
+                      Set your personal target (1% – 100%).
+                    </span>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="future-sessions" className="apple-label text-xs">
+                      Future / Upcoming Sessions
+                    </label>
+                    <input
+                      id="future-sessions"
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      placeholder="0"
+                      value={futureSessionsInput}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === '') {
+                          setFutureSessionsInput('');
+                          return;
+                        }
+                        const num = parseFloat(val);
+                        if (!isNaN(num)) {
+                          setFutureSessionsInput(String(Math.max(0, num)));
+                        }
+                      }}
+                      className="apple-input h-11 text-sm"
+                    />
+                    <span className="text-[11px] text-[var(--text-tertiary)]">
+                      Classes remaining in the semester.
+                    </span>
+                  </div>
+                </div>
+
+                {/* Planning Results Grid */}
+                {isValid && facultySessions > 0 ? (
+                  (() => {
+                    const T = Math.min(100, Math.max(1, parseFloat(targetPercentageInput) || 75));
+                    const future = Math.max(0, parseFloat(futureSessionsInput) || 0);
+                    const currentPct = roundTo((attended / facultySessions) * 100, 2);
+
+                    if (future > 0) {
+                      const totalEnd = facultySessions + future;
+                      const minAttendedTotal = Math.ceil((T / 100) * totalEnd);
+                      const requiredInFuture = Math.max(0, minAttendedTotal - attended);
+                      const isAchievable = requiredInFuture <= future;
+                      const maxMissable = isAchievable ? Math.max(0, future - requiredInFuture) : 0;
+
+                      return (
+                        <div className="rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-primary)] p-4 flex flex-col gap-3">
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                            <div className="p-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border-secondary)]">
+                              <span className="text-[10px] font-bold uppercase text-[var(--text-secondary)] block">
+                                Current
+                              </span>
+                              <span className="text-base font-bold text-[var(--text-primary)] mt-0.5 block tabular-nums">
+                                {currentPct}%
+                              </span>
+                            </div>
+                            <div className="p-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border-secondary)]">
+                              <span className="text-[10px] font-bold uppercase text-[var(--text-secondary)] block">
+                                Target
+                              </span>
+                              <span className="text-base font-bold text-[var(--text-primary)] mt-0.5 block tabular-nums">
+                                {T}%
+                              </span>
+                            </div>
+                            <div className="p-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border-secondary)]">
+                              <span className="text-[10px] font-bold uppercase text-[var(--text-secondary)] block">
+                                Required Classes
+                              </span>
+                              <span className={`text-base font-bold mt-0.5 block tabular-nums ${isAchievable ? 'text-[var(--text-primary)]' : 'text-rose-600'}`}>
+                                {isAchievable ? requiredInFuture : 'Not Reachable'}
+                              </span>
+                            </div>
+                            <div className="p-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border-secondary)]">
+                              <span className="text-[10px] font-bold uppercase text-[var(--text-secondary)] block">
+                                Can Be Missed
+                              </span>
+                              <span className="text-base font-bold text-[var(--text-primary)] mt-0.5 block tabular-nums">
+                                {isAchievable ? maxMissable : 0}
+                              </span>
+                            </div>
                           </div>
-                          <div className="mt-1">
-                            Future Sessions Needed:{' '}
-                            <strong className="text-[var(--text-primary)] text-sm">
-                              {facultySessions === 0 ? '0' : (targetCalc.requiredSessions === Infinity ? 'Unreachable' : targetCalc.requiredSessions)}
-                            </strong>
+
+                          <div className="text-xs text-[var(--text-secondary)] leading-relaxed pt-1 border-t border-[var(--border-secondary)]">
+                            {isAchievable ? (
+                              <span>
+                                Attend at least <strong>{requiredInFuture}</strong> out of {future} upcoming sessions to reach <strong>{T}%</strong>. You can safely miss up to <strong>{maxMissable}</strong> classes.
+                              </span>
+                            ) : (
+                              <span className="text-rose-600 dark:text-rose-400">
+                                Target of {T}% cannot be reached within {future} upcoming sessions. Even attending all {future} sessions results in {formatFixed(((attended + future) / totalEnd) * 100, 2)}%.
+                              </span>
+                            )}
                           </div>
                         </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
+                      );
+                    } else {
+                      // Future = 0
+                      const neededConsecutive = T < 100
+                        ? Math.max(0, Math.ceil((T * facultySessions - 100 * attended) / (100 - T)))
+                        : (attended === facultySessions ? 0 : Infinity);
+                      const missableNow = currentPct >= T
+                        ? Math.max(0, Math.floor((100 * attended - T * facultySessions) / T))
+                        : 0;
 
-                {/* 2. Future Absence Projection */}
-                <div className="flex flex-col gap-3">
-                  <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-                    2. Planned Future Absences
-                  </span>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="flex flex-col gap-1.5">
-                      <label htmlFor="future-sessions" className="apple-label text-xs">
-                        Upcoming Faculty Sessions
-                      </label>
-                      <input
-                        id="future-sessions"
-                        type="number"
-                        inputMode="decimal"
-                        min={0}
-                        value={futureSessionsInput}
-                        onChange={(e) => setFutureSessionsInput(e.target.value)}
-                        className="apple-input h-11 text-sm"
-                      />
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                      <label htmlFor="future-absences" className="apple-label text-xs">
-                        Planned Future Absences
-                      </label>
-                      <input
-                        id="future-absences"
-                        type="number"
-                        inputMode="decimal"
-                        min={0}
-                        value={futureAbsencesInput}
-                        onChange={(e) => setFutureAbsencesInput(e.target.value)}
-                        className="apple-input h-11 text-sm"
-                      />
-                    </div>
-                  </div>
+                      return (
+                        <div className="rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-primary)] p-4 flex flex-col gap-3">
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                            <div className="p-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border-secondary)]">
+                              <span className="text-[10px] font-bold uppercase text-[var(--text-secondary)] block">
+                                Current
+                              </span>
+                              <span className="text-base font-bold text-[var(--text-primary)] mt-0.5 block tabular-nums">
+                                {currentPct}%
+                              </span>
+                            </div>
+                            <div className="p-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border-secondary)]">
+                              <span className="text-[10px] font-bold uppercase text-[var(--text-secondary)] block">
+                                Target
+                              </span>
+                              <span className="text-base font-bold text-[var(--text-primary)] mt-0.5 block tabular-nums">
+                                {T}%
+                              </span>
+                            </div>
+                            <div className="p-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border-secondary)]">
+                              <span className="text-[10px] font-bold uppercase text-[var(--text-secondary)] block">
+                                Needed Consecutive
+                              </span>
+                              <span className="text-base font-bold text-[var(--text-primary)] mt-0.5 block tabular-nums">
+                                {neededConsecutive === Infinity ? 'Unreachable' : neededConsecutive}
+                              </span>
+                            </div>
+                            <div className="p-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border-secondary)]">
+                              <span className="text-[10px] font-bold uppercase text-[var(--text-secondary)] block">
+                                Currently Missable
+                              </span>
+                              <span className="text-base font-bold text-[var(--text-primary)] mt-0.5 block tabular-nums">
+                                {missableNow}
+                              </span>
+                            </div>
+                          </div>
 
-                  {isValid && (
-                    <div className="p-3.5 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-primary)] flex items-center justify-between text-xs">
-                      <span className="text-[var(--text-secondary)] font-medium">
-                        Projected Attendance ({futureCalc.futureAttended} / {futureCalc.futureTotal})
-                      </span>
-                      <span className="font-bold text-[var(--text-primary)] text-sm tabular-nums">
-                        {formatFixed(futureCalc.projectedPercentage, 2)}%
-                      </span>
-                    </div>
-                  )}
-                </div>
+                          <div className="text-xs text-[var(--text-secondary)] leading-relaxed pt-1 border-t border-[var(--border-secondary)]">
+                            {currentPct >= T ? (
+                              <span>
+                                You currently meet your target ({currentPct}% ≥ {T}%). You can miss up to <strong>{missableNow}</strong> sessions before dropping below {T}%.
+                              </span>
+                            ) : (
+                              <span>
+                                You need to attend <strong>{neededConsecutive}</strong> consecutive sessions without absence to reach <strong>{T}%</strong>.
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    }
+                  })()
+                ) : (
+                  <div className="p-3.5 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-xs text-[var(--text-secondary)]">
+                    Enter your conducted and attended sessions above to compute attendance planning projections.
+                  </div>
+                )}
               </div>
             )}
           </div>

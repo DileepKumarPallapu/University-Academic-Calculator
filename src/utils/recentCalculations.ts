@@ -31,8 +31,8 @@ export const saveRecentCalculation = (entry: Omit<RecentCalculation, 'id' | 'tim
       id: `${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       timestamp: Date.now(),
     };
-    // Keep up to 10 recent calculations
-    const updated = [newEntry, ...filtered].slice(0, 10);
+    // Keep up to 20 recent calculations
+    const updated = [newEntry, ...filtered].slice(0, 20);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
     window.dispatchEvent(new Event('recent-calculations-updated'));
   } catch {
@@ -54,6 +54,46 @@ export const deleteRecentCalculation = (id: string) => {
 export const clearRecentCalculations = () => {
   try {
     localStorage.removeItem(STORAGE_KEY);
+    window.dispatchEvent(new Event('recent-calculations-updated'));
+  } catch {
+    // ignore
+  }
+};
+
+export interface AcademicSummary {
+  cgpa?: RecentCalculation;
+  sgpa?: RecentCalculation;
+  attendance?: RecentCalculation;
+  internals?: RecentCalculation;
+}
+
+export const getAcademicSummary = (): AcademicSummary => {
+  const calculations = getRecentCalculations();
+  const summary: AcademicSummary = {};
+
+  for (const item of calculations) {
+    if (item.type === 'cgpa' && !summary.cgpa) {
+      summary.cgpa = item;
+    } else if (item.type === 'gpa' && !summary.sgpa) {
+      summary.sgpa = item;
+    } else if (item.type === 'attendance' && !summary.attendance) {
+      summary.attendance = item;
+    } else if (item.type === 'internals' && !summary.internals) {
+      summary.internals = item;
+    }
+  }
+
+  return summary;
+};
+
+export const clearAllLocalAcademicData = () => {
+  try {
+    localStorage.removeItem('academic-calculator-student-profile');
+    localStorage.removeItem('academic-calculator-student-name');
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem('academic_attendance_history');
+    localStorage.removeItem('academic_selected_regulation');
+    window.dispatchEvent(new Event('student-profile-updated'));
     window.dispatchEvent(new Event('recent-calculations-updated'));
   } catch {
     // ignore

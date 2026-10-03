@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react';
-import { Plus, Trash2, RotateCcw } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Plus, Trash2, RotateCcw, Download, ChevronDown } from 'lucide-react';
 import { calculateGPA, formatFixed } from '../utils/calculations';
 import { REGULATIONS, type RegulationId } from '../config/university';
 import type { SubjectItem } from '../types';
@@ -159,6 +159,99 @@ export const GPACalculatorPage: React.FC = () => {
     0
   );
 
+  // CSV Export Handler
+  const handleExportCSV = () => {
+    const headers = ['Subject', 'Credits', 'Grade', 'Grade Point', 'Credit Points'];
+    const rows = subjects.map((sub, idx) => {
+      const cred = Number(sub.credits) || 0;
+      const pts = sub.gradePoint ?? 0;
+      const cp = cred * pts;
+      const name = `"${(sub.name.trim() || `Subject ${idx + 1}`).replace(/"/g, '""')}"`;
+      return [name, cred, sub.grade, pts, cred === 0 ? 0 : cp.toFixed(1)].join(',');
+    });
+    const csvContent = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const safeName = (studentName.trim() || 'Student').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const dateStr = new Date().toISOString().split('T')[0];
+    link.setAttribute('href', url);
+    link.setAttribute('download', `${safeName}_SGPA_Subjects_${dateStr}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showToast('CSV exported successfully.', 'success');
+  };
+
+  // What-If SGPA State & Handlers
+  const [whatIfExpanded, setWhatIfExpanded] = useState<boolean>(false);
+  const [whatIfGrades, setWhatIfGrades] = useState<Record<string, { grade: string; points: number }>>({});
+
+  useEffect(() => {
+    const initial: Record<string, { grade: string; points: number }> = {};
+    subjects.forEach((s) => {
+      initial[s.id] = { grade: s.grade, points: s.gradePoint ?? 0 };
+    });
+    setWhatIfGrades(initial);
+  }, [subjects]);
+
+  const handleWhatIfGradeChange = (id: string, grade: string) => {
+    const opt = gradeOptions.find((g) => g.grade === grade) || gradeOptions[0];
+    setWhatIfGrades((prev) => ({
+      ...prev,
+      [id]: { grade: opt.grade, points: opt.points },
+    }));
+  };
+
+  const whatIfSubjectsList = subjects.map((s) => {
+    const custom = whatIfGrades[s.id];
+    return {
+      ...s,
+      grade: custom ? custom.grade : s.grade,
+      gradePoint: custom ? custom.points : s.gradePoint,
+    };
+  });
+  const whatIfGpaResult = calculateGPA(whatIfSubjectsList);
+
+  const handleApplyWhatIf = () => {
+    setSubjects(whatIfSubjectsList);
+    showToast('What-if grades applied to main calculation.', 'success');
+  };
+
+  const handleResetWhatIf = () => {
+    const initial: Record<string, { grade: string; points: number }> = {};
+    subjects.forEach((s) => {
+      initial[s.id] = { grade: s.grade, points: s.gradePoint ?? 0 };
+    });
+    setWhatIfGrades(initial);
+    showToast('What-if grades reset to original.', 'info');
+  };
+
+  // Target SGPA Planner State & Derived Math
+  const [targetGpaExpanded, setTargetGpaExpanded] = useState<boolean>(false);
+  const [targetGpaInput, setTargetGpaInput] = useState<string>('8.50');
+  const [remainingCreditsInput, setRemainingCreditsInput] = useState<string>('20');
+
+  const parsedTargetSgpa = parseFloat(targetGpaInput) || 0;
+  const parsedRemainingCredits = Math.max(0, parseFloat(remainingCreditsInput) || 0);
+
+  const currentCompletedCredits = gpaResult.totalCredits;
+  const currentQualityPts = totalQualityPoints;
+  const targetTotalCredits = currentCompletedCredits + parsedRemainingCredits;
+
+  const targetRequiredTotalQualityPoints = parsedTargetSgpa * targetTotalCredits;
+  const targetRequiredRemainingQualityPoints = targetRequiredTotalQualityPoints - currentQualityPts;
+
+  const requiredAvgGradePoint = parsedRemainingCredits > 0
+    ? targetRequiredRemainingQualityPoints / parsedRemainingCredits
+    : 0;
+
+  const maxAchievableSgpa = targetTotalCredits > 0
+    ? (currentQualityPts + 10.0 * parsedRemainingCredits) / targetTotalCredits
+    : 0;
+
+
   return (
     <>
       <div className="apple-page-enter flex flex-col gap-8 max-w-[1200px] mx-auto print:hidden">
@@ -254,25 +347,37 @@ export const GPACalculatorPage: React.FC = () => {
                 </select>
               </div>
 
-              {/* Number of Subjects Generator */}
-              <form onSubmit={handleGenerateSubjects} className="flex items-center gap-2">
-                <label htmlFor="num-subjects" className="text-xs font-medium text-[var(--text-secondary)] whitespace-nowrap">
-                  Subjects:
-                </label>
-                <input
-                  id="num-subjects"
-                  type="number"
-                  inputMode="decimal"
-                  min={1}
-                  max={20}
-                  value={subjectCountInput}
-                  onChange={(e) => setSubjectCountInput(parseInt(e.target.value) || 0)}
-                  className="apple-input w-16 text-center text-sm h-10"
-                />
-                <button type="submit" className="apple-btn-secondary text-xs h-10 px-3 whitespace-nowrap">
-                  Generate
+              {/* Number of Subjects Generator and CSV Export */}
+              <div className="flex flex-wrap items-center gap-2">
+                <form onSubmit={handleGenerateSubjects} className="flex items-center gap-2">
+                  <label htmlFor="num-subjects" className="text-xs font-medium text-[var(--text-secondary)] whitespace-nowrap">
+                    Subjects:
+                  </label>
+                  <input
+                    id="num-subjects"
+                    type="number"
+                    inputMode="decimal"
+                    min={1}
+                    max={20}
+                    value={subjectCountInput}
+                    onChange={(e) => setSubjectCountInput(parseInt(e.target.value) || 0)}
+                    className="apple-input w-16 text-center text-sm h-10"
+                  />
+                  <button type="submit" className="apple-btn-secondary text-xs h-10 px-3 whitespace-nowrap">
+                    Generate
+                  </button>
+                </form>
+
+                <button
+                  type="button"
+                  onClick={handleExportCSV}
+                  className="apple-btn-secondary text-xs h-10 px-3 flex items-center gap-1.5 whitespace-nowrap"
+                  title="Export subjects to CSV"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Export CSV</span>
                 </button>
-              </form>
+              </div>
             </div>
 
             {/* Desktop & Tablet Subject Table with Stable, Centered Credits Column */}
@@ -540,6 +645,267 @@ export const GPACalculatorPage: React.FC = () => {
                 Calculate SGPA
               </button>
             </div>
+          </div>
+
+          {/* Plan / What-If SGPA Card */}
+          <div className="apple-main-container p-6 flex flex-col gap-4">
+            <button
+              type="button"
+              onClick={() => setWhatIfExpanded((prev) => !prev)}
+              className="flex items-center justify-between text-base font-semibold text-[var(--text-primary)] cursor-pointer text-left"
+              aria-expanded={whatIfExpanded}
+            >
+              <div className="flex items-center gap-2">
+                <span>Experiment with what-if grades</span>
+                <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--bg-tertiary)] text-[var(--text-secondary)] font-normal">
+                  Simulation
+                </span>
+              </div>
+              <ChevronDown
+                className={`w-4 h-4 text-[var(--text-tertiary)] transition-transform ${
+                  whatIfExpanded ? 'rotate-180' : ''
+                }`}
+              />
+            </button>
+
+            {whatIfExpanded && (
+              <div className="pt-4 border-t border-[var(--border-secondary)] flex flex-col gap-5 text-sm animate-appleFadeIn">
+                <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+                  Test hypothetical grade scenarios. Changes made here simulate your projected SGPA without affecting your active calculation until you choose to apply them.
+                </p>
+
+                {/* Subject Grade Selector Grid */}
+                <div className="flex flex-col gap-3">
+                  {subjects.map((s, idx) => {
+                    const currentSimGrade = whatIfGrades[s.id]?.grade ?? s.grade;
+                    const cred = Number(s.credits) || 0;
+                    return (
+                      <div
+                        key={s.id}
+                        className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-xl bg-[var(--surface)] border border-[var(--border-secondary)]"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-[var(--text-primary)] text-sm">
+                            {s.name.trim() || `Subject ${idx + 1}`}
+                          </span>
+                          <span className="text-xs text-[var(--text-secondary)]">
+                            ({cred} {cred === 1 ? 'credit' : 'credits'}{cred === 0 ? ' • Non-credit' : ''})
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <label className="text-xs text-[var(--text-secondary)]">Simulate:</label>
+                          <select
+                            value={currentSimGrade}
+                            onChange={(e) => handleWhatIfGradeChange(s.id, e.target.value)}
+                            className="apple-input h-9 text-xs font-semibold py-0 w-28 cursor-pointer"
+                          >
+                            {gradeOptions.map((opt) => (
+                              <option key={opt.grade} value={opt.grade}>
+                                {opt.grade} ({opt.points} pts)
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Simulation Comparison Banner */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-primary)]">
+                  <div>
+                    <span className="text-xs text-[var(--text-secondary)] block">Current SGPA</span>
+                    <span className="text-lg font-bold text-[var(--text-primary)] tabular-nums">
+                      {gpaResult.totalCredits > 0 ? formatFixed(gpaResult.gpa, 2) : '—'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-[var(--text-secondary)] block">Projected SGPA</span>
+                    <span className="text-lg font-bold text-[var(--text-primary)] tabular-nums">
+                      {whatIfGpaResult.totalCredits > 0 ? formatFixed(whatIfGpaResult.gpa, 2) : '—'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-[var(--text-secondary)] block">Net Change</span>
+                    <span
+                      className={`text-lg font-bold tabular-nums ${
+                        whatIfGpaResult.gpa > gpaResult.gpa
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : whatIfGpaResult.gpa < gpaResult.gpa
+                          ? 'text-rose-600 dark:text-rose-400'
+                          : 'text-[var(--text-primary)]'
+                      }`}
+                    >
+                      {gpaResult.totalCredits > 0 && whatIfGpaResult.totalCredits > 0
+                        ? `${whatIfGpaResult.gpa >= gpaResult.gpa ? '+' : ''}${formatFixed(
+                            whatIfGpaResult.gpa - gpaResult.gpa,
+                            2
+                          )}`
+                        : '—'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* What-If Action Buttons */}
+                <div className="flex items-center gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={handleApplyWhatIf}
+                    className="apple-btn-primary flex-1 h-10 text-xs font-semibold"
+                  >
+                    Apply Changes to Calculation
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleResetWhatIf}
+                    className="apple-btn-secondary h-10 px-4 text-xs font-semibold"
+                  >
+                    Reset What-if
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Target SGPA Planner Expandable Card */}
+          <div className="apple-main-container p-6 flex flex-col gap-4">
+            <button
+              type="button"
+              onClick={() => setTargetGpaExpanded((prev) => !prev)}
+              className="flex items-center justify-between text-base font-semibold text-[var(--text-primary)] cursor-pointer text-left"
+              aria-expanded={targetGpaExpanded}
+            >
+              <div className="flex items-center gap-2">
+                <span>Plan your target SGPA</span>
+                <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--bg-tertiary)] text-[var(--text-secondary)] font-normal">
+                  Goal Planner
+                </span>
+              </div>
+              <ChevronDown
+                className={`w-4 h-4 text-[var(--text-tertiary)] transition-transform ${
+                  targetGpaExpanded ? 'rotate-180' : ''
+                }`}
+              />
+            </button>
+
+            {targetGpaExpanded && (
+              <div className="pt-4 border-t border-[var(--border-secondary)] flex flex-col gap-5 text-sm animate-appleFadeIn">
+                <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+                  Determine the average grade point required across your remaining semester credits to reach your target SGPA.
+                </p>
+
+                {/* Input Fields */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="target-sgpa-input" className="apple-label text-xs">
+                      Target SGPA (Max 10.0)
+                    </label>
+                    <input
+                      id="target-sgpa-input"
+                      type="number"
+                      inputMode="decimal"
+                      min={0}
+                      max={10}
+                      step="0.01"
+                      placeholder="8.50"
+                      value={targetGpaInput}
+                      onChange={(e) => setTargetGpaInput(e.target.value)}
+                      className="apple-input h-11 text-sm"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="remaining-credits-input" className="apple-label text-xs">
+                      Remaining Credits
+                    </label>
+                    <input
+                      id="remaining-credits-input"
+                      type="number"
+                      inputMode="decimal"
+                      min={1}
+                      max={40}
+                      step="1"
+                      placeholder="20"
+                      value={remainingCreditsInput}
+                      onChange={(e) => setRemainingCreditsInput(e.target.value)}
+                      className="apple-input h-11 text-sm"
+                    />
+                  </div>
+                </div>
+
+                {/* Planner Summary Cards */}
+                {parsedRemainingCredits > 0 ? (
+                  <div className="flex flex-col gap-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div className="p-3 rounded-xl bg-[var(--surface)] border border-[var(--border-secondary)]">
+                        <span className="text-xs text-[var(--text-secondary)] block">Current SGPA</span>
+                        <span className="text-base font-bold text-[var(--text-primary)] tabular-nums mt-0.5 block">
+                          {gpaResult.totalCredits > 0 ? formatFixed(gpaResult.gpa, 2) : '—'}
+                        </span>
+                        <span className="text-[10px] text-[var(--text-tertiary)]">
+                          {gpaResult.totalCredits} credits
+                        </span>
+                      </div>
+
+                      <div className="p-3 rounded-xl bg-[var(--surface)] border border-[var(--border-secondary)]">
+                        <span className="text-xs text-[var(--text-secondary)] block">Target SGPA</span>
+                        <span className="text-base font-bold text-[var(--text-primary)] tabular-nums mt-0.5 block">
+                          {formatFixed(parsedTargetSgpa, 2)}
+                        </span>
+                        <span className="text-[10px] text-[var(--text-tertiary)]">
+                          Goal
+                        </span>
+                      </div>
+
+                      <div className="p-3 rounded-xl bg-[var(--surface)] border border-[var(--border-secondary)]">
+                        <span className="text-xs text-[var(--text-secondary)] block">Required GP</span>
+                        <span
+                          className={`text-base font-bold tabular-nums mt-0.5 block ${
+                            requiredAvgGradePoint > 10.0
+                              ? 'text-rose-600 dark:text-rose-400'
+                              : 'text-[var(--text-primary)]'
+                          }`}
+                        >
+                          {requiredAvgGradePoint <= 0 ? '0.00' : formatFixed(requiredAvgGradePoint, 2)}
+                        </span>
+                        <span className="text-[10px] text-[var(--text-tertiary)]">
+                          / 10 average
+                        </span>
+                      </div>
+
+                      <div className="p-3 rounded-xl bg-[var(--surface)] border border-[var(--border-secondary)]">
+                        <span className="text-xs text-[var(--text-secondary)] block">Max Achievable</span>
+                        <span className="text-base font-bold text-[var(--text-primary)] tabular-nums mt-0.5 block">
+                          {formatFixed(maxAchievableSgpa, 2)}
+                        </span>
+                        <span className="text-[10px] text-[var(--text-tertiary)]">
+                          at 10.0 GP
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Result Analysis Message */}
+                    {requiredAvgGradePoint > 10.0 ? (
+                      <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 text-xs text-rose-800 dark:text-rose-300 leading-relaxed">
+                        <strong>Target Unattainable:</strong> A target SGPA of {formatFixed(parsedTargetSgpa, 2)} requires an average grade point of {formatFixed(requiredAvgGradePoint, 2)} across your remaining {parsedRemainingCredits} credits, which exceeds the maximum grade point scale (10.0). The highest achievable SGPA is <strong>{formatFixed(maxAchievableSgpa, 2)}</strong>.
+                      </div>
+                    ) : requiredAvgGradePoint <= 0 ? (
+                      <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50 text-xs text-emerald-800 dark:text-emerald-300 leading-relaxed">
+                        Your current quality points already secure your target SGPA of {formatFixed(parsedTargetSgpa, 2)} across all {targetTotalCredits} credits.
+                      </div>
+                    ) : (
+                      <div className="p-3.5 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-xs text-[var(--text-primary)] leading-relaxed">
+                        To attain an SGPA of <strong>{formatFixed(parsedTargetSgpa, 2)}</strong>, maintain an average grade point of at least <strong>{formatFixed(requiredAvgGradePoint, 2)} / 10</strong> across your remaining {parsedRemainingCredits} credits.
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-xs text-[var(--text-secondary)]">
+                    Please specify a positive number of remaining credits to compute target requirements.
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 

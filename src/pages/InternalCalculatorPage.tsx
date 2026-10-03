@@ -14,6 +14,7 @@ import { StudentNameInput } from '../components/common/StudentNameInput';
 import { ResultActionButtons } from '../components/common/ResultActionButtons';
 import { ResetConfirmModal } from '../components/common/ResetConfirmModal';
 import { saveRecentCalculation } from '../utils/recentCalculations';
+import { ChevronDown } from 'lucide-react';
 
 export const InternalCalculatorPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'theory' | 'integrated'>('theory');
@@ -64,6 +65,8 @@ export const InternalCalculatorPage: React.FC = () => {
 
   const [showResetModal, setShowResetModal] = useState(false);
   const [resetTarget, setResetTarget] = useState<'theory' | 'integrated'>('theory');
+  const [planExpanded, setPlanExpanded] = useState<boolean>(false);
+  const [targetInternalInput, setTargetInternalInput] = useState<string>('32');
 
   const isTheoryDirty = Number(theory.test1) > 0 || Number(theory.test2) > 0 || Number(theory.test3) > 0 || Number(theory.attendance) > 0 || Number(theory.assignment) > 0;
   const isIntegratedDirty = Number(integrated.mid1) > 0 || Number(integrated.mid2) > 0 || Number(integrated.lab) > 0 || Number(integrated.attendance) > 0 || Number(integrated.assignment) > 0;
@@ -536,6 +539,154 @@ export const InternalCalculatorPage: React.FC = () => {
                 Calculate Internal Marks
               </button>
             </div>
+          </div>
+
+          {/* Plan Your Internal Marks Expandable Card */}
+          <div className="apple-main-container p-6 flex flex-col gap-4">
+            <button
+              type="button"
+              onClick={() => setPlanExpanded((prev) => !prev)}
+              className="flex items-center justify-between text-base font-semibold text-[var(--text-primary)] cursor-pointer"
+              aria-expanded={planExpanded}
+            >
+              <div className="flex items-center gap-2">
+                <span>Plan your internal marks</span>
+                <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--bg-tertiary)] text-[var(--text-secondary)] font-normal">
+                  Optional
+                </span>
+              </div>
+              <ChevronDown
+                className={`w-4 h-4 text-[var(--text-tertiary)] transition-transform ${
+                  planExpanded ? 'rotate-180' : ''
+                }`}
+              />
+            </button>
+
+            {planExpanded && (
+              <div className="pt-4 border-t border-[var(--border-secondary)] flex flex-col gap-5 text-sm animate-appleFadeIn">
+                <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+                  Enter your target internal mark (out of 40) to determine the remaining marks needed across your {activeTab === 'theory' ? 'Theory' : 'Integrated'} assessment components.
+                </p>
+
+                {/* Target Mark Input */}
+                <div className="flex flex-col gap-1.5 max-w-xs">
+                  <label htmlFor="target-internal-input" className="apple-label text-xs">
+                    Target Internal Score (Max 40)
+                  </label>
+                  <input
+                    id="target-internal-input"
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    max={40}
+                    step="any"
+                    placeholder="32"
+                    value={targetInternalInput}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '') {
+                        setTargetInternalInput('');
+                        return;
+                      }
+                      const num = parseFloat(val);
+                      if (!isNaN(num)) {
+                        setTargetInternalInput(String(Math.min(40, Math.max(0, num))));
+                      }
+                    }}
+                    className="apple-input h-11 text-sm"
+                  />
+                </div>
+
+                {/* Planning Summary Cards */}
+                {(() => {
+                  const currentScore = activeTab === 'theory' ? theoryResult.totalInternal : integratedResult.totalInternal;
+                  const target = Math.min(40, Math.max(0, parseFloat(targetInternalInput) || 0));
+                  const remainingAvailable = Math.max(0, 40 - currentScore);
+                  const requiredRemaining = Math.max(0, target - currentScore);
+                  const isAchievable = target <= 40 && requiredRemaining <= remainingAvailable;
+
+                  return (
+                    <div className="rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-primary)] p-4 flex flex-col gap-4">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                        <div className="p-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border-secondary)]">
+                          <span className="text-[10px] font-bold uppercase text-[var(--text-secondary)] block">
+                            Current Score
+                          </span>
+                          <span className="text-base font-bold text-[var(--text-primary)] mt-0.5 block tabular-nums">
+                            {formatFixed(currentScore, 2)} / 40
+                          </span>
+                        </div>
+                        <div className="p-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border-secondary)]">
+                          <span className="text-[10px] font-bold uppercase text-[var(--text-secondary)] block">
+                            Target Score
+                          </span>
+                          <span className="text-base font-bold text-[var(--text-primary)] mt-0.5 block tabular-nums">
+                            {formatFixed(target, 2)} / 40
+                          </span>
+                        </div>
+                        <div className="p-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border-secondary)]">
+                          <span className="text-[10px] font-bold uppercase text-[var(--text-secondary)] block">
+                            Remaining Available
+                          </span>
+                          <span className="text-base font-bold text-[var(--text-primary)] mt-0.5 block tabular-nums">
+                            {formatFixed(remainingAvailable, 2)}
+                          </span>
+                        </div>
+                        <div className="p-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border-secondary)]">
+                          <span className="text-[10px] font-bold uppercase text-[var(--text-secondary)] block">
+                            Required Marks
+                          </span>
+                          <span className={`text-base font-bold mt-0.5 block tabular-nums ${isAchievable ? 'text-[var(--text-primary)]' : 'text-rose-600'}`}>
+                            {isAchievable ? `${formatFixed(requiredRemaining, 2)}` : 'Unattainable'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Explanation */}
+                      <div className="text-xs text-[var(--text-secondary)] leading-relaxed pt-2 border-t border-[var(--border-secondary)]">
+                        {!isAchievable ? (
+                          <span className="text-rose-600 dark:text-rose-400 font-semibold">
+                            Target cannot be reached with the remaining marks. Maximum attainable total is {formatFixed(currentScore + remainingAvailable, 2)} / 40.
+                          </span>
+                        ) : target <= currentScore ? (
+                          <span>
+                            Target of <strong>{formatFixed(target, 2)} / 40</strong> is already achieved with your current score of <strong>{formatFixed(currentScore, 2)} / 40</strong>.
+                          </span>
+                        ) : (
+                          <span>
+                            You need <strong>{formatFixed(requiredRemaining, 2)}</strong> marks out of the remaining {formatFixed(remainingAvailable, 2)} marks to achieve your target internal score of <strong>{formatFixed(target, 2)} / 40</strong>.
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Applicable Assessment Structure Reference */}
+                      <div className="pt-2 border-t border-[var(--border-secondary)] flex flex-col gap-1.5 text-xs">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+                          Assessment Component Limits ({activeTab === 'theory' ? 'Theory' : 'Integrated'})
+                        </span>
+                        {activeTab === 'theory' ? (
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] text-[var(--text-secondary)]">
+                            <div>• Test 1: Max 10 (Raw /30)</div>
+                            <div>• Test 2: Max 10 (Raw /30)</div>
+                            <div>• Test 3: Max 10 (Raw /30)</div>
+                            <div>• Attendance: Max 5</div>
+                            <div>• Assignment: Max 5</div>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] text-[var(--text-secondary)]">
+                            <div>• Mid 1: Max 5 (Raw /20)</div>
+                            <div>• Mid 2: Max 5 (Raw /20)</div>
+                            <div>• Model Lab: Max 20</div>
+                            <div>• Attendance: Max 5</div>
+                            <div>• Assignment: Max 5</div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
           </div>
         </div>
 
