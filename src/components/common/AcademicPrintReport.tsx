@@ -153,27 +153,27 @@ export const AcademicPrintReport: React.FC<AcademicPrintReportProps> = ({
   ];
 
   return (
-    <div className="print-report-container w-full bg-white text-[#1D1D1F] p-0 m-0">
+    <div className="print-report-container print-report w-full bg-white text-[#1D1D1F] p-0 m-0">
       {/* Upper Content Section */}
       <div className="report-content w-full">
         {/* 1. Header: Brand, Document Category, Date & Small Verification QR */}
-        <header className="print-header border-b border-[#D2D2D7] pb-3 mb-5">
+        <header className="print-header border-b border-[#D2D2D7] pb-3 mb-4">
           <div className="flex justify-between items-start gap-4">
             <div>
-              <h1 className="text-[24px] font-bold text-[#1D1D1F] tracking-tight leading-tight uppercase">
+              <h1 className="text-[22px] font-bold text-[#1D1D1F] tracking-tight leading-tight uppercase">
                 Academic Calculator
               </h1>
-              <p className="text-[13px] font-semibold text-[#6E6E73] uppercase tracking-wide mt-0.5">
+              <p className="text-[12px] font-semibold text-[#6E6E73] uppercase tracking-wide mt-0.5">
                 {reportTitle}
               </p>
             </div>
 
-            <div className="flex items-center gap-4 text-right">
-              <div className="flex flex-col items-end">
+            <div className="flex items-start gap-3.5 text-right">
+              <div className="flex flex-col items-end pt-1">
                 <span className="text-[10px] font-bold text-[#86868B] uppercase tracking-wider block">
                   Official Academic Report
                 </span>
-                <span className="text-[12px] font-semibold text-[#1D1D1F]">
+                <span className="text-[11px] font-semibold text-[#1D1D1F] mt-0.5">
                   {currentDate}
                 </span>
               </div>

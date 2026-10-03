@@ -624,29 +624,77 @@
 
 /* Print Styles & Print-Only Elements */
 .print-footer,
-.print-report-container {
+.print-report-container,
+.print-report {
   display: none;
 }
 
 @media print {
   @page {
     size: A4 portrait;
-    margin: 16mm 20mm;
+    margin: 14mm 16mm 14mm 16mm;
+  }
+
+  /* Completely reset dark mode variables and backgrounds in print */
+  :root,
+  [data-theme="dark"],
+  [data-theme="light"],
+  .dark {
+    --bg-primary: #FFFFFF !important;
+    --bg-secondary: #FFFFFF !important;
+    --bg-tertiary: #FAFAFA !important;
+    --surface: #FFFFFF !important;
+    --surface-secondary: #FAFAFA !important;
+    --surface-elevated: #FFFFFF !important;
+    --text-primary: #1D1D1F !important;
+    --text-secondary: #6E6E73 !important;
+    --text-tertiary: #86868B !important;
+    --border-primary: #D2D2D7 !important;
+    --border-secondary: #E5E5EA !important;
+    --card-bg: #FFFFFF !important;
+    --card-border: #D2D2D7 !important;
+    --footer-bg: #FFFFFF !important;
+    --footer-text: #1D1D1F !important;
+    --footer-secondary: #6E6E73 !important;
+    --footer-tertiary: #86868B !important;
+    --footer-border: #D2D2D7 !important;
   }
 
   html,
   body,
-  #root {
+  #root,
+  #root > div,
+  .min-h-screen,
+  main,
+  .print-report-container,
+  .print-report {
     background: #FFFFFF !important;
     background-color: #FFFFFF !important;
     color: #1D1D1F !important;
     padding: 0 !important;
     margin: 0 !important;
     width: 100% !important;
-    min-height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    height: auto !important;
+    box-shadow: none !important;
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
+  }
+
+  /* Ensure dark mode never leaks into any print elements */
+  [data-theme="dark"] body,
+  [data-theme="dark"] #root,
+  [data-theme="dark"] #root > div,
+  [data-theme="dark"] .min-h-screen,
+  [data-theme="dark"] main,
+  [data-theme="dark"] .print-report-container,
+  [data-theme="dark"] .print-report,
+  [data-theme="dark"] .print-footer {
+    background: #FFFFFF !important;
+    background-color: #FFFFFF !important;
+    color: #1D1D1F !important;
   }
 
   /* Hide screen-only interactive and layout chrome, never hide print header or print footer */
@@ -669,6 +717,8 @@
     width: 100% !important;
     padding: 0 !important;
     margin: 0 !important;
+    background: #FFFFFF !important;
+    background-color: #FFFFFF !important;
   }
 
   /* Table rules for print */
@@ -703,29 +753,70 @@
     page-break-inside: avoid !important;
   }
 
-  /* Ensure print report layout pushes footer towards bottom */
-  .print-report-container {
-    display: flex !important;
-    flex-direction: column !important;
-    justify-content: space-between !important;
-    min-height: 250mm !important;
+  /* Normal document flow for print container */
+  .print-report-container,
+  .print-report {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
     width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
     background: #FFFFFF !important;
+    background-color: #FFFFFF !important;
     color: #1D1D1F !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
 
-  /* Dedicated Print Footer matching Website Branding */
+  /* Print QR Code sizing and sharpness */
+  .print-qr-box {
+    width: 84px !important;
+    height: 84px !important;
+    min-width: 84px !important;
+    min-height: 84px !important;
+    max-width: 84px !important;
+    max-height: 84px !important;
+    background: #FFFFFF !important;
+    background-color: #FFFFFF !important;
+    border: 1px solid #D2D2D7 !important;
+    border-radius: 8px !important;
+    padding: 4px !important;
+    box-sizing: border-box !important;
+  }
+
+  .print-qr-box svg {
+    width: 100% !important;
+    height: 100% !important;
+    display: block !important;
+  }
+
+  .print-qr-caption {
+    font-size: 7.5px !important;
+    color: #6E6E73 !important;
+    line-height: 1.1 !important;
+    margin-top: 3px !important;
+  }
+
+  /* Dedicated Print Footer matching Website Branding in natural document flow */
   .print-footer {
     display: flex !important;
     visibility: visible !important;
     opacity: 1 !important;
     justify-content: space-between !important;
     align-items: flex-start !important;
-    margin-top: 32px !important;
-    padding-top: 18px !important;
+    margin-top: 28px !important;
+    padding-top: 14px !important;
+    padding-bottom: 8px !important;
     border-top: 1px solid #D2D2D7 !important;
     background: #FFFFFF !important;
+    background-color: #FFFFFF !important;
     color: #1D1D1F !important;
+    position: static !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif !important;
     break-inside: avoid !important;
     page-break-inside: avoid !important;
@@ -810,11 +901,12 @@
     display: inline-flex !important;
     align-items: center !important;
     gap: 5px !important;
-    padding: 6px 10px !important;
+    padding: 5px 9px !important;
     border: 1px solid #D2D2D7 !important;
     border-radius: 7px !important;
     color: #1D1D1F !important;
     background: #FFFFFF !important;
+    background-color: #FFFFFF !important;
     font-size: 9px !important;
     text-decoration: none !important;
     font-weight: 500 !important;
@@ -827,5 +919,6 @@
     color: #1D1D1F !important;
   }
 }
+
 
 
