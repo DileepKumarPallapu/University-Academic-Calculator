@@ -637,8 +637,10 @@ export const GPACalculatorPage: React.FC = () => {
                     });
                     showToast('SGPA calculated successfully.', 'success');
                   }
-                  const el = document.getElementById('sgpa-result-section');
-                  if (el) el.scrollIntoView({ behavior: 'smooth' });
+                  if (window.innerWidth < 1024) {
+                    const el = document.getElementById('sgpa-result-section');
+                    if (el) el.scrollIntoView({ behavior: 'smooth' });
+                  }
                 }}
                 className="apple-btn-primary w-full sm:flex-1 h-[52px] text-[17px] font-semibold"
               >

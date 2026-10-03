@@ -15,13 +15,20 @@ import type {
 
 /**
  * Rounds a number to a fixed number of decimal places without floating-point artifacts.
+ * Safe against NaN, null, undefined, and Infinity.
  */
-export function roundTo(num: number, decimals: number = 2): number {
+export function roundTo(num: number | null | undefined, decimals: number = 2): number {
+  if (num === null || num === undefined || isNaN(num) || !isFinite(num)) {
+    return 0;
+  }
   const factor = Math.pow(10, decimals);
   return Math.round((num + Number.EPSILON) * factor) / factor;
 }
 
-export function formatScore(num: number, decimals: number = 2): string {
+export function formatScore(num: number | null | undefined, decimals: number = 2): string {
+  if (num === null || num === undefined || isNaN(num) || !isFinite(num)) {
+    return '0';
+  }
   if (Number.isInteger(num)) {
     return num.toString();
   }
@@ -31,7 +38,10 @@ export function formatScore(num: number, decimals: number = 2): string {
   });
 }
 
-export function formatFixed(num: number, decimals: number = 2): string {
+export function formatFixed(num: number | null | undefined, decimals: number = 2): string {
+  if (num === null || num === undefined || isNaN(num) || !isFinite(num)) {
+    return '0.00';
+  }
   return roundTo(num, decimals).toFixed(decimals);
 }
 

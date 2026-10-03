@@ -249,4 +249,95 @@ describe('University Calculation Engine Unit Tests', () => {
       expect(cgpaRes.cgpa).toBe(8.56);
     });
   });
+
+  describe('Comprehensive Edge Cases (Final Quality Engineering Pass)', () => {
+    it('handles SGPA edge cases: single subject, max grade, min grade', () => {
+      // Single subject
+      const single = calculateGPA([{ id: '1', name: 'Math', credits: 4, grade: 'S', gradePoint: 10 }]);
+      expect(single.gpa).toBe(10);
+      expect(single.totalCredits).toBe(4);
+
+      // Max grade
+      const max = calculateGPA([
+        { id: '1', name: 'Sub 1', credits: 3, grade: 'S', gradePoint: 10 },
+        { id: '2', name: 'Sub 2', credits: 4, grade: 'S', gradePoint: 10 },
+      ]);
+      expect(max.gpa).toBe(10);
+
+      // Min grade (0 GP)
+      const min = calculateGPA([
+        { id: '1', name: 'Sub 1', credits: 3, grade: 'U', gradePoint: 0 },
+        { id: '2', name: 'Sub 2', credits: 4, grade: 'U', gradePoint: 0 },
+      ]);
+      expect(min.gpa).toBe(0);
+      expect(min.totalCredits).toBe(7);
+    });
+
+    it('handles CGPA edge cases: single semester, 0-credit semester, decimal SGPA', () => {
+      // Single semester
+      const single = calculateCGPA([{ id: '1', semesterNumber: 1, gpa: 8.42, credits: 21 }]);
+      expect(single.cgpa).toBe(8.42);
+      expect(single.totalCredits).toBe(21);
+
+      // 0-credit semester does not corrupt calculation
+      const withZero = calculateCGPA([
+        { id: '1', semesterNumber: 1, gpa: 9.0, credits: 20 },
+        { id: '2', semesterNumber: 2, gpa: 0, credits: 0 },
+      ]);
+      expect(withZero.cgpa).toBe(9.0);
+      expect(withZero.totalCredits).toBe(20);
+
+      // Multiple semesters with precise decimal SGPA
+      const decimal = calculateCGPA([
+        { id: '1', semesterNumber: 1, gpa: 8.75, credits: 22 },
+        { id: '2', semesterNumber: 2, gpa: 9.12, credits: 24 },
+      ]);
+      // (8.75*22 + 9.12*24) / 46 = (192.5 + 218.88) / 46 = 411.38 / 46 = 8.94304 => 8.94
+      expect(decimal.cgpa).toBe(8.94);
+      expect(decimal.totalCredits).toBe(46);
+    });
+
+    it('handles Attendance edge cases: 0 faculty sessions, attended=0, target=100', () => {
+      // 0 faculty sessions
+      const zeroFac = calculateAttendance({ totalSessions: 0, facultySessions: 0, attended: 0 });
+      expect(zeroFac.percentage).toBe(0);
+      expect(zeroFac.absent).toBe(0);
+
+      // Attended = 0
+      const zeroAtt = calculateAttendance({ totalSessions: 30, facultySessions: 30, attended: 0 });
+      expect(zeroAtt.percentage).toBe(0);
+      expect(zeroAtt.absent).toBe(30);
+
+      // Attended = faculty sessions
+      const full = calculateAttendance({ totalSessions: 30, facultySessions: 30, attended: 30 });
+      expect(full.percentage).toBe(100);
+      expect(full.absent).toBe(0);
+    });
+
+    it('handles Internal Marks edge cases: all zero, maximum marks, invalid raw marks bounded safely', () => {
+      // All zero
+      const zeroTheory = calculateTheoryInternal({ test1: 0, test2: 0, test3: 0, attendance: 0, assignment: 0 });
+      expect(zeroTheory.totalInternal).toBe(0);
+      expect(zeroTheory.percentage).toBe(0);
+
+      const zeroInt = calculateIntegratedInternal({ mid1: 0, mid2: 0, lab: 0, attendance: 0, assignment: 0 });
+      expect(zeroInt.totalInternal).toBe(0);
+      expect(zeroInt.percentage).toBe(0);
+
+      // Max marks
+      const maxTheory = calculateTheoryInternal({ test1: 30, test2: 30, test3: 30, attendance: 5, assignment: 5 });
+      expect(maxTheory.totalInternal).toBe(40);
+      expect(maxTheory.percentage).toBe(100);
+
+      const maxInt = calculateIntegratedInternal({ mid1: 20, mid2: 20, lab: 20, attendance: 5, assignment: 5 });
+      expect(maxInt.totalInternal).toBe(40);
+      expect(maxInt.percentage).toBe(100);
+
+      // Out of bounds raw marks safely clamped
+      expect(convertTestMark(45)).toBe(10);
+      expect(convertTestMark(-10)).toBe(0);
+      expect(convertMidMark(30)).toBe(5);
+      expect(convertMidMark(-5)).toBe(0);
+    });
+  });
 });

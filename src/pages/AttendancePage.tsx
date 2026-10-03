@@ -280,8 +280,10 @@ export const AttendancePage: React.FC = () => {
                       route: '/attendance',
                     });
                   }
-                  const el = document.getElementById('attendance-result-section');
-                  if (el) el.scrollIntoView({ behavior: 'smooth' });
+                  if (window.innerWidth < 1024) {
+                    const el = document.getElementById('attendance-result-section');
+                    if (el) el.scrollIntoView({ behavior: 'smooth' });
+                  }
                 }}
               >
                 Calculate Attendance

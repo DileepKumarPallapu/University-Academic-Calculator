@@ -532,8 +532,10 @@ export const InternalCalculatorPage: React.FC = () => {
                     subtext: `${formatFixed(pct, 2)}%`,
                     route: '/internals',
                   });
-                  const el = document.getElementById('internal-result-section');
-                  if (el) el.scrollIntoView({ behavior: 'smooth' });
+                  if (window.innerWidth < 1024) {
+                    const el = document.getElementById('internal-result-section');
+                    if (el) el.scrollIntoView({ behavior: 'smooth' });
+                  }
                 }}
               >
                 Calculate Internal Marks
