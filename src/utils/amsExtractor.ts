@@ -84,14 +84,23 @@ const romanToDecimal = (str: string): number | null => {
 /**
  * Extracts student metadata from full text
  */
+/**
+ * Extracts student metadata from full text
+ */
 export const extractStudentInfo = (text: string): AmsStudentInfo => {
   const info: AmsStudentInfo = {
     name: '',
     nameConfidence: 'none',
+    studentId: '',
     registerNumber: '',
     regConfidence: 'none',
+    degree: '',
+    branch: '',
     department: '',
     program: '',
+    batch: '',
+    resultMonthYear: '',
+    resultType: '',
     semester: null,
     semesterConfidence: 'none',
     academicYear: '',
@@ -99,6 +108,33 @@ export const extractStudentInfo = (text: string): AmsStudentInfo => {
     regulationConfidence: 'none',
     college: '',
   };
+
+  // Student ID patterns: "Stu Id", "Student Id", "StudentID"
+  const stuIdMatch = text.match(/(?:stu\s*id|student\s*id)\s*[:\-]?\s*([0-9a-zA-Z]{6,15})/i);
+  if (stuIdMatch && stuIdMatch[1]) {
+    info.studentId = stuIdMatch[1].trim().toUpperCase();
+  }
+
+  // Register Number patterns
+  const regPatterns = [
+    /(?:register\s*(?:no|number)?|roll\s*(?:no|number)?|ht\s*no|hall\s*ticket\s*(?:no|number)?|regd\s*(?:no|number)?)\s*[:\-]?\s*([0-9a-zA-Z]{6,15})/i,
+    /\b([0-9]{2}[0-9A-Za-z]{8,10})\b/,
+    /\b([0-9]{2}[A-Za-z]{2,5}[0-9]{3,5})\b/,
+  ];
+
+  for (const pattern of regPatterns) {
+    const match = text.match(pattern);
+    if (match && match[1]) {
+      info.registerNumber = match[1].trim().toUpperCase();
+      info.regConfidence = 'high';
+      break;
+    }
+  }
+
+  // If studentId wasn't found separately but we have a register number:
+  if (!info.studentId && info.registerNumber) {
+    info.studentId = info.registerNumber;
+  }
 
   // Name patterns
   const namePatterns = [
@@ -109,7 +145,7 @@ export const extractStudentInfo = (text: string): AmsStudentInfo => {
   for (const pattern of namePatterns) {
     const match = text.match(pattern);
     if (match && match[1]) {
-      const candidate = match[1].replace(/(?:reg|roll|ht|branch|course|semester|sem)[\s\S]*/i, '').trim();
+      const candidate = match[1].replace(/(?:reg|roll|ht|degree|branch|batch|course|semester|sem)[\s\S]*/i, '').trim();
       if (candidate.length > 2 && !/^(student|candidate|result|grade|marks)$/i.test(candidate)) {
         info.name = candidate;
         info.nameConfidence = 'high';
@@ -118,19 +154,60 @@ export const extractStudentInfo = (text: string): AmsStudentInfo => {
     }
   }
 
-  // Register Number patterns
-  const regPatterns = [
-    /(?:register\s*(?:no|number)?|roll\s*(?:no|number)?|ht\s*no|hall\s*ticket\s*(?:no|number)?|regd\s*(?:no|number)?)\s*[:\-]?\s*([0-9a-zA-Z]{6,15})/i,
-    /\b([0-9]{2}[0-9A-Za-z]{8,10})\b/,
-  ];
+  // Degree patterns: "Degree: B.Tech", "Degree - B.Tech"
+  const degreeMatch = text.match(/(?:degree)\s*[:\-]?\s*([A-Za-z\.\s]{2,15}?)(?:\r?\n|$)/i) ||
+    text.match(/\b(B\.Tech|M\.Tech|B\.E|B\.Sc|M\.Sc|BBA|MBA|BCA|MCA)\b/i);
+  if (degreeMatch && degreeMatch[1]) {
+    info.degree = degreeMatch[1].trim();
+  }
 
-  for (const pattern of regPatterns) {
-    const match = text.match(pattern);
-    if (match && match[1]) {
-      info.registerNumber = match[1].trim().toUpperCase();
+  // Branch / Department patterns: "Branch: CSE (AIML)", "Branch - CSE (AIML)"
+  const branchMatch = text.match(/(?:branch)\s*[:\-]?\s*([A-Za-z0-9\s\(\)&/\-_]{2,30}?)(?:\r?\n|$)/i) ||
+    text.match(/(?:department|program(?:me)?)\s*[:\-]?\s*([A-Za-z0-9\s\(\)&/\-_]{2,30}?)(?:\r?\n|$)/i);
+  if (branchMatch && branchMatch[1]) {
+    info.branch = branchMatch[1].trim();
+    info.department = branchMatch[1].trim();
+  }
+
+  // Batch patterns: "Batch: 2024-2025", "Batch - 2024-2025"
+  const batchMatch = text.match(/(?:batch)\s*[:\-]?\s*(\d{4}\s*[-–/]\s*\d{2,4})/i);
+  if (batchMatch && batchMatch[1]) {
+    info.batch = batchMatch[1].trim().replace(/\s+/g, '');
+  }
+
+  // Month & Year of Result: "Month & Year of Result: Nov.2024"
+  const monthYearMatch = text.match(/(?:month\s*(?:&|and)?\s*year\s*(?:of\s*result)?|result\s*month(?:\s*year)?)\s*[:\-]?\s*([A-Za-z]{3,9}\.?\s*\d{4})/i) ||
+    text.match(/\b((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s*\d{4})\b/i);
+  if (monthYearMatch && monthYearMatch[1]) {
+    info.resultMonthYear = monthYearMatch[1].trim();
+  }
+
+  // Result Type: "Result Type: Regular", "Result Type - Regular"
+  const resTypeMatch = text.match(/(?:result\s*type)\s*[:\-]?\s*(Regular|Arrear|Supplementary|Revaluation|Improvement)/i);
+  if (resTypeMatch && resTypeMatch[1]) {
+    info.resultType = resTypeMatch[1].trim();
+  }
+
+  // If table row contained repeating metadata:
+  // e.g. "1 24UECS0805 24UECS0805 PALLAPU DILEEP KUMAR B.Tech CSE (AIML) 2024-2025 10210BM101 ..."
+  const rowPattern = /(?:^\s*\d+\s+)?([0-9A-Za-z]{8,12})\s+([0-9A-Za-z]{8,12})\s+([A-Za-z\s\.]{4,35}?)\s+(B\.Tech|M\.Tech|B\.E|B\.Sc|MBA|MCA)\s+([A-Za-z0-9\s\(\)&/\-_]{2,25}?)\s+(\d{4}\s*[-–]\s*\d{4})/im;
+  const rowMatch = text.match(rowPattern);
+  if (rowMatch) {
+    if (!info.studentId) info.studentId = rowMatch[1].toUpperCase();
+    if (!info.registerNumber) {
+      info.registerNumber = rowMatch[2].toUpperCase();
       info.regConfidence = 'high';
-      break;
     }
+    if (!info.name) {
+      info.name = rowMatch[3].trim();
+      info.nameConfidence = 'high';
+    }
+    if (!info.degree) info.degree = rowMatch[4].trim();
+    if (!info.branch) {
+      info.branch = rowMatch[5].trim();
+      info.department = rowMatch[5].trim();
+    }
+    if (!info.batch) info.batch = rowMatch[6].replace(/\s+/g, '');
   }
 
   // Semester pattern: handles "Semester: 5", "Semester: Semester 5", "Sem: V", etc.
@@ -151,12 +228,6 @@ export const extractStudentInfo = (text: string): AmsStudentInfo => {
       info.regulation = detected;
       info.regulationConfidence = 'high';
     }
-  }
-
-  // Department pattern
-  const deptMatch = text.match(/(?:department|branch|program(?:me)?)\s*[:\-]\s*([a-zA-Z\s&]{2,30})/i);
-  if (deptMatch && deptMatch[1]) {
-    info.department = deptMatch[1].trim();
   }
 
   // Academic Year pattern (e.g. 2026-27, 2026–2027)
@@ -195,13 +266,14 @@ export const normalizeSubjectName = (name: string): string => {
 export const extractSubjectsFromText = (
   text: string,
   selectedRegulation?: RegulationId | null,
-  sourceLabel = 'AMS Result'
+  _sourceLabel = 'AMS Result'
 ): AmsSubject[] => {
   const lines = text.split('\n').map((l) => l.trim()).filter((l) => l.length > 0);
   const subjects: AmsSubject[] = [];
 
-  // Pattern for subject code: 4-10 alphanumeric characters
-  const codeRegex = /\b([A-Za-z0-9]{4,10})\b/;
+  // Course code regex:
+  // 10210BM101, 10217GE901, 10210CS302, CS501, 21CS101, EVS01
+  const courseCodeRegex = /\b(102\d{2}[A-Za-z]{2}\d{3}[A-Za-z]?|[A-Za-z]{2,5}\d{2,5}[A-Za-z0-9]?|\d{4,6}[A-Za-z]{2,4}\d{2,4}[A-Za-z0-9]?)\b/g;
 
   // Header detection to avoid treating header rows as subjects
   const isHeaderLine = (line: string): boolean => {
@@ -209,13 +281,20 @@ export const extractSubjectsFromText = (
     const matches = [
       'subject code',
       'course code',
+      'coursecode',
       'subject name',
       'course title',
+      'coursename',
       'credits',
       'letter grade',
       'grade point',
+      'sno',
       's.no',
       'serial no',
+      'stuid',
+      'stu id',
+      'registerno',
+      'register no',
     ];
     let matchCount = 0;
     for (const m of matches) {
@@ -231,108 +310,109 @@ export const extractSubjectsFromText = (
 
     // Skip headers or metadata lines
     if (isHeaderLine(line)) continue;
-    if (/^(student name|register no|semester|university|examination|date|page\s*\d+)/i.test(line)) {
+    if (/^(student name|register no|degree|branch|batch|month & year|result type|semester|university|examination|date|page\s*\d+)/i.test(line)) {
       continue;
     }
 
-    // Split line tokens by 2+ spaces, tabs, or pipe symbols
-    let rawTokens = line.split(/\t+| {2,}|\|/).map((t) => t.trim()).filter(Boolean);
+    // Look for valid course code
+    const codeMatches = Array.from(line.matchAll(courseCodeRegex));
+    if (codeMatches.length === 0) continue;
 
-    // If the first token is a pure serial number (1, 2, 3...) and next token looks like subject code, drop S.No
-    if (rawTokens.length >= 3 && /^[0-9]{1,3}$/.test(rawTokens[0])) {
-      if (/^[A-Za-z0-9]{4,10}$/.test(rawTokens[1])) {
-        rawTokens = rawTokens.slice(1);
-      }
-    }
+    // Filter out code candidates that are clearly not course codes
+    const validCodeMatches = codeMatches.filter((m) => {
+      const c = m[0].toUpperCase();
+      if (/^(SEMESTER|RESULT|STUDENT|CREDITS|GRADE|REGULAR|DEGREE|BRANCH|BATCH)$/i.test(c)) return false;
+      // If it looks like a student roll number: 2 digits + 2-5 letters + 3-5 digits (e.g. 24UECS0805)
+      if (/^\d{2}[A-Z]{2,5}\d{3,5}$/i.test(c)) return false;
+      return true;
+    });
 
-    let foundCode = '';
+    if (validCodeMatches.length === 0) continue;
+
+    // Take the last valid course code match in the line
+    const matchedCodeObj = validCodeMatches[validCodeMatches.length - 1];
+    const foundCode = matchedCodeObj[0].toUpperCase();
+    const codeIndex = matchedCodeObj.index ?? line.indexOf(foundCode);
+
+    // Remainder of line after course code
+    const afterCode = line.substring(codeIndex + foundCode.length).trim();
+    if (!afterCode) continue;
+
     let foundName = '';
     let foundCredits: number | '' | null = null;
     let foundGrade = '';
-    let foundGP: number | null = null;
     let foundStatus = 'Pass';
+    let creditsSource: 'AMS' | 'USER' = 'USER';
 
-    // Strategy 1: Check tokenized cells
-    if (rawTokens.length >= 3) {
-      for (const tok of rawTokens) {
-        // Check for subject code
-        if (!foundCode && /^[A-Za-z0-9]{4,10}$/.test(tok) && !/^(PASS|FAIL|ABSENT|CREDITS|GRADE)$/i.test(tok)) {
-          foundCode = tok.toUpperCase();
-          continue;
-        }
+    // Strategy 1: ... [Credits] [Result Status] [Grade]
+    const creditsStatusGradeMatch = afterCode.match(/^(.*?)\s+(\d+(?:\.\d+)?)\s+(Pass|Fail|RA|AB|Absent|W|NE)\s+([A-Z]\+?|[A-Z])$/i);
 
-        // Check for Grade
-        const upperTok = tok.toUpperCase();
-        if (!foundGrade && ALL_VALID_GRADES.has(upperTok)) {
-          foundGrade = upperTok;
-          continue;
-        }
+    // Strategy 2: ... [Result Status] [Grade]
+    const statusGradeMatch = afterCode.match(/^(.*?)\s+(Pass|Fail|RA|AB|Absent|W|NE)\s+([A-Z]\+?|[A-Z])$/i);
 
-        // Check for Status
-        if (/^(PASS|FAIL|RA|ABSENT|AB)$/i.test(tok)) {
-          foundStatus = tok.toUpperCase();
-          continue;
-        }
+    // Strategy 3: ... [Credits] [Grade]
+    const creditsGradeMatch = afterCode.match(/^(.*?)\s+(\d+(?:\.\d+)?)\s+([A-Z]\+?|[A-Z])$/i);
 
-        // Check for numeric credits (0, 0.5, 1, 1.5, 2, 3, 4, 5, etc.)
-        if (foundCredits === null && /^[0-9](\.[0-9])?$/.test(tok)) {
-          const c = parseFloat(tok);
-          if (!isNaN(c) && c >= 0 && c <= 15) {
-            foundCredits = c;
-            continue;
+    // Strategy 4: ... [Grade]
+    const gradeOnlyMatch = afterCode.match(/^(.*?)\s+([A-Z]\+?|[A-Z])$/i);
+
+    const formatStatus = (s: string) => {
+      const u = s.toUpperCase();
+      if (u === 'RA' || u === 'AB' || u === 'NE' || u === 'W') return u;
+      return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+    };
+
+    if (creditsStatusGradeMatch) {
+      foundName = creditsStatusGradeMatch[1].trim();
+      foundCredits = parseFloat(creditsStatusGradeMatch[2]);
+      foundStatus = formatStatus(creditsStatusGradeMatch[3]);
+      foundGrade = creditsStatusGradeMatch[4].toUpperCase();
+      creditsSource = 'AMS';
+    } else if (statusGradeMatch) {
+      foundName = statusGradeMatch[1].trim();
+      foundStatus = formatStatus(statusGradeMatch[2]);
+      foundGrade = statusGradeMatch[3].toUpperCase();
+      foundCredits = ''; // No credits in AMS document!
+      creditsSource = 'USER';
+    } else if (creditsGradeMatch) {
+      foundName = creditsGradeMatch[1].trim();
+      foundCredits = parseFloat(creditsGradeMatch[2]);
+      foundGrade = creditsGradeMatch[3].toUpperCase();
+      creditsSource = 'AMS';
+    } else if (gradeOnlyMatch && ALL_VALID_GRADES.has(gradeOnlyMatch[2].toUpperCase())) {
+      foundName = gradeOnlyMatch[1].trim();
+      foundGrade = gradeOnlyMatch[2].toUpperCase();
+      foundCredits = '';
+      creditsSource = 'USER';
+    } else {
+      // Fallback tokenize
+      const tokens = afterCode.split(/\s+/);
+      if (tokens.length >= 2) {
+        const lastTok = tokens[tokens.length - 1].toUpperCase();
+        if (ALL_VALID_GRADES.has(lastTok)) {
+          foundGrade = lastTok;
+          const secondLastTok = tokens[tokens.length - 2].toUpperCase();
+          if (/^(PASS|FAIL|RA|AB|ABSENT|W|NE)$/i.test(secondLastTok)) {
+            foundStatus = formatStatus(secondLastTok);
+            foundName = tokens.slice(0, tokens.length - 2).join(' ');
+          } else if (/^\d+(\.\d+)?$/.test(secondLastTok)) {
+            foundCredits = parseFloat(secondLastTok);
+            creditsSource = 'AMS';
+            foundName = tokens.slice(0, tokens.length - 2).join(' ');
+          } else {
+            foundName = tokens.slice(0, tokens.length - 1).join(' ');
           }
-        }
-
-        // Title token
-        if (tok.length > 2 && !foundName) {
-          foundName = tok;
         }
       }
     }
 
-    // Strategy 2: If token split didn't find complete row, parse via line regex
-    if (!foundCode || !foundGrade) {
-      // Look for code
-      const cMatch = line.match(codeRegex);
-      if (cMatch && !/^(SEMESTER|RESULT|STUDENT|CREDITS|GRADE)$/i.test(cMatch[1])) {
-        foundCode = cMatch[1].toUpperCase();
+    // Clean up course title
+    foundName = foundName.replace(/^[-–—:\s]+/, '').trim();
 
-        // Remove the code from line to examine remainder
-        const afterCode = line.substring(line.indexOf(cMatch[1]) + cMatch[1].length).trim();
+    if (foundCode && (foundGrade || foundName)) {
+      let foundGP: number | null = null;
+      let gpSource: 'AMS' | 'REGULATION' | 'USER' = 'REGULATION';
 
-        // Look for grade at word boundaries
-        const gradeMatches = afterCode.match(/\b(A\+|B\+|O|S|A|B|C|D|P|F|RA|AB)\b/i);
-        if (gradeMatches) {
-          foundGrade = gradeMatches[1].toUpperCase();
-        }
-
-        // Look for credits: e.g. standalone 0, 1, 2, 3, 4, 5
-        const creditMatch = afterCode.match(/\b([0-9](\.[0-9])?)\b/);
-        if (creditMatch) {
-          const val = parseFloat(creditMatch[1]);
-          if (!isNaN(val) && val >= 0 && val <= 12) {
-            foundCredits = val;
-          }
-        }
-
-        // Title is roughly the string between code and credits/grade
-        let rawTitle = afterCode;
-        if (foundGrade) {
-          rawTitle = rawTitle.replace(new RegExp(`\\b${foundGrade}\\b`, 'i'), '');
-        }
-        if (creditMatch) {
-          rawTitle = rawTitle.replace(creditMatch[0], '');
-        }
-        rawTitle = rawTitle.replace(/[\d|\t]+/g, ' ').replace(/\s+/g, ' ').trim();
-        if (rawTitle.length > 2) {
-          foundName = rawTitle;
-        }
-      }
-    }
-
-    // A valid row requires at least a Subject Code OR a recognizable Subject Name + Grade
-    if ((foundCode || (foundName && foundName.length >= 4)) && (foundGrade || foundCredits !== null)) {
-      // Derive Grade Point from regulation if available and grade is present
       if (foundGrade && regConfig) {
         const matchingGrade = regConfig.grades.find((g) => g.grade.toUpperCase() === foundGrade);
         if (matchingGrade) {
@@ -340,27 +420,26 @@ export const extractSubjectsFromText = (
         }
       }
 
-      // Check confidence levels
-      const codeConf: ConfidenceLevel = foundCode ? 'high' : 'low';
-      const nameConf: ConfidenceLevel = foundName && foundName.length > 3 ? 'high' : 'medium';
-      const credConf: ConfidenceLevel = foundCredits !== null ? 'high' : 'none';
+      const credConf: ConfidenceLevel = foundCredits !== '' && foundCredits !== null ? 'high' : 'none';
       const gradeConf: ConfidenceLevel = foundGrade && ALL_VALID_GRADES.has(foundGrade) ? 'high' : 'low';
 
       subjects.push({
-        id: `ams-sub-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-        subjectCode: foundCode || '',
-        subjectName: foundName || (foundCode ? `Subject ${foundCode}` : `Subject ${subjects.length + 1}`),
-        credits: foundCredits !== null ? foundCredits : '',
-        grade: foundGrade || '',
+        id: `ams-sub-${Date.now()}-${Math.random().toString(36).substring(2, 7)}-${idx}`,
+        subjectCode: foundCode,
+        subjectName: foundName || `Subject ${foundCode}`,
+        credits: foundCredits,
+        grade: foundGrade,
         gradePoint: foundGP,
         status: foundStatus,
-        source: `${sourceLabel}, Row ${idx + 1}`,
+        source: 'AMS',
+        creditsSource,
+        gradePointSource: gpSource,
         isDuplicate: false,
         isExcluded: false,
         isManuallyEdited: false,
         confidence: {
-          code: codeConf,
-          name: nameConf,
+          code: 'high',
+          name: foundName.length > 3 ? 'high' : 'medium',
           credits: credConf,
           grade: gradeConf,
           gradePoint: foundGP !== null ? 'high' : 'none',
@@ -392,7 +471,6 @@ export const detectAndFlagDuplicates = (subjects: AmsSubject[]): AmsSubject[] =>
         seenCodes.set(normCode, index);
       }
     } else if (sub.subjectName) {
-      // Fallback signature: name + credits + grade
       const sig = `${normalizeSubjectName(sub.subjectName)}_${sub.credits}_${sub.grade}`;
       if (seenSignatures.has(sig)) {
         isDupe = true;
@@ -405,7 +483,7 @@ export const detectAndFlagDuplicates = (subjects: AmsSubject[]): AmsSubject[] =>
       return {
         ...sub,
         isDuplicate: true,
-        isExcluded: true, // by default excluded so it is not double-counted
+        isExcluded: true,
       };
     }
     return sub;
@@ -415,7 +493,10 @@ export const detectAndFlagDuplicates = (subjects: AmsSubject[]): AmsSubject[] =>
 /**
  * Calculates Audit Summary for user verification and report
  */
-export const computeAmsAuditSummary = (subjects: AmsSubject[]): AmsAuditSummary => {
+export const computeAmsAuditSummary = (
+  subjects: AmsSubject[],
+  studentInfo?: AmsStudentInfo
+): AmsAuditSummary => {
   const subjectsDetected = subjects.length;
   const uniqueSubjects = subjects.filter((s) => !s.isExcluded);
   const subjectsIncluded = uniqueSubjects.length;
@@ -429,6 +510,7 @@ export const computeAmsAuditSummary = (subjects: AmsSubject[]): AmsAuditSummary 
 
   let totalCredits = 0;
   let totalQualityPoints = 0;
+  let hasMissingCreditsOrGP = false;
 
   for (const s of subjects) {
     if (s.isDuplicate) duplicatesCount++;
@@ -436,24 +518,55 @@ export const computeAmsAuditSummary = (subjects: AmsSubject[]): AmsAuditSummary 
     if (s.isManuallyEdited) manualCorrectionsCount++;
 
     if (!s.isExcluded) {
-      const c = Number(s.credits) || 0;
-      const gp = s.gradePoint ?? 0;
+      const isMissingCredit = s.credits === '' || s.credits === null || Number(s.credits) < 0;
+      const isMissingGP = !s.grade || s.gradePoint === null;
 
-      if (c === 0) {
-        nonCreditCount++;
-      } else {
-        creditBearingCount++;
-        totalCredits += c;
-        totalQualityPoints += c * gp;
-      }
-
-      if (s.credits === '' || s.credits === null || !s.grade || s.gradePoint === null) {
+      if (isMissingCredit || isMissingGP) {
         fieldsRequiringInput++;
+        hasMissingCreditsOrGP = true;
+      } else {
+        const c = Number(s.credits);
+        const gp = s.gradePoint!;
+        if (c === 0) {
+          nonCreditCount++;
+        } else {
+          creditBearingCount++;
+          totalCredits += c;
+          totalQualityPoints += c * gp;
+        }
       }
     }
   }
 
-  const sgpa = totalCredits > 0 ? totalQualityPoints / totalCredits : null;
+  // CRITICAL RULE: DO NOT calculate SGPA until required missing information is provided.
+  const sgpa = !hasMissingCreditsOrGP && totalCredits > 0 ? totalQualityPoints / totalCredits : null;
+
+  // Track fields detected automatically vs entered by user
+  const fieldsDetectedAutomatically: string[] = [];
+  const fieldsEnteredByUser: string[] = [];
+
+  if (studentInfo) {
+    if (studentInfo.name) fieldsDetectedAutomatically.push('Student Name');
+    if (studentInfo.registerNumber) fieldsDetectedAutomatically.push('Register Number');
+    if (studentInfo.degree) fieldsDetectedAutomatically.push('Degree');
+    if (studentInfo.branch) fieldsDetectedAutomatically.push('Branch');
+    if (studentInfo.batch) fieldsDetectedAutomatically.push('Batch');
+    if (studentInfo.resultMonthYear) fieldsDetectedAutomatically.push('Result Month & Year');
+    if (studentInfo.regulation) fieldsDetectedAutomatically.push('Regulation');
+  }
+
+  if (subjectsDetected > 0) {
+    fieldsDetectedAutomatically.push(`${subjectsDetected} Subject Codes & Titles`);
+    fieldsDetectedAutomatically.push('Letter Grades & Results');
+  }
+
+  const anyUserCredits = subjects.some((s) => s.creditsSource === 'USER' || s.credits === '' || s.credits === null);
+  if (anyUserCredits) {
+    fieldsEnteredByUser.push('Course Credits');
+  }
+  if (!studentInfo?.regulation) {
+    fieldsEnteredByUser.push('Academic Regulation');
+  }
 
   return {
     subjectsDetected,
@@ -467,6 +580,8 @@ export const computeAmsAuditSummary = (subjects: AmsSubject[]): AmsAuditSummary 
     totalCredits,
     totalQualityPoints,
     sgpa,
+    fieldsDetectedAutomatically,
+    fieldsEnteredByUser,
   };
 };
 

@@ -93,7 +93,13 @@ export const AmsResultReport: React.FC<AmsResultReportProps> = ({
             Official SGPA Calculation Report
           </h2>
           <p className="text-xs text-[var(--text-secondary)] mt-1">
-            Student: <strong>{studentInfo.name || 'Verified Student'}</strong> • Semester {studentInfo.semester || 5} • {studentInfo.regulation || 'VTR21'}
+            Student: <strong>{studentInfo.name || 'Verified Student'}</strong>
+            {studentInfo.registerNumber ? ` (${studentInfo.registerNumber})` : ''}
+            {studentInfo.degree ? ` • ${studentInfo.degree}` : ''}
+            {studentInfo.branch ? ` • ${studentInfo.branch}` : ''}
+            {studentInfo.batch ? ` • Batch ${studentInfo.batch}` : ''}
+            {studentInfo.resultMonthYear ? ` • ${studentInfo.resultMonthYear}` : ''}
+            • Semester {studentInfo.semester || 1} • {studentInfo.regulation || 'VTR21'}
           </p>
         </div>
 
@@ -118,10 +124,10 @@ export const AmsResultReport: React.FC<AmsResultReportProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left: Audit Summary & Subject Breakdown (7 cols) */}
         <div className="lg:col-span-7 flex flex-col gap-6">
-          {/* Imported Result Summary Card (Section 29 & 30) */}
+          {/* Imported Result Summary Card */}
           <div className="apple-main-container p-6 flex flex-col gap-4">
             <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] border-b border-[var(--border-secondary)] pb-2.5">
-              Imported Result Summary & Audit
+              Imported Result Summary & Accuracy Audit
             </span>
 
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -172,11 +178,30 @@ export const AmsResultReport: React.FC<AmsResultReportProps> = ({
 
               <div className="p-3 rounded-xl bg-[var(--surface)] border border-[var(--border-secondary)]">
                 <span className="text-[10px] font-bold uppercase text-[var(--text-secondary)] block">
-                  User Verified Fields
+                  Data Status
                 </span>
-                <span className="text-lg font-bold text-[var(--text-primary)] mt-0.5 block tabular-nums">
-                  {auditSummary.manualCorrectionsCount > 0 ? auditSummary.manualCorrectionsCount : 'Verified'}
+                <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400 mt-1 block">
+                  Verified ✓
                 </span>
+              </div>
+            </div>
+
+            {/* Provenance Audit Details */}
+            <div className="p-3.5 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] flex flex-col gap-2 text-xs">
+              <span className="font-bold text-[var(--text-primary)]">Data Provenance Summary</span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                <div className="flex flex-col gap-1">
+                  <span className="font-semibold text-[var(--text-secondary)]">Auto-Detected from Document:</span>
+                  <span className="text-[var(--text-primary)]">
+                    {auditSummary.fieldsDetectedAutomatically?.join(', ') || 'Student Info, Subject Codes, Titles, Grades'}
+                  </span>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="font-semibold text-[var(--text-secondary)]">User Verified / Entered:</span>
+                  <span className="text-[var(--text-primary)]">
+                    {auditSummary.fieldsEnteredByUser?.join(', ') || 'Course Credits, Regulation'}
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -274,13 +299,29 @@ export const AmsResultReport: React.FC<AmsResultReportProps> = ({
               </div>
             </div>
 
-            {/* Formula box */}
-            <div className="rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-primary)] p-4 text-xs text-[var(--text-primary)] font-mono leading-relaxed">
-              <strong className="block mb-1 text-[13px] text-[var(--text-primary)]">SGPA Formula:</strong>
-              <div>SGPA = Σ (Credits × Grade Point) ÷ Σ (Credits)</div>
-              <div className="mt-1 font-semibold">
-                {formatFixed(auditSummary.totalQualityPoints, 2)} ÷ {auditSummary.totalCredits} = {formattedSgpa}
+            {/* Step-by-Step Formula Breakdown Box */}
+            <div className="rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-primary)] p-4 text-xs font-mono leading-relaxed flex flex-col gap-2">
+              <div className="flex items-center justify-between border-b border-[var(--border-secondary)] pb-1.5">
+                <strong className="text-[12px] text-[var(--text-primary)]">SGPA Step-by-Step Breakdown:</strong>
+                <span className="text-[10px] text-[var(--text-tertiary)]">{studentInfo.regulation}</span>
               </div>
+              <div className="text-[11px] text-[var(--text-secondary)]">
+                Formula: SGPA = Σ (Credits × Grade Point) ÷ Σ (Credits)
+              </div>
+              <div className="text-[11px] text-[var(--text-primary)] bg-[var(--surface)] p-2.5 rounded-lg border border-[var(--border-secondary)] max-h-28 overflow-y-auto break-words leading-loose">
+                {subjects
+                  .filter((s) => !s.isExcluded)
+                  .map((s) => `(${s.credits || 0} × ${s.gradePoint ?? 0})`)
+                  .join(' + ')}
+              </div>
+              <div className="text-xs font-semibold text-[var(--text-primary)] pt-1">
+                = {formatFixed(auditSummary.totalQualityPoints, 2)} Quality Points ÷ {auditSummary.totalCredits} Credits = <span className="font-bold text-[var(--accent)] text-sm">{formattedSgpa}</span>
+              </div>
+              {auditSummary.nonCreditCount > 0 && (
+                <div className="text-[10px] text-[var(--text-tertiary)] italic">
+                  * {auditSummary.nonCreditCount} non-credit course(s) with 0 credits contribute 0 points and are excluded from the denominator.
+                </div>
+              )}
             </div>
 
             {/* Appendix Option for PDF (Section 33 & 34) */}

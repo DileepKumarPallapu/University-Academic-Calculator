@@ -104,18 +104,29 @@ export const AmsPrintReport: React.FC<AmsPrintReportProps> = ({
                 <span className="text-black/60 font-medium">Register No:</span>
                 <span className="font-mono font-bold text-black">{studentInfo.registerNumber || '—'}</span>
 
+                {(studentInfo.degree || studentInfo.branch) && (
+                  <>
+                    <span className="text-black/60 font-medium">Degree & Branch:</span>
+                    <span className="font-semibold text-black">
+                      {[studentInfo.degree, studentInfo.branch].filter(Boolean).join(' - ')}
+                    </span>
+                  </>
+                )}
+
+                {(studentInfo.batch || studentInfo.resultMonthYear) && (
+                  <>
+                    <span className="text-black/60 font-medium">Batch / Period:</span>
+                    <span className="font-semibold text-black">
+                      {[studentInfo.batch, studentInfo.resultMonthYear].filter(Boolean).join(' • ')}
+                    </span>
+                  </>
+                )}
+
                 <span className="text-black/60 font-medium">Semester:</span>
-                <span className="font-semibold text-black">Semester {studentInfo.semester || 5}</span>
+                <span className="font-semibold text-black">Semester {studentInfo.semester || 1}</span>
 
                 <span className="text-black/60 font-medium">Regulation:</span>
                 <span className="font-bold text-black">{studentInfo.regulation || 'VTR21'}</span>
-
-                {studentInfo.department && (
-                  <>
-                    <span className="text-black/60 font-medium">Department:</span>
-                    <span className="font-semibold text-black">{studentInfo.department}</span>
-                  </>
-                )}
               </div>
             </div>
 
@@ -154,9 +165,10 @@ export const AmsPrintReport: React.FC<AmsPrintReportProps> = ({
                   <th className="py-1.5 px-2 w-8 text-center border-r border-black/20">S.No</th>
                   <th className="py-1.5 px-2 w-20 border-r border-black/20">Code</th>
                   <th className="py-1.5 px-2 border-r border-black/20">Subject Name</th>
+                  <th className="py-1.5 px-2 w-12 text-center border-r border-black/20">Result</th>
+                  <th className="py-1.5 px-2 w-12 text-center border-r border-black/20">Grade</th>
+                  <th className="py-1.5 px-2 w-12 text-center border-r border-black/20">GP</th>
                   <th className="py-1.5 px-2 w-14 text-center border-r border-black/20">Credits</th>
-                  <th className="py-1.5 px-2 w-14 text-center border-r border-black/20">Grade</th>
-                  <th className="py-1.5 px-2 w-14 text-center border-r border-black/20">GP</th>
                   <th className="py-1.5 px-2 w-20 text-right">Credits × GP</th>
                 </tr>
               </thead>
@@ -182,14 +194,17 @@ export const AmsPrintReport: React.FC<AmsPrintReportProps> = ({
                           </span>
                         )}
                       </td>
-                      <td className="py-1.5 px-2 text-center border-r border-black/20 font-mono">
-                        {c}
+                      <td className="py-1.5 px-2 text-center border-r border-black/20 font-mono font-semibold">
+                        {s.status || 'Pass'}
                       </td>
                       <td className="py-1.5 px-2 text-center border-r border-black/20 font-bold font-mono">
                         {s.grade}
                       </td>
                       <td className="py-1.5 px-2 text-center border-r border-black/20 font-mono">
                         {gp}
+                      </td>
+                      <td className="py-1.5 px-2 text-center border-r border-black/20 font-mono">
+                        {c}
                       </td>
                       <td className="py-1.5 px-2 text-right font-mono font-bold">
                         {cp.toFixed(1)}
@@ -200,16 +215,13 @@ export const AmsPrintReport: React.FC<AmsPrintReportProps> = ({
               </tbody>
               <tfoot>
                 <tr className="bg-black/[0.04] border-t-2 border-black/40 font-bold">
-                  <td colSpan={3} className="py-2 px-2 text-right border-r border-black/20 uppercase text-[9px]">
+                  <td colSpan={6} className="py-2 px-2 text-right border-r border-black/20 uppercase text-[9px]">
                     Total Academic Count
                   </td>
                   <td className="py-2 px-2 text-center font-mono border-r border-black/20">
                     {auditSummary.totalCredits}
                   </td>
-                  <td colSpan={2} className="py-2 px-2 border-r border-black/20 text-right uppercase text-[9px]">
-                    Total Quality Pts:
-                  </td>
-                  <td className="py-2 px-2 text-right font-mono text-[11px]">
+                  <td className="py-2 px-2 text-right font-mono font-bold">
                     {formatFixed(auditSummary.totalQualityPoints, 2)}
                   </td>
                 </tr>

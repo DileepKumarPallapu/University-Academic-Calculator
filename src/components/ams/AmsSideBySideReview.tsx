@@ -9,6 +9,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Check,
+  CheckCircle2,
+  Sparkles,
+  X,
 } from 'lucide-react';
 import type {
   AmsExtractionResult,
@@ -146,7 +149,9 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
       grade: defaultGrade,
       gradePoint: defaultGP,
       status: 'Pass',
-      source: 'Manually Added',
+      source: 'USER',
+      creditsSource: 'USER',
+      gradePointSource: 'REGULATION',
       isDuplicate: false,
       isExcluded: false,
       isManuallyEdited: true,
@@ -183,8 +188,43 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
     );
   };
 
+  // Bulk credit entry state
+  const [showBulkCreditModal, setShowBulkCreditModal] = useState<boolean>(false);
+  const [bulkCreditText, setBulkCreditText] = useState<string>('');
+  const [profileDiffDismissed, setProfileDiffDismissed] = useState<boolean>(false);
+
+  const includedSubjects = subjects.filter((s) => !s.isExcluded);
+  const parsedBulkTokens = bulkCreditText
+    .trim()
+    .split(/[\s,;\t\n]+/)
+    .filter(Boolean);
+  const validBulkCredits = parsedBulkTokens.map(Number).filter((n) => !isNaN(n) && n >= 0);
+  const bulkCreditCountMatches =
+    parsedBulkTokens.length > 0 &&
+    validBulkCredits.length === includedSubjects.length &&
+    parsedBulkTokens.length === validBulkCredits.length;
+
+  const handleApplyBulkCredits = () => {
+    if (!bulkCreditCountMatches) return;
+    let idx = 0;
+    setSubjects((prev) =>
+      prev.map((s) => {
+        if (s.isExcluded) return s;
+        const newCredit = validBulkCredits[idx++];
+        return {
+          ...s,
+          credits: newCredit,
+          creditsSource: 'USER',
+          isManuallyEdited: true,
+        };
+      })
+    );
+    setShowBulkCreditModal(false);
+    setBulkCreditText('');
+  };
+
   // Audit calculations
-  const audit = computeAmsAuditSummary(subjects);
+  const audit = computeAmsAuditSummary(subjects, studentInfo);
 
   // Validation before calculation:
   // 1. Regulation must be selected
@@ -246,7 +286,7 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
       </div>
 
       {/* Profile Mismatch Notice */}
-      {profileDiffers && profile && (
+      {profileDiffers && profile && !profileDiffDismissed && (
         <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-900 dark:text-amber-200">
           <div className="flex items-center gap-2.5">
             <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
@@ -265,7 +305,7 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => {}}
+              onClick={() => setProfileDiffDismissed(true)}
               className="px-3 py-1.5 rounded-lg border border-amber-300 dark:border-amber-800 font-semibold"
             >
               Use Imported
@@ -394,14 +434,108 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
             mobileTab === 'review' ? 'flex' : 'hidden lg:flex'
           }`}
         >
+          {/* Information Required for SGPA Checklist Card */}
+          <div className="apple-main-container p-5 flex flex-col gap-3 border border-[var(--border-primary)]">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[var(--border-secondary)] pb-2.5">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-[var(--accent)]">
+                  Information Required for SGPA
+                </span>
+                <span className="text-xs text-[var(--text-secondary)]">
+                  {canCalculate ? '✓ All requirements met' : '⚠ Action required below'}
+                </span>
+              </div>
+              <span className="text-[11px] text-[var(--text-tertiary)]">
+                Source: AMS Examination Portal
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+              {/* 1. Student Details */}
+              <div className="p-3 rounded-xl bg-[var(--surface)] border border-[var(--border-secondary)] flex flex-col gap-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-[var(--text-primary)]">1. Student Details</span>
+                  <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5">
+                    <Check className="w-3 h-3" /> Auto-detected
+                  </span>
+                </div>
+                <p className="text-[11px] text-[var(--text-secondary)] line-clamp-2">
+                  {studentInfo.name || 'Student Name'} {studentInfo.registerNumber ? `(${studentInfo.registerNumber})` : ''}
+                  {studentInfo.degree ? ` • ${studentInfo.degree}` : ''}
+                  {studentInfo.branch ? ` • ${studentInfo.branch}` : ''}
+                </p>
+              </div>
+
+              {/* 2. Course Credits */}
+              <div className={`p-3 rounded-xl border flex flex-col gap-1.5 ${
+                hasMissingCredits
+                  ? 'bg-amber-500/5 border-amber-500/30'
+                  : 'bg-[var(--surface)] border-[var(--border-secondary)]'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-[var(--text-primary)]">2. Course Credits</span>
+                  {hasMissingCredits ? (
+                    <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 flex items-center gap-0.5">
+                      <AlertTriangle className="w-3 h-3" /> Missing in AMS
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5">
+                      <Check className="w-3 h-3" /> All {includedSubjects.length} entered
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center justify-between gap-2 mt-auto">
+                  <span className="text-[11px] text-[var(--text-secondary)]">
+                    {hasMissingCredits
+                      ? `${subjects.filter(s => !s.isExcluded && (s.credits === '' || s.credits === null)).length} need credits`
+                      : `${audit.totalCredits} total credits`}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowBulkCreditModal(true)}
+                    className="text-[10px] font-bold px-2 py-1 rounded-md bg-[var(--bg-tertiary)] hover:bg-[var(--border-secondary)] text-[var(--text-primary)] flex items-center gap-1 transition-colors"
+                  >
+                    <Sparkles className="w-3 h-3 text-[var(--accent)]" />
+                    <span>Enter quickly</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 3. Academic Regulation */}
+              <div className={`p-3 rounded-xl border flex flex-col gap-1.5 ${
+                !studentInfo.regulation
+                  ? 'bg-rose-500/5 border-rose-500/30'
+                  : 'bg-[var(--surface)] border-[var(--border-secondary)]'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-[var(--text-primary)]">3. Regulation</span>
+                  {studentInfo.regulation ? (
+                    <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5">
+                      <Check className="w-3 h-3" /> {studentInfo.regulation} (GP Derived)
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 flex items-center gap-0.5">
+                      <AlertTriangle className="w-3 h-3" /> Select below
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-[var(--text-secondary)]">
+                  {studentInfo.regulation
+                    ? `Grade points derived automatically using ${studentInfo.regulation} rules.`
+                    : 'Choose regulation below to derive Grade Points.'}
+                </p>
+              </div>
+            </div>
+          </div>
+
           {/* Student Information Card */}
           <div className="apple-main-container p-6 flex flex-col gap-4">
             <div className="flex items-center justify-between border-b border-[var(--border-secondary)] pb-3">
               <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-                Student Information
+                Student & Examination Information
               </span>
               <span className="text-[11px] text-[var(--text-tertiary)]">
-                Auto-extracted from header
+                Auto-extracted from AMS document
               </span>
             </div>
 
@@ -457,7 +591,63 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
                       regConfidence: 'high',
                     }))
                   }
-                  placeholder="e.g. 22021A0501"
+                  placeholder="e.g. 24UECS0805"
+                  className="apple-input text-sm h-10"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-[var(--text-primary)]">
+                  Degree & Branch
+                </label>
+                <input
+                  type="text"
+                  value={
+                    studentInfo.degree && studentInfo.branch
+                      ? `${studentInfo.degree} - ${studentInfo.branch}`
+                      : studentInfo.branch || studentInfo.degree || ''
+                  }
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const parts = val.split('-');
+                    if (parts.length > 1) {
+                      setStudentInfo((prev) => ({
+                        ...prev,
+                        degree: parts[0].trim(),
+                        branch: parts.slice(1).join('-').trim(),
+                        department: parts.slice(1).join('-').trim(),
+                      }));
+                    } else {
+                      setStudentInfo((prev) => ({
+                        ...prev,
+                        branch: val.trim(),
+                        department: val.trim(),
+                      }));
+                    }
+                  }}
+                  placeholder="e.g. B.Tech - CSE (AIML)"
+                  className="apple-input text-sm h-10"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-[var(--text-primary)]">
+                  Batch & Result Period
+                </label>
+                <input
+                  type="text"
+                  value={
+                    studentInfo.batch && studentInfo.resultMonthYear
+                      ? `${studentInfo.batch} (${studentInfo.resultMonthYear})`
+                      : studentInfo.batch || studentInfo.resultMonthYear || ''
+                  }
+                  onChange={(e) =>
+                    setStudentInfo((prev) => ({
+                      ...prev,
+                      batch: e.target.value,
+                    }))
+                  }
+                  placeholder="e.g. 2024-2025 (Nov.2024)"
                   className="apple-input text-sm h-10"
                 />
               </div>
@@ -467,7 +657,7 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
                   Semester
                 </label>
                 <select
-                  value={studentInfo.semester || 5}
+                  value={studentInfo.semester || 1}
                   onChange={(e) =>
                     setStudentInfo((prev) => ({
                       ...prev,
@@ -537,14 +727,25 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
                   {audit.creditBearingCount} Credit-bearing • {audit.nonCreditCount} Non-credit
                 </span>
               </div>
-              <button
-                type="button"
-                onClick={handleAddSubjectRow}
-                className="apple-btn-secondary text-xs h-8 px-3 gap-1 self-start sm:self-auto"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Add Subject</span>
-              </button>
+              <div className="flex items-center gap-2 self-start sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => setShowBulkCreditModal(true)}
+                  className="apple-btn-secondary text-xs h-8 px-2.5 gap-1.5 text-[var(--accent)] hover:border-[var(--accent)]"
+                  title="Paste or enter credits for all subjects quickly"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Enter Credits Quickly</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAddSubjectRow}
+                  className="apple-btn-secondary text-xs h-8 px-3 gap-1"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Subject</span>
+                </button>
+              </div>
             </div>
 
             {/* Desktop Table View */}
@@ -790,6 +991,86 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Bulk Credit Entry Modal */}
+      {showBulkCreditModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-md bg-[var(--surface)] border border-[var(--border-primary)] rounded-2xl p-6 shadow-2xl flex flex-col gap-4">
+            <div className="flex items-center justify-between border-b border-[var(--border-secondary)] pb-3">
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 rounded-lg bg-[var(--bg-tertiary)] text-[var(--accent)]">
+                  <Sparkles className="w-4 h-4" />
+                </span>
+                <h3 className="font-bold text-sm text-[var(--text-primary)]">
+                  Bulk Credit Entry
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowBulkCreditModal(false)}
+                className="p-1 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+              Paste or enter the credit values for all <strong>{includedSubjects.length}</strong> included subjects in order, separated by spaces, commas, or newlines. 0-credit subjects are valid.
+            </p>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold text-[var(--text-primary)]">
+                Credit Sequence
+              </label>
+              <textarea
+                rows={3}
+                value={bulkCreditText}
+                onChange={(e) => setBulkCreditText(e.target.value)}
+                placeholder={`e.g. 3 3 1.5 4 1.5 2 4 3 1.5 0 0 (${includedSubjects.length} values)`}
+                className="apple-input text-xs font-mono p-3 resize-none"
+                autoFocus
+              />
+            </div>
+
+            {/* Validation badge */}
+            <div className="flex items-center justify-between text-xs p-2.5 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-secondary)]">
+              <span className="text-[var(--text-secondary)]">
+                Count: <strong>{validBulkCredits.length}</strong> / {includedSubjects.length}
+              </span>
+              {bulkCreditCountMatches ? (
+                <span className="font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Ready to apply
+                </span>
+              ) : (
+                <span className="font-semibold text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  {validBulkCredits.length > includedSubjects.length
+                    ? `${validBulkCredits.length - includedSubjects.length} extra`
+                    : `Needs ${includedSubjects.length - validBulkCredits.length} more`}
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--border-secondary)]">
+              <button
+                type="button"
+                onClick={() => setShowBulkCreditModal(false)}
+                className="apple-btn-secondary text-xs h-9 px-3.5"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleApplyBulkCredits}
+                disabled={!bulkCreditCountMatches}
+                className="apple-btn-primary text-xs h-9 px-4 disabled:opacity-40 font-semibold"
+              >
+                Apply Credits
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

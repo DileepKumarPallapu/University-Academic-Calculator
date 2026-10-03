@@ -5,10 +5,16 @@ export type ConfidenceLevel = 'high' | 'medium' | 'low' | 'none';
 export interface AmsStudentInfo {
   name: string;
   nameConfidence: ConfidenceLevel;
+  studentId?: string;
   registerNumber: string;
   regConfidence: ConfidenceLevel;
+  degree?: string;
+  branch?: string;
   department: string;
   program: string;
+  batch?: string;
+  resultMonthYear?: string;
+  resultType?: string;
   semester: number | null;
   semesterConfidence: ConfidenceLevel;
   academicYear: string;
@@ -24,8 +30,10 @@ export interface AmsSubject {
   credits: number | '' | null;
   grade: string;
   gradePoint: number | null;
-  status: string; // e.g., 'Pass', 'RA', 'Absent', 'Fail'
-  source: string;
+  status: string; // e.g., 'Pass', 'RA', 'AB', 'NE'
+  source: 'AMS' | 'USER';
+  creditsSource?: 'AMS' | 'USER';
+  gradePointSource?: 'AMS' | 'REGULATION' | 'USER';
   isDuplicate: boolean;
   isExcluded: boolean;
   isManuallyEdited: boolean;
@@ -72,4 +80,6 @@ export interface AmsAuditSummary {
   totalCredits: number;
   totalQualityPoints: number;
   sgpa: number | null;
+  fieldsDetectedAutomatically?: string[];
+  fieldsEnteredByUser?: string[];
 }

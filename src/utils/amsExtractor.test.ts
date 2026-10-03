@@ -153,4 +153,144 @@ describe('AMS Result Extractor', () => {
     expect(audit.creditBearingCount).toBe(0);
     expect(audit.sgpa).toBeNull();
   });
+
+  it('correctly extracts 11-subject real university AMS semester format without credits', () => {
+    const rawAmsDocument = `
+      Student Name: PALLAPU DILEEP KUMAR
+      Register No: 24UECS0805
+      Degree: B.Tech
+      Branch: CSE (AIML)
+      Batch: 2024-2025
+      Month & Year of Result: Nov.2024
+      Result Type: Regular
+
+      10210BM101 Biology for Engineers Pass C
+      10210CS102 Computational Thinking for Problem Solving Pass C
+      10210CS302 Computational Thinking Laboratory Pass S
+      10210EE201 Basic Electrical, Electronics & Measurement Engineering Pass A
+      10210EE204 Introduction to Engineering Pass S
+      10210EN201 Professional Communication - I Pass C
+      10210MA101 Linear Algebra for Computing Pass B
+      10210PH101 Semiconductor Physics Pass D
+      10210PH301 Modern Physics Laboratory Pass C
+      10217GE901 Engineers and Society Pass S
+      10217GE902 Constitution of India Pass B
+    `;
+
+    // 1. Verify student info extraction
+    const studentInfo = extractStudentInfo(rawAmsDocument);
+    expect(studentInfo.name).toBe('PALLAPU DILEEP KUMAR');
+    expect(studentInfo.registerNumber).toBe('24UECS0805');
+    expect(studentInfo.degree).toBe('B.Tech');
+    expect(studentInfo.branch).toBe('CSE (AIML)');
+    expect(studentInfo.batch).toBe('2024-2025');
+    expect(studentInfo.resultMonthYear).toBe('Nov.2024');
+    expect(studentInfo.resultType).toBe('Regular');
+    // Semester is not explicitly named "Semester: X", so remains null for user selection
+    expect(studentInfo.semester).toBeNull();
+
+    // 2. Extract subjects with regulation VTR21
+    const subjects = extractSubjectsFromText(rawAmsDocument, 'VTR21');
+    expect(subjects.length).toBe(11);
+
+    // Verify all 11 subject codes
+    const expectedCodes = [
+      '10210BM101',
+      '10210CS102',
+      '10210CS302',
+      '10210EE201',
+      '10210EE204',
+      '10210EN201',
+      '10210MA101',
+      '10210PH101',
+      '10210PH301',
+      '10217GE901',
+      '10217GE902',
+    ];
+    expect(subjects.map((s) => s.subjectCode)).toEqual(expectedCodes);
+
+    // Verify full non-truncated course names
+    expect(subjects[0].subjectName).toBe('Biology for Engineers');
+    expect(subjects[1].subjectName).toBe('Computational Thinking for Problem Solving');
+    expect(subjects[2].subjectName).toBe('Computational Thinking Laboratory');
+    expect(subjects[3].subjectName).toBe('Basic Electrical, Electronics & Measurement Engineering');
+    expect(subjects[4].subjectName).toBe('Introduction to Engineering');
+    expect(subjects[5].subjectName).toBe('Professional Communication - I');
+    expect(subjects[6].subjectName).toBe('Linear Algebra for Computing');
+    expect(subjects[7].subjectName).toBe('Semiconductor Physics');
+    expect(subjects[8].subjectName).toBe('Modern Physics Laboratory');
+    expect(subjects[9].subjectName).toBe('Engineers and Society');
+    expect(subjects[10].subjectName).toBe('Constitution of India');
+
+    // Verify grades
+    const expectedGrades = ['C', 'C', 'S', 'A', 'S', 'C', 'B', 'D', 'C', 'S', 'B'];
+    expect(subjects.map((s) => s.grade)).toEqual(expectedGrades);
+
+    // Verify that NO credits were guessed or invented
+    for (const sub of subjects) {
+      expect(sub.credits).toBe('');
+      expect(sub.confidence.credits).toBe('none');
+      expect(sub.creditsSource).toBe('USER');
+      expect(sub.source).toBe('AMS');
+      expect(sub.status).toBe('Pass');
+    }
+
+    // Verify grade points were derived from regulation VTR21:
+    // S -> 10, A -> 9, B -> 8, C -> 7, D -> 6
+    const expectedGradePoints = [7, 7, 10, 9, 10, 7, 8, 6, 7, 10, 8];
+    expect(subjects.map((s) => s.gradePoint)).toEqual(expectedGradePoints);
+
+    // 3. Verify audit summary blocks calculation when credits are missing
+    const initialAudit = computeAmsAuditSummary(subjects, studentInfo);
+    expect(initialAudit.sgpa).toBeNull();
+    expect(initialAudit.fieldsRequiringInput).toBe(11); // All 11 require credits
+    expect(initialAudit.fieldsDetectedAutomatically).toContain('Student Name');
+    expect(initialAudit.fieldsDetectedAutomatically).toContain('Register Number');
+    expect(initialAudit.fieldsEnteredByUser).toContain('Course Credits');
+
+    // 4. Verify calculation once user enters credits (e.g. via bulk credit entry)
+    const enteredCredits = [3, 3, 1.5, 4, 1.5, 2, 4, 3, 1.5, 0, 0];
+    const completedSubjects = subjects.map((s, i) => ({
+      ...s,
+      credits: enteredCredits[i],
+    }));
+
+    const finalAudit = computeAmsAuditSummary(completedSubjects, {
+      ...studentInfo,
+      regulation: 'VTR21',
+    });
+
+    expect(finalAudit.fieldsRequiringInput).toBe(0);
+    // Total Credits = 3 + 3 + 1.5 + 4 + 1.5 + 2 + 4 + 3 + 1.5 + 0 + 0 = 23.5
+    expect(finalAudit.totalCredits).toBe(23.5);
+    // Non credit count = 2 (0-credit subjects)
+    expect(finalAudit.nonCreditCount).toBe(2);
+    expect(finalAudit.creditBearingCount).toBe(9);
+    // Total quality points =
+    // (3*7)+(3*7)+(1.5*10)+(4*9)+(1.5*10)+(2*7)+(4*8)+(3*6)+(1.5*7)+(0*10)+(0*8)
+    // = 21 + 21 + 15 + 36 + 15 + 14 + 32 + 18 + 10.5 + 0 + 0 = 182.5
+    expect(finalAudit.totalQualityPoints).toBe(182.5);
+    // SGPA = 182.5 / 23.5 = 7.7659...
+    expect(finalAudit.sgpa).toBeCloseTo(182.5 / 23.5, 4);
+  });
+
+  it('extracts student metadata from repeating tabular row layout', () => {
+    const tabularLine = `
+      1 24UECS0805 24UECS0805 PALLAPU DILEEP KUMAR B.Tech CSE (AIML) 2024-2025 10210BM101 Biology for Engineers Pass C
+    `;
+    const info = extractStudentInfo(tabularLine);
+    expect(info.registerNumber).toBe('24UECS0805');
+    expect(info.name).toBe('PALLAPU DILEEP KUMAR');
+    expect(info.degree).toBe('B.Tech');
+    expect(info.branch).toBe('CSE (AIML)');
+    expect(info.batch).toBe('2024-2025');
+
+    const subjects = extractSubjectsFromText(tabularLine, 'VTR21');
+    expect(subjects.length).toBe(1);
+    expect(subjects[0].subjectCode).toBe('10210BM101');
+    expect(subjects[0].subjectName).toBe('Biology for Engineers');
+    expect(subjects[0].grade).toBe('C');
+    expect(subjects[0].credits).toBe('');
+  });
 });
+
