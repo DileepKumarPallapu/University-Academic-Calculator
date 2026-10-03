@@ -35,59 +35,62 @@ const LinkedinIcon: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' 
 
 export const Footer: React.FC = () => {
   return (
-    <footer className="w-full bg-[var(--surface)] border-t border-[var(--border-primary)] py-8 sm:py-10 lg:py-12 no-print transition-colors">
-      <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 flex flex-col items-center text-center gap-6">
-        {/* Brand Header */}
-        <div className="flex flex-col items-center gap-1">
-          <div className="text-base font-semibold tracking-tight text-[var(--text-primary)]">
+    <footer className="footer no-print">
+      <div className="footer-container">
+        {/* Left Side: Brand, Description, Developer & Copyright */}
+        <div className="footer-left">
+          <div className="text-[18px] font-semibold text-[var(--text-primary)] tracking-tight">
             Academic Calculator
           </div>
-          <p className="text-xs text-[var(--text-secondary)]">
+          <p className="text-[14px] font-normal text-[var(--text-secondary)] m-0 leading-normal">
             Simple academic tools for students.
           </p>
-        </div>
 
-        {/* Creator Information */}
-        <div className="flex flex-col items-center gap-1">
-          <span className="text-xs text-[var(--text-secondary)]">
-            Built by
-          </span>
-          <div className="text-[18px] font-semibold text-[var(--text-primary)] tracking-tight">
-            Pallapu Dileep Kumar
+          <div className="pt-2 flex flex-col gap-0.5 items-center md:items-start">
+            <span className="text-[12px] font-normal text-[var(--text-secondary)]">
+              Developed by
+            </span>
+            <span className="text-[14px] font-semibold text-[var(--text-primary)] tracking-tight">
+              Pallapu Dileep Kumar
+            </span>
+            <span className="text-[13px] font-normal text-[var(--text-secondary)]">
+              CSE Student • Developer
+            </span>
           </div>
-          <span className="text-xs text-[var(--text-secondary)]">
-            CSE Student • Developer
+
+          <div className="pt-3 text-[12px] font-normal text-[var(--text-tertiary)]">
+            © 2026 Pallapu Dileep Kumar. All rights reserved.
+          </div>
+        </div>
+
+        {/* Right Side: Connect & Social Buttons */}
+        <div className="footer-right">
+          <span className="text-[13px] font-semibold text-[var(--text-primary)] uppercase tracking-wider">
+            Connect
           </span>
-        </div>
+          <div className="footer-socials">
+            <a
+              href="https://github.com/DileepKumarPallapu"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="footer-social-btn"
+              aria-label="GitHub Profile of Pallapu Dileep Kumar"
+            >
+              <GithubIcon className="w-4 h-4 text-[var(--text-primary)]" />
+              <span>GitHub</span>
+            </a>
 
-        {/* Social Buttons */}
-        <div className="flex flex-wrap items-center justify-center gap-3">
-          <a
-            href="https://github.com/DileepKumarPallapu"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="h-[42px] px-4 rounded-[10px] bg-[var(--surface)] border border-[var(--border-primary)] text-[var(--text-primary)] text-xs font-semibold inline-flex items-center gap-2 hover:-translate-y-0.5 hover:bg-[var(--bg-tertiary)] transition-all shadow-sm"
-            aria-label="GitHub Profile of Pallapu Dileep Kumar"
-          >
-            <GithubIcon className="w-4 h-4 text-[var(--text-primary)]" />
-            <span>GitHub</span>
-          </a>
-
-          <a
-            href="https://www.linkedin.com/in/dileep-kumar-pallapu"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="h-[42px] px-4 rounded-[10px] bg-[var(--surface)] border border-[var(--border-primary)] text-[var(--text-primary)] text-xs font-semibold inline-flex items-center gap-2 hover:-translate-y-0.5 hover:bg-[var(--bg-tertiary)] transition-all shadow-sm"
-            aria-label="LinkedIn Profile of Pallapu Dileep Kumar"
-          >
-            <LinkedinIcon className="w-4 h-4 text-[var(--text-primary)]" />
-            <span>LinkedIn</span>
-          </a>
-        </div>
-
-        {/* Copyright */}
-        <div className="text-xs text-[var(--text-secondary)] pt-3 border-t border-[var(--border-secondary)] w-full max-w-xs">
-          © 2026 Pallapu Dileep Kumar
+            <a
+              href="https://www.linkedin.com/in/dileep-kumar-pallapu"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="footer-social-btn"
+              aria-label="LinkedIn Profile of Pallapu Dileep Kumar"
+            >
+              <LinkedinIcon className="w-4 h-4 text-[var(--text-primary)]" />
+              <span>LinkedIn</span>
+            </a>
+          </div>
         </div>
       </div>
     </footer>
