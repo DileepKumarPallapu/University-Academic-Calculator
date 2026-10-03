@@ -13,6 +13,9 @@ import {
   detectAmsFormat,
   compareWithSavedProfile,
   detectAndFlagDuplicates,
+  extractTableFromOcrGeometry,
+  FORBIDDEN_SUBJECT_WORDS,
+  isForbiddenSubjectName,
 } from './amsExtractor';
 
 describe('AMS Result Extractor', () => {
@@ -802,6 +805,177 @@ describe('AMS Result Extractor', () => {
       const res = detectAndFlagDuplicates(subs);
       expect(res[0].isDuplicate).toBe(false);
       expect(res[1].isDuplicate).toBe(false);
+    });
+  });
+
+  describe('Rebuilt AMS Extraction Engine — Mandatory Regression Suite', () => {
+    it('extracts EXACTLY 11 subjects from full Vel Tech AMS page without leaking header, student metadata, or legend', () => {
+      const fullAmsPageWithNoise = `
+        VEL TECH RANGARAJAN Dr. SAGUNTHALA R&D INSTITUTE OF SCIENCE AND TECHNOLOGY
+        (Deemed to be University Estd. u/s 3 of UGC Act, 1956)
+        PALLAPU DILEEP KUMAR
+        VTU29962
+        Home  Roadmap  Timetable  Attendance  Marks  Documents  Help
+        Degree: B.Tech  Branch: CSE (AIML)  Batch: 2024-2025  Month & Year of Result: Nov.2024  Result Type: Regular
+        Get Result  Clear
+
+        SNo Stu Id Register No Name Degree Branch Batch Coursecode Coursename Result Grade
+        1 VTU29962 24UECS0805 PALLAPU DILEEP KUMAR B.Tech CSE (AIML) 2024-2025 10210BM101 Biology for Engineers Pass C
+        2 VTU29962 24UECS0805 PALLAPU DILEEP KUMAR B.Tech CSE (AIML) 2024-2025 10210CS102 Computational Thinking for Problem Solving Pass C
+        3 VTU29962 24UECS0805 PALLAPU DILEEP KUMAR B.Tech CSE (AIML) 2024-2025 10210CS302 Computational Thinking Laboratory Pass S
+        4 VTU29962 24UECS0805 PALLAPU DILEEP KUMAR B.Tech CSE (AIML) 2024-2025 10210EE201 Basic Electrical, Electronics & Measurement Engineering Pass A
+        5 VTU29962 24UECS0805 PALLAPU DILEEP KUMAR B.Tech CSE (AIML) 2024-2025 10210EE204 Introduction to Engineering Pass S
+        6 VTU29962 24UECS0805 PALLAPU DILEEP KUMAR B.Tech CSE (AIML) 2024-2025 10210EN201 Professional Communication - I Pass C
+        7 VTU29962 24UECS0805 PALLAPU DILEEP KUMAR B.Tech CSE (AIML) 2024-2025 10210MA101 Linear Algebra for Computing Pass B
+        8 VTU29962 24UECS0805 PALLAPU DILEEP KUMAR B.Tech CSE (AIML) 2024-2025 10210PH101 Semiconductor Physics Pass D
+        9 VTU29962 24UECS0805 PALLAPU DILEEP KUMAR B.Tech CSE (AIML) 2024-2025 10210PH301 Modern Physics Laboratory Pass C
+        10 VTU29962 24UECS0805 PALLAPU DILEEP KUMAR B.Tech CSE (AIML) 2024-2025 10217GE901 Engineers and Society Pass S
+        11 VTU29962 24UECS0805 PALLAPU DILEEP KUMAR B.Tech CSE (AIML) 2024-2025 10217GE902 Constitution of India Pass B
+
+        RA - Reappear  AB - Absent  NE - Not Eligible  WH1 - Withheld  WH2 - Withheld  WH3 - Withheld  WH4 - Withheld  ND - Not Decided
+        Print  Excel  Back
+      `;
+
+      // 1. Student metadata extraction
+      const studentInfo = extractStudentInfo(fullAmsPageWithNoise);
+      expect(studentInfo.name).toBe('PALLAPU DILEEP KUMAR');
+      expect(studentInfo.studentId).toBe('VTU29962');
+      expect(studentInfo.registerNumber).toBe('24UECS0805');
+      expect(studentInfo.degree).toBe('B.Tech');
+      expect(studentInfo.branch).toBe('CSE (AIML)');
+      expect(studentInfo.batch).toBe('2024-2025');
+      expect(studentInfo.resultMonthYear).toBe('Nov.2024');
+      expect(studentInfo.resultType).toBe('Regular');
+
+      // 2. Table extraction with strict zoning
+      const result = parseStructuredAmsTextTable(fullAmsPageWithNoise, 'VTR21');
+
+      // CRITICAL SUCCESS CRITERIA: Exactly 11 subjects (NOT 14, 20, or 25!)
+      expect(result.subjects.length).toBe(11);
+      expect(result.detectedRowsCount).toBe(11);
+      expect(result.extractedRowsCount).toBe(11);
+      expect(result.missingRowNumbers).toEqual([]);
+      expect(result.rowAccountingVerified).toBe(true);
+
+      // Verify ZERO false subjects leaked from header, metadata, or legend
+      const extractedTitles = result.subjects.map((s) => s.subjectName);
+      const extractedCodes = result.subjects.map((s) => s.subjectCode);
+
+      for (const forbidden of ['INSTITUTE', 'DEEMED', 'PALLAPU', 'VTU29962', '24UECS0805', 'ROADMAP', 'TIMETABLE']) {
+        expect(extractedTitles).not.toContain(forbidden);
+        expect(extractedCodes).not.toContain(forbidden);
+        expect(FORBIDDEN_SUBJECT_WORDS).toContain(forbidden);
+        expect(isForbiddenSubjectName(forbidden)).toBe(true);
+      }
+      expect(isForbiddenSubjectName('Biology for Engineers')).toBe(false);
+
+      // Verify ZERO duplicate false positives
+      const duplicates = result.subjects.filter((s) => s.isDuplicate);
+      expect(duplicates.length).toBe(0);
+
+      // Verify exact 11 expected course codes in order
+      const expectedCodes = [
+        '10210BM101', '10210CS102', '10210CS302', '10210EE201', '10210EE204',
+        '10210EN201', '10210MA101', '10210PH101', '10210PH301', '10217GE901', '10217GE902'
+      ];
+      expect(result.subjects.map((s) => s.subjectCode)).toEqual(expectedCodes);
+
+      // Verify exact 11 expected course names
+      expect(result.subjects[0].subjectName).toBe('Biology for Engineers');
+      expect(result.subjects[1].subjectName).toBe('Computational Thinking for Problem Solving');
+      expect(result.subjects[2].subjectName).toBe('Computational Thinking Laboratory');
+      expect(result.subjects[3].subjectName).toBe('Basic Electrical, Electronics & Measurement Engineering');
+      expect(result.subjects[4].subjectName).toBe('Introduction to Engineering');
+      expect(result.subjects[5].subjectName).toBe('Professional Communication - I');
+      expect(result.subjects[6].subjectName).toBe('Linear Algebra for Computing');
+      expect(result.subjects[7].subjectName).toBe('Semiconductor Physics');
+      expect(result.subjects[8].subjectName).toBe('Modern Physics Laboratory');
+      expect(result.subjects[9].subjectName).toBe('Engineers and Society');
+      expect(result.subjects[10].subjectName).toBe('Constitution of India');
+
+      // Verify exact 11 expected grades
+      const expectedGrades = ['C', 'C', 'S', 'A', 'S', 'C', 'B', 'D', 'C', 'S', 'B'];
+      expect(result.subjects.map((s) => s.grade)).toEqual(expectedGrades);
+
+      // Verify table debug info is attached
+      expect(result.tableDebug).toBeDefined();
+      expect(result.tableDebug?.extractionStats.totalRowsExtracted).toBe(11);
+      expect(result.tableDebug?.extractionStats.duplicatesDetected).toBe(0);
+    });
+
+    it('extracts table geometry using spatial OCR word bounding boxes', () => {
+      // Mock realistic OCR word data with spatial coordinates
+      const mockOcrWords = [
+        // Top Exclusion Zone (y: 20 to 120)
+        { text: 'VEL', bbox: { x0: 100, y0: 20, x1: 150, y1: 40 }, confidence: 95 },
+        { text: 'TECH', bbox: { x0: 160, y0: 20, x1: 220, y1: 40 }, confidence: 95 },
+        { text: 'INSTITUTE', bbox: { x0: 230, y0: 20, x1: 350, y1: 40 }, confidence: 95 },
+        { text: 'PALLAPU', bbox: { x0: 800, y0: 30, x1: 900, y1: 50 }, confidence: 92 },
+        { text: 'DILEEP', bbox: { x0: 910, y0: 30, x1: 980, y1: 50 }, confidence: 92 },
+        { text: 'VTU29962', bbox: { x0: 800, y0: 60, x1: 900, y1: 80 }, confidence: 94 },
+
+        // Table Header Row (y: 180 to 210)
+        { text: 'SNo', bbox: { x0: 20, y0: 180, x1: 60, y1: 210 }, confidence: 98 },
+        { text: 'Stu Id', bbox: { x0: 80, y0: 180, x1: 150, y1: 210 }, confidence: 98 },
+        { text: 'Register No', bbox: { x0: 170, y0: 180, x1: 280, y1: 210 }, confidence: 98 },
+        { text: 'Name', bbox: { x0: 300, y0: 180, x1: 450, y1: 210 }, confidence: 98 },
+        { text: 'Coursecode', bbox: { x0: 480, y0: 180, x1: 600, y1: 210 }, confidence: 98 },
+        { text: 'Coursename', bbox: { x0: 620, y0: 180, x1: 900, y1: 210 }, confidence: 98 },
+        { text: 'Result', bbox: { x0: 920, y0: 180, x1: 980, y1: 210 }, confidence: 98 },
+        { text: 'Grade', bbox: { x0: 1000, y0: 180, x1: 1060, y1: 210 }, confidence: 98 },
+
+        // Row 1 (y: 230 to 260)
+        { text: '1', bbox: { x0: 25, y0: 235, x1: 40, y1: 255 }, confidence: 99 },
+        { text: 'VTU29962', bbox: { x0: 85, y0: 235, x1: 145, y1: 255 }, confidence: 96 },
+        { text: '24UECS0805', bbox: { x0: 175, y0: 235, x1: 275, y1: 255 }, confidence: 96 },
+        { text: 'PALLAPU DILEEP KUMAR', bbox: { x0: 305, y0: 235, x1: 445, y1: 255 }, confidence: 94 },
+        { text: '10210BM101', bbox: { x0: 485, y0: 235, x1: 590, y1: 255 }, confidence: 97 },
+        { text: 'Biology', bbox: { x0: 625, y0: 235, x1: 690, y1: 255 }, confidence: 95 },
+        { text: 'for', bbox: { x0: 700, y0: 235, x1: 730, y1: 255 }, confidence: 95 },
+        { text: 'Engineers', bbox: { x0: 740, y0: 235, x1: 830, y1: 255 }, confidence: 95 },
+        { text: 'Pass', bbox: { x0: 925, y0: 235, x1: 970, y1: 255 }, confidence: 99 },
+        { text: 'C', bbox: { x0: 1010, y0: 235, x1: 1030, y1: 255 }, confidence: 99 },
+
+        // Row 2 (y: 270 to 300)
+        { text: '2', bbox: { x0: 25, y0: 275, x1: 40, y1: 295 }, confidence: 99 },
+        { text: 'VTU29962', bbox: { x0: 85, y0: 275, x1: 145, y1: 295 }, confidence: 96 },
+        { text: '24UECS0805', bbox: { x0: 175, y0: 275, x1: 275, y1: 295 }, confidence: 96 },
+        { text: 'PALLAPU DILEEP KUMAR', bbox: { x0: 305, y0: 275, x1: 445, y1: 295 }, confidence: 94 },
+        { text: '10210CS102', bbox: { x0: 485, y0: 275, x1: 590, y1: 295 }, confidence: 97 },
+        { text: 'Computational', bbox: { x0: 625, y0: 275, x1: 740, y1: 295 }, confidence: 95 },
+        { text: 'Thinking', bbox: { x0: 750, y0: 275, x1: 830, y1: 295 }, confidence: 95 },
+        { text: 'Pass', bbox: { x0: 925, y0: 275, x1: 970, y1: 295 }, confidence: 99 },
+        { text: 'C', bbox: { x0: 1010, y0: 275, x1: 1030, y1: 295 }, confidence: 99 },
+
+        // Bottom Legend (y: 350 to 380)
+        { text: 'RA-Reappear', bbox: { x0: 50, y0: 360, x1: 150, y1: 380 }, confidence: 90 },
+        { text: 'AB-Absent', bbox: { x0: 170, y0: 360, x1: 250, y1: 380 }, confidence: 90 },
+      ];
+
+      const mockOcrData = {
+        text: mockOcrWords.map((w) => w.text).join(' '),
+        words: mockOcrWords,
+        lines: [],
+      };
+
+      const geoResult = extractTableFromOcrGeometry(mockOcrData, 'VTR21');
+
+      expect(geoResult.tableDetected).toBe(true);
+      expect(geoResult.subjects.length).toBe(2);
+      expect(geoResult.subjects[0].subjectCode).toBe('10210BM101');
+      expect(geoResult.subjects[0].subjectName).toBe('Biology for Engineers');
+      expect(geoResult.subjects[0].grade).toBe('C');
+      expect(geoResult.subjects[1].subjectCode).toBe('10210CS102');
+      expect(geoResult.subjects[1].subjectName).toBe('Computational Thinking');
+      expect(geoResult.subjects[1].grade).toBe('C');
+
+      // Table debug verification
+      expect(geoResult.tableDebug).toBeDefined();
+      expect(geoResult.tableDebug?.exclusionZones?.length).toBe(2);
+      expect(geoResult.tableDebug?.exclusionZones?.[0].name).toContain('Top');
+      expect(geoResult.tableDebug?.exclusionZones?.[1].name).toContain('Bottom');
+      expect(geoResult.tableDebug?.extractionStats.totalRowsExtracted).toBe(2);
+      expect(geoResult.tableDebug?.extractionStats.duplicatesDetected).toBe(0);
     });
   });
 });

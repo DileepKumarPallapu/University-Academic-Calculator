@@ -154,6 +154,41 @@ export interface CalculationTraceItem {
   formulaStr: string;
 }
 
+export interface TableDebugInspection {
+  tableBBox?: { x0: number; y0: number; x1: number; y1: number };
+  columnBounds?: {
+    name: string;
+    x0: number;
+    x1: number;
+  }[];
+  rowBounds?: {
+    sno: number;
+    y0: number;
+    y1: number;
+  }[];
+  exclusionZones?: {
+    name: string;
+    y0: number;
+    y1: number;
+    reason: string;
+  }[];
+  cellMappings?: {
+    row: number;
+    col: string;
+    rawText: string;
+    confidence: number;
+  }[];
+  extractionStats: {
+    totalRowsDetected: number;
+    totalRowsExtracted: number;
+    courseCodesDetected: number;
+    courseNamesDetected: number;
+    gradesDetected: number;
+    duplicatesDetected: number;
+    falseSubjectsFiltered: number;
+  };
+}
+
 export interface AmsExtractionResult {
   studentInfo: AmsStudentInfo;
   subjects: AmsSubject[];
@@ -180,6 +215,7 @@ export interface AmsExtractionResult {
   rowAccountingVerified?: boolean;
   scanSteps?: ScanStepItem[];
   profileMatch?: ProfileMatchResult;
+  tableDebug?: TableDebugInspection;
 }
 
 export interface AmsAuditSummary {
