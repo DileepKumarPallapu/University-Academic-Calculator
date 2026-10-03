@@ -39,33 +39,33 @@ export const Footer: React.FC = () => {
       <div className="footer-container">
         {/* Left Side: Brand, Description, Developer & Copyright */}
         <div className="footer-left">
-          <div className="text-[18px] font-semibold text-[var(--text-primary)] tracking-tight">
+          <div className="footer-title">
             Academic Calculator
           </div>
-          <p className="text-[14px] font-normal text-[var(--text-secondary)] m-0 leading-normal">
+          <p className="footer-description">
             Simple academic tools for students.
           </p>
 
           <div className="pt-2 flex flex-col gap-0.5 items-center md:items-start">
-            <span className="text-[12px] font-normal text-[var(--text-secondary)]">
+            <span className="footer-label">
               Developed by
             </span>
-            <span className="text-[14px] font-semibold text-[var(--text-primary)] tracking-tight">
+            <span className="footer-developer">
               Pallapu Dileep Kumar
             </span>
-            <span className="text-[13px] font-normal text-[var(--text-secondary)]">
+            <span className="footer-role">
               CSE Student • Developer
             </span>
           </div>
 
-          <div className="pt-3 text-[12px] font-normal text-[var(--text-tertiary)]">
+          <div className="pt-3 footer-copyright">
             © 2026 Pallapu Dileep Kumar. All rights reserved.
           </div>
         </div>
 
         {/* Right Side: Connect & Social Buttons */}
         <div className="footer-right">
-          <span className="text-[13px] font-semibold text-[var(--text-primary)] uppercase tracking-wider">
+          <span className="footer-connect-title">
             Connect
           </span>
           <div className="footer-socials">
@@ -73,10 +73,10 @@ export const Footer: React.FC = () => {
               href="https://github.com/DileepKumarPallapu"
               target="_blank"
               rel="noopener noreferrer"
-              className="footer-social-btn"
+              className="footer-social-btn footer-social-button"
               aria-label="GitHub Profile of Pallapu Dileep Kumar"
             >
-              <GithubIcon className="w-4 h-4 text-[var(--text-primary)]" />
+              <GithubIcon className="w-4 h-4" />
               <span>GitHub</span>
             </a>
 
@@ -84,10 +84,10 @@ export const Footer: React.FC = () => {
               href="https://www.linkedin.com/in/dileep-kumar-pallapu"
               target="_blank"
               rel="noopener noreferrer"
-              className="footer-social-btn"
+              className="footer-social-btn footer-social-button"
               aria-label="LinkedIn Profile of Pallapu Dileep Kumar"
             >
-              <LinkedinIcon className="w-4 h-4 text-[var(--text-primary)]" />
+              <LinkedinIcon className="w-4 h-4" />
               <span>LinkedIn</span>
             </a>
           </div>
