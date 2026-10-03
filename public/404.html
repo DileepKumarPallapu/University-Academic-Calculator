@@ -5,15 +5,16 @@
     <title>Academic Calculator</title>
     <script>
       (function() {
+        var isGitHubPages = window.location.hostname.includes('github.io');
+        var repoName = isGitHubPages ? '/University-Academic-Calculator' : '';
         var path = window.location.pathname;
-        var repoName = '/University-Academic-Calculator';
-        if (path.startsWith(repoName)) {
+        if (repoName && path.startsWith(repoName)) {
           path = path.slice(repoName.length);
         }
         if (!path || path === '/') {
           window.location.replace(window.location.origin + repoName + '/');
         } else {
-          window.location.replace(window.location.origin + (window.location.pathname.startsWith(repoName) ? repoName : '') + '/#' + path + window.location.search);
+          window.location.replace(window.location.origin + (repoName ? repoName : '') + '/#' + path + window.location.search);
         }
       })();
     </script>
