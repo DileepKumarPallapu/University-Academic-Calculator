@@ -146,9 +146,19 @@ describe('University Calculation Engine Unit Tests', () => {
   });
 
   describe('Validation & Precision', () => {
-    it('validates credits and marks correctly', () => {
+    it('validates credits and marks correctly (0 credits is valid, negative is invalid)', () => {
+      // 0 credits is valid non-credit subject
+      expect(validateCredits(0).isValid).toBe(true);
       expect(validateCredits(4).isValid).toBe(true);
-      expect(validateCredits(0).isValid).toBe(false);
+      expect(validateCredits(3.5).isValid).toBe(true);
+      // Negative credits must be rejected
+      expect(validateCredits(-1).isValid).toBe(false);
+      expect(validateCredits(-0.5).isValid).toBe(false);
+      expect(validateCredits(-1).error).toBe('Credits cannot be negative.');
+      // Empty or non-numeric
+      expect(validateCredits('').isValid).toBe(false);
+      expect(validateCredits(15).isValid).toBe(false);
+
       expect(validateGPAInput(8.5).isValid).toBe(true);
       expect(validateGPAInput(11).isValid).toBe(false);
       expect(validateMarks(35, 30, 'Test 1').isValid).toBe(false);
@@ -160,23 +170,83 @@ describe('University Calculation Engine Unit Tests', () => {
     });
   });
 
-    it('calculates weighted GPA correctly for prompt QA scenario (11 credits, 100 quality points => 9.09)', () => {
+  describe('SGPA 0-Credit Subject Calculations', () => {
+    // TEST 1: 4 credits + 3 credits + 0 credits -> calculate correctly
+    it('TEST 1: calculates SGPA correctly with 4 credits, 3 credits, and 0 credits (60 / 7 = 8.57)', () => {
+      const gpaRes = calculateGPA([
+        { id: 'sub-a', name: 'Subject A', credits: 4, grade: 'A', gradePoint: 9 },
+        { id: 'sub-b', name: 'Subject B', credits: 0, grade: 'S', gradePoint: 10 },
+        { id: 'sub-c', name: 'Subject C', credits: 3, grade: 'B', gradePoint: 8 },
+      ]);
+      expect(gpaRes.totalCredits).toBe(7);
+      expect(gpaRes.totalPoints).toBe(60);
+      expect(gpaRes.gpa).toBe(8.57);
+      expect(gpaRes.subjectsCount).toBe(3);
+      expect(gpaRes.creditBearingCount).toBe(2);
+      expect(gpaRes.hasCreditBearingSubjects).toBe(true);
+    });
+
+    // TEST 2: All subjects have 0 credits -> hasCreditBearingSubjects is false
+    it('TEST 2: flags when all subjects have 0 credits', () => {
+      const gpaRes = calculateGPA([
+        { id: 'sub-1', name: 'Subject 1', credits: 0, grade: 'S', gradePoint: 10 },
+        { id: 'sub-2', name: 'Subject 2', credits: 0, grade: 'A', gradePoint: 9 },
+      ]);
+      expect(gpaRes.totalCredits).toBe(0);
+      expect(gpaRes.totalPoints).toBe(0);
+      expect(gpaRes.gpa).toBe(0);
+      expect(gpaRes.subjectsCount).toBe(2);
+      expect(gpaRes.creditBearingCount).toBe(0);
+      expect(gpaRes.hasCreditBearingSubjects).toBe(false);
+    });
+
+    // TEST 3: Negative credits validation error
+    it('TEST 3: rejects negative credits with descriptive error', () => {
+      const negValidation = validateCredits(-2);
+      expect(negValidation.isValid).toBe(false);
+      expect(negValidation.error).toBe('Credits cannot be negative.');
+    });
+
+    // TEST 4: Normal credits -> existing SGPA result must remain unchanged
+    it('TEST 4: calculates normal credits unchanged (11 credits, 100 quality points => 9.09)', () => {
       const gpaRes = calculateGPA([
         { id: '1', name: 'Subject A', credits: 4, grade: 'A', gradePoint: 9 },
         { id: '2', name: 'Subject B', credits: 3, grade: 'B', gradePoint: 8 },
         { id: '3', name: 'Subject C', credits: 4, grade: 'S', gradePoint: 10 },
       ]);
       expect(gpaRes.totalCredits).toBe(11);
+      expect(gpaRes.totalPoints).toBe(100);
       expect(gpaRes.gpa).toBe(9.09);
     });
 
+    // TEST 5: Mix of 0-credit and credit-bearing subjects -> 0-credit subjects do not affect SGPA
+    it('TEST 5: 0-credit subjects do not change SGPA of credit-bearing subjects', () => {
+      const withoutZero = calculateGPA([
+        { id: '1', name: 'Maths', credits: 4, grade: 'A', gradePoint: 9 },
+        { id: '2', name: 'Physics', credits: 3, grade: 'B', gradePoint: 8 },
+      ]);
+      const withZero = calculateGPA([
+        { id: '1', name: 'Maths', credits: 4, grade: 'A', gradePoint: 9 },
+        { id: '2', name: 'Physics', credits: 3, grade: 'B', gradePoint: 8 },
+        { id: '3', name: 'Environmental Studies', credits: 0, grade: 'S', gradePoint: 10 },
+        { id: '4', name: 'Constitution of India', credits: 0, grade: 'A', gradePoint: 9 },
+      ]);
+      expect(withZero.totalCredits).toBe(withoutZero.totalCredits);
+      expect(withZero.totalPoints).toBe(withoutZero.totalPoints);
+      expect(withZero.gpa).toBe(withoutZero.gpa);
+      expect(withZero.subjectsCount).toBe(4);
+      expect(withZero.creditBearingCount).toBe(2);
+    });
+  });
+
+  describe('CGPA Calculation', () => {
     it('calculates credit-weighted CGPA correctly for prompt QA scenario (Sem 1: 8 GPA/20 cr, Sem 2: 9 GPA/25 cr => 8.56)', () => {
       const cgpaRes = calculateCGPA([
         { id: '1', semesterNumber: 1, gpa: 8.0, credits: 20 },
         { id: '2', semesterNumber: 2, gpa: 9.0, credits: 25 },
       ]);
       expect(cgpaRes.totalCredits).toBe(45);
-      // (8 * 20 + 9 * 25) / 45 = (160 + 225) / 45 = 385 / 45 = 8.5555... => 8.56
       expect(cgpaRes.cgpa).toBe(8.56);
     });
+  });
 });

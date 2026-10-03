@@ -10,9 +10,11 @@ import { StudentNameInput } from '../components/common/StudentNameInput';
 import { GradeScaleModal } from '../components/common/GradeScaleModal';
 import { ResultActionButtons } from '../components/common/ResultActionButtons';
 import { saveRecentCalculation } from '../utils/recentCalculations';
+import { useAppToast } from '../components/layout/AppShell';
 
 export const GPACalculatorPage: React.FC = () => {
   const { profile, studentName, setStudentName, updateProfile, nameError, setNameError } = useStudentProfile();
+  const { showToast } = useAppToast();
   const studentNameInputRef = useRef<HTMLInputElement>(null);
   const [isGradeScaleOpen, setIsGradeScaleOpen] = useState(false);
 
@@ -286,18 +288,35 @@ export const GPACalculatorPage: React.FC = () => {
                         </td>
 
                         {/* Credits Input Cell: 48px, High-contrast, Centered */}
-                        <td className="py-3 px-3 text-center w-[110px] min-w-[100px]">
-                          <input
-                            type="number"
-                            inputMode="decimal"
-                            min={0}
-                            max={12}
-                            step="any"
-                            placeholder="0"
-                            value={s.credits}
-                            onChange={(e) => handleSubjectChange(s.id, 'credits', e.target.value)}
-                            className="h-[48px] w-full max-w-[84px] mx-auto rounded-[10px] bg-[var(--surface)] text-[var(--text-primary)] border border-[var(--input-border)] text-center text-[16px] font-medium placeholder:text-[var(--text-tertiary)] outline-none focus:border-2 focus:border-[var(--text-primary)] focus:ring-2 focus:ring-black/10 dark:focus:ring-white/10 transition-all shadow-sm"
-                          />
+                        <td className="py-3 px-3 text-center w-[120px] min-w-[110px]">
+                          <div className="flex flex-col items-center">
+                            <input
+                              type="number"
+                              inputMode="decimal"
+                              min={0}
+                              max={12}
+                              step="any"
+                              placeholder="0"
+                              value={s.credits}
+                              onChange={(e) => handleSubjectChange(s.id, 'credits', e.target.value)}
+                              className={`h-[48px] w-full max-w-[84px] mx-auto rounded-[10px] bg-[var(--surface)] text-[var(--text-primary)] border ${
+                                typeof s.credits === 'number' && s.credits < 0
+                                  ? 'border-[var(--danger)] focus:border-[var(--danger)] ring-1 ring-[var(--danger)]'
+                                  : 'border-[var(--input-border)] focus:border-[var(--text-primary)]'
+                              } text-center text-[16px] font-medium placeholder:text-[var(--text-tertiary)] outline-none focus:border-2 focus:ring-2 focus:ring-black/10 dark:focus:ring-white/10 transition-all shadow-sm`}
+                            />
+                            {typeof s.credits === 'number' && s.credits < 0 ? (
+                              <span className="text-[10px] text-[var(--danger)] font-medium mt-1">
+                                ≥ 0 only
+                              </span>
+                            ) : (
+                              (s.credits as any) === 0 && (
+                                <span className="text-[10px] text-[var(--text-tertiary)] font-medium mt-1">
+                                  Non-credit
+                                </span>
+                              )
+                            )}
+                          </div>
                         </td>
 
                         {/* Grade Select */}
@@ -380,18 +399,36 @@ export const GPACalculatorPage: React.FC = () => {
 
                     <div className="grid grid-cols-2 gap-3 items-center">
                       <div className="flex flex-col gap-1.5">
-                        <label className="text-xs font-semibold text-[var(--text-primary)]">
-                          Credits
-                        </label>
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-semibold text-[var(--text-primary)]">
+                            Credits
+                          </label>
+                          {typeof s.credits === 'number' && s.credits < 0 ? (
+                            <span className="text-[10px] text-[var(--danger)] font-medium">
+                              Cannot be negative
+                            </span>
+                          ) : (
+                            (s.credits as any) === 0 && (
+                              <span className="text-[10px] text-[var(--text-tertiary)] font-medium">
+                                Non-credit
+                              </span>
+                            )
+                          )}
+                        </div>
                         <input
                           type="number"
                           inputMode="decimal"
                           min={0}
                           max={12}
+                          step="any"
                           placeholder="0"
                           value={s.credits}
                           onChange={(e) => handleSubjectChange(s.id, 'credits', e.target.value)}
-                          className="h-[48px] rounded-[10px] bg-[var(--surface)] text-[var(--text-primary)] border border-[var(--input-border)] text-center text-[16px] font-medium outline-none focus:border-2 focus:border-[var(--text-primary)] shadow-sm"
+                          className={`h-[48px] rounded-[10px] bg-[var(--surface)] text-[var(--text-primary)] border ${
+                            typeof s.credits === 'number' && s.credits < 0
+                              ? 'border-[var(--danger)] ring-1 ring-[var(--danger)]'
+                              : 'border-[var(--input-border)]'
+                          } text-center text-[16px] font-medium outline-none focus:border-2 focus:border-[var(--text-primary)] shadow-sm`}
                         />
                       </div>
 
@@ -439,13 +476,23 @@ export const GPACalculatorPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => {
-                  saveRecentCalculation({
-                    type: 'gpa',
-                    title: `SGPA (Semester ${selectedSemester}, ${regulation})`,
-                    value: `${formatFixed(gpaResult.gpa, 2)} / 10`,
-                    subtext: `${gpaResult.totalCredits} Credits • ${subjects.length} Subjects`,
-                    route: '/sgpa',
-                  });
+                  const hasNegative = subjects.some((s) => typeof s.credits === 'number' && s.credits < 0);
+                  if (hasNegative) {
+                    showToast('Credits cannot be negative. Please enter 0 or higher.', 'error');
+                    return;
+                  }
+                  if (gpaResult.totalCredits === 0) {
+                    showToast('Add at least one subject with credits greater than 0 to calculate SGPA.', 'info');
+                  } else {
+                    saveRecentCalculation({
+                      type: 'gpa',
+                      title: `SGPA (Semester ${selectedSemester}, ${regulation})`,
+                      value: `${formatFixed(gpaResult.gpa, 2)} / 10`,
+                      subtext: `${gpaResult.totalCredits} Credits • ${subjects.length} Subjects`,
+                      route: '/sgpa',
+                    });
+                    showToast('SGPA calculated successfully.', 'success');
+                  }
                   const el = document.getElementById('sgpa-result-section');
                   if (el) el.scrollIntoView({ behavior: 'smooth' });
                 }}
@@ -464,17 +511,30 @@ export const GPACalculatorPage: React.FC = () => {
               <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
                 SGPA
               </span>
-              <div className="flex items-baseline gap-2 mt-2">
-                <span className="text-[44px] sm:text-[56px] font-bold tracking-tight text-[var(--text-primary)] tabular-nums leading-none">
-                  {formatFixed(gpaResult.gpa, 2)}
-                </span>
-                <span className="text-xl font-semibold text-[var(--text-secondary)]">
-                  / 10
-                </span>
-              </div>
-              <p className="text-sm font-medium text-[var(--text-secondary)] mt-2">
-                Semester Grade Point Average ({regulation})
-              </p>
+              {gpaResult.totalCredits > 0 ? (
+                <>
+                  <div className="flex items-baseline gap-2 mt-2">
+                    <span className="text-[44px] sm:text-[56px] font-bold tracking-tight text-[var(--text-primary)] tabular-nums leading-none">
+                      {formatFixed(gpaResult.gpa, 2)}
+                    </span>
+                    <span className="text-xl font-semibold text-[var(--text-secondary)]">
+                      / 10
+                    </span>
+                  </div>
+                  <p className="text-sm font-medium text-[var(--text-secondary)] mt-2">
+                    Semester Grade Point Average ({regulation})
+                  </p>
+                </>
+              ) : (
+                <div className="mt-2.5">
+                  <div className="text-[18px] sm:text-[20px] font-semibold text-[var(--text-primary)] leading-snug">
+                    No credit-bearing subjects available.
+                  </div>
+                  <p className="text-xs text-[var(--text-secondary)] mt-1.5 leading-relaxed">
+                    Add at least one subject with credits greater than 0 to calculate SGPA.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Summary Metrics */}
@@ -501,9 +561,15 @@ export const GPACalculatorPage: React.FC = () => {
             <div className="rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-primary)] p-4 text-xs text-[var(--text-primary)] font-mono leading-relaxed">
               <strong className="block mb-1 text-[13px] text-[var(--text-primary)]">How SGPA is Calculated:</strong>
               <div>• SGPA = Σ (Credit × Grade Point) ÷ Σ (Credits)</div>
-              <div className="mt-1 font-semibold">
-                {formatFixed(totalQualityPoints, 2)} ÷ {gpaResult.totalCredits || 0} = {formatFixed(gpaResult.gpa, 2)}
-              </div>
+              {gpaResult.totalCredits > 0 ? (
+                <div className="mt-1 font-semibold">
+                  {formatFixed(totalQualityPoints, 2)} ÷ {gpaResult.totalCredits} = {formatFixed(gpaResult.gpa, 2)}
+                </div>
+              ) : (
+                <div className="mt-1 text-[var(--text-secondary)] font-sans">
+                  No credit-bearing subjects available. Add at least one subject with credits &gt; 0.
+                </div>
+              )}
             </div>
 
             {/* Result Action Buttons: Copy & Share */}
@@ -519,7 +585,11 @@ export const GPACalculatorPage: React.FC = () => {
                   { label: 'Subject Count', value: `${subjects.length}` },
                 ]}
                 resultLabel="SGPA"
-                resultValue={`${formatFixed(gpaResult.gpa, 2)} / 10`}
+                resultValue={
+                  gpaResult.totalCredits > 0
+                    ? `${formatFixed(gpaResult.gpa, 2)} / 10`
+                    : 'No credit-bearing subjects available'
+                }
               />
             </div>
 
@@ -546,13 +616,21 @@ export const GPACalculatorPage: React.FC = () => {
       regulation={regulation}
       semester={selectedSemester}
       resultLabel="SEMESTER GRADE POINT AVERAGE (SGPA)"
-      resultValue={`${formatFixed(gpaResult.gpa, 2)} / 10`}
-      resultSubtext={`Total Credits: ${gpaResult.totalCredits} • Total Credit Points: ${formatFixed(totalQualityPoints, 2)}`}
+      resultValue={gpaResult.totalCredits > 0 ? `${formatFixed(gpaResult.gpa, 2)} / 10` : 'N/A'}
+      resultSubtext={
+        gpaResult.totalCredits > 0
+          ? `Total Credits: ${gpaResult.totalCredits} • Total Credit Points: ${formatFixed(totalQualityPoints, 2)}`
+          : 'No credit-bearing subjects available'
+      }
       formulaTitle="SGPA Calculation Summary"
       formulaRule="SGPA Formula: Σ(Credit × Grade Point) ÷ Σ(Credits)"
-      formulaCalculation={`${formatFixed(totalQualityPoints, 2)} ÷ ${gpaResult.totalCredits || 0} = ${formatFixed(gpaResult.gpa, 2)}`}
+      formulaCalculation={
+        gpaResult.totalCredits > 0
+          ? `${formatFixed(totalQualityPoints, 2)} ÷ ${gpaResult.totalCredits} = ${formatFixed(gpaResult.gpa, 2)}`
+          : 'No credit-bearing subjects'
+      }
       isEmpty={gpaResult.totalCredits === 0}
-      emptyNotice="Please enter course credits and calculate your SGPA before printing."
+      emptyNotice="Add at least one subject with credits greater than 0 to calculate SGPA before printing."
     >
       <table className="w-full text-left border-collapse border border-[#D2D2D7]">
         <thead>
@@ -573,6 +651,11 @@ export const GPACalculatorPage: React.FC = () => {
               <tr key={sub.id}>
                 <td className="py-2.5 px-3 font-medium text-[#1D1D1F]">
                   {sub.name.trim() || `Subject ${idx + 1}`}
+                  {cred === 0 && (
+                    <span className="ml-2 text-[10px] font-normal text-[#86868B]">
+                      (Non-credit)
+                    </span>
+                  )}
                 </td>
                 <td className="py-2.5 px-3 text-center font-semibold text-[#1D1D1F] tabular-nums font-mono">
                   {cred}
@@ -584,7 +667,7 @@ export const GPACalculatorPage: React.FC = () => {
                   {pts}
                 </td>
                 <td className="py-2.5 px-3 text-right font-semibold text-[#1D1D1F] tabular-nums font-mono">
-                  {qualityPts.toFixed(2)}
+                  {qualityPts.toFixed(1)}
                 </td>
               </tr>
             );

@@ -78,11 +78,14 @@ export function validateMarks(
 
 export function validateCredits(credits: number | ''): { isValid: boolean; error?: string } {
   if (credits === '' || credits === undefined || isNaN(Number(credits))) {
-    return { isValid: false, error: 'Credits are required.' };
+    return { isValid: false, error: 'Credits must be a valid number.' };
   }
   const val = Number(credits);
-  if (val <= 0 || val > 12) {
-    return { isValid: false, error: 'Credits must be between 1 and 12.' };
+  if (val < 0) {
+    return { isValid: false, error: 'Credits cannot be negative.' };
+  }
+  if (val > 12) {
+    return { isValid: false, error: 'Credits cannot exceed 12.' };
   }
   return { isValid: true };
 }
@@ -193,11 +196,20 @@ export function calculateGPA(
   customGradeScale?: Record<string, number>
 ): GPAResult {
   if (!subjects || subjects.length === 0) {
-    return { gpa: 0, totalCredits: 0, totalPoints: 0, performanceTier: 'N/A', subjectsCount: 0 };
+    return {
+      gpa: 0,
+      totalCredits: 0,
+      totalPoints: 0,
+      performanceTier: 'N/A',
+      subjectsCount: 0,
+      creditBearingCount: 0,
+      hasCreditBearingSubjects: false,
+    };
   }
 
   let totalCredits = 0;
   let totalPoints = 0;
+  let creditBearingCount = 0;
 
   for (const sub of subjects) {
     const credits = Number(sub.credits) || 0;
@@ -207,14 +219,19 @@ export function calculateGPA(
       points = customGradeScale[sub.grade];
     }
 
+    // Non-credit subjects (credits = 0) have 0 credit points and do not contribute to totalCredits
     if (credits > 0) {
       totalCredits += credits;
       totalPoints += credits * points;
+      creditBearingCount++;
     }
   }
 
-  const gpa = totalCredits > 0 ? roundTo(totalPoints / totalCredits, 2) : 0;
-  const performanceTier = UNIVERSITY_CONFIG.getGpaTier(gpa).label;
+  const hasCreditBearingSubjects = totalCredits > 0;
+  const gpa = hasCreditBearingSubjects ? roundTo(totalPoints / totalCredits, 2) : 0;
+  const performanceTier = hasCreditBearingSubjects
+    ? UNIVERSITY_CONFIG.getGpaTier(gpa).label
+    : 'N/A';
 
   return {
     gpa,
@@ -222,6 +239,8 @@ export function calculateGPA(
     totalPoints: roundTo(totalPoints, 2),
     performanceTier,
     subjectsCount: subjects.length,
+    creditBearingCount,
+    hasCreditBearingSubjects,
   };
 }
 

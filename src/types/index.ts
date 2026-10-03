@@ -77,6 +77,8 @@ export interface GPAResult {
   totalPoints: number;
   performanceTier: string;
   subjectsCount: number;
+  creditBearingCount?: number;
+  hasCreditBearingSubjects?: boolean;
 }
 
 export interface SemesterItem {
