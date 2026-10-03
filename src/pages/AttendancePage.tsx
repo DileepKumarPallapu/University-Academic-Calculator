@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ChevronDown, Check, Copy, RotateCcw, BookmarkPlus, Calendar } from 'lucide-react';
 import {
   calculateAttendance,
@@ -8,7 +8,8 @@ import {
 } from '../utils/calculations';
 import { PrintButton } from '../components/common/PrintButton';
 import { AcademicPrintReport } from '../components/common/AcademicPrintReport';
-
+import { useStudentName } from '../hooks/useStudentName';
+import { StudentNameInput } from '../components/common/StudentNameInput';
 
 interface AttendanceRecord {
   id: string;
@@ -21,6 +22,9 @@ interface AttendanceRecord {
 }
 
 export const AttendancePage: React.FC = () => {
+  const { studentName, setStudentName, nameError, setNameError } = useStudentName();
+  const studentNameInputRef = useRef<HTMLInputElement>(null);
+
   // Primary inputs defaulted to 0
   const [totalSessionsInput, setTotalSessionsInput] = useState<string>('0');
   const [facultySessionsInput, setFacultySessionsInput] = useState<string>('0');
@@ -164,6 +168,14 @@ export const AttendancePage: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         {/* Left Form: 7 cols */}
         <div className="lg:col-span-7 flex flex-col gap-6">
+          {/* Student Name Input */}
+          <StudentNameInput
+            value={studentName}
+            onChange={setStudentName}
+            errorMessage={nameError}
+            inputRef={studentNameInputRef}
+          />
+
           <div className="apple-main-container p-6 sm:p-8 flex flex-col gap-6">
             <div className="flex items-center justify-between border-b border-[var(--border-primary)] pb-4">
               <span className="text-sm font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
@@ -504,7 +516,13 @@ export const AttendancePage: React.FC = () => {
 
             {/* Print / Save PDF Action Button */}
             <div className="pt-2">
-              <PrintButton disabled={facultySessions === 0} />
+              <PrintButton
+                studentName={studentName}
+                calculatorType="Attendance"
+                onValidationError={setNameError}
+                inputRef={studentNameInputRef}
+                disabled={facultySessions === 0}
+              />
             </div>
           </div>
         </div>
@@ -515,6 +533,7 @@ export const AttendancePage: React.FC = () => {
     <AcademicPrintReport
       reportTitle="Attendance Report"
       calculatorName="Attendance Calculator"
+      studentName={studentName}
       resultLabel="ATTENDANCE PERCENTAGE"
       resultValue={`${formatFixed(attendanceResult.percentage, 2)}%`}
       resultSubtext={`${attended} / ${facultySessions} sessions attended • ${status.label}`}

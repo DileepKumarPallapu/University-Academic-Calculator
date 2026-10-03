@@ -1,13 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { calculateCGPA, formatFixed } from '../utils/calculations';
 import { REGULATIONS, type RegulationId } from '../config/university';
 import type { SemesterItem } from '../types';
 import { PrintButton } from '../components/common/PrintButton';
 import { AcademicPrintReport } from '../components/common/AcademicPrintReport';
-
+import { useStudentName } from '../hooks/useStudentName';
+import { StudentNameInput } from '../components/common/StudentNameInput';
 
 export const CGPACalculatorPage: React.FC = () => {
+  const { studentName, setStudentName, nameError, setNameError } = useStudentName();
+  const studentNameInputRef = useRef<HTMLInputElement>(null);
+
   // Regulation selection with localStorage persistence
   const [regulation, setRegulation] = useState<RegulationId>(() => {
     try {
@@ -103,6 +107,14 @@ export const CGPACalculatorPage: React.FC = () => {
           Calculate your Cumulative Grade Point Average across all completed semesters with exact credit weighting.
         </p>
       </div>
+
+      {/* Student Name Input */}
+      <StudentNameInput
+        value={studentName}
+        onChange={setStudentName}
+        errorMessage={nameError}
+        inputRef={studentNameInputRef}
+      />
 
       {/* Regulation Selection Card */}
       <div className="apple-main-container p-6 sm:p-7 flex flex-col gap-4">
@@ -384,7 +396,12 @@ export const CGPACalculatorPage: React.FC = () => {
 
             {/* Print / Save PDF Action Button */}
             <div className="pt-2">
-              <PrintButton />
+              <PrintButton
+                studentName={studentName}
+                calculatorType="CGPA"
+                onValidationError={setNameError}
+                inputRef={studentNameInputRef}
+              />
             </div>
           </div>
         </div>
@@ -395,6 +412,7 @@ export const CGPACalculatorPage: React.FC = () => {
     <AcademicPrintReport
       reportTitle="CGPA Report"
       calculatorName="CGPA Calculator"
+      studentName={studentName}
       regulation={regulation}
       resultLabel="CUMULATIVE GRADE POINT AVERAGE (CGPA)"
       resultValue={`${formatFixed(cgpaResult.cgpa, 2)} / 10`}

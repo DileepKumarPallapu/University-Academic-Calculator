@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   calculateTheoryInternal,
   calculateIntegratedInternal,
@@ -9,10 +9,14 @@ import {
 import type { TheoryInputs, IntegratedInputs } from '../types';
 import { PrintButton } from '../components/common/PrintButton';
 import { AcademicPrintReport } from '../components/common/AcademicPrintReport';
-
+import { useStudentName } from '../hooks/useStudentName';
+import { StudentNameInput } from '../components/common/StudentNameInput';
 
 export const InternalCalculatorPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'theory' | 'integrated'>('theory');
+  const { studentName, setStudentName, nameError, setNameError } = useStudentName();
+  const studentNameInputRef = useRef<HTMLInputElement>(null);
+
 
   // Theory inputs defaulted to 0
   const [theory, setTheory] = useState<TheoryInputs>({
@@ -147,6 +151,14 @@ export const InternalCalculatorPage: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         {/* Left Form: 7 cols */}
         <div className="lg:col-span-7 flex flex-col gap-6">
+          {/* Student Name Input */}
+          <StudentNameInput
+            value={studentName}
+            onChange={setStudentName}
+            errorMessage={nameError}
+            inputRef={studentNameInputRef}
+          />
+
           <div className="apple-main-container p-6 sm:p-8 flex flex-col gap-6">
             {activeTab === 'theory' ? (
               <>
@@ -600,7 +612,12 @@ export const InternalCalculatorPage: React.FC = () => {
 
             {/* Print / Save PDF Action Button */}
             <div className="pt-2">
-              <PrintButton />
+              <PrintButton
+                studentName={studentName}
+                calculatorType="Internal Marks"
+                onValidationError={setNameError}
+                inputRef={studentNameInputRef}
+              />
             </div>
           </div>
         </div>
@@ -611,6 +628,7 @@ export const InternalCalculatorPage: React.FC = () => {
     <AcademicPrintReport
       reportTitle="Internal Marks Report"
       calculatorName="Internal Marks Calculator"
+      studentName={studentName}
       calculationType={activeTab === 'theory' ? 'Theory Internal' : 'Integrated Internal'}
       resultLabel="TOTAL INTERNAL MARKS"
       resultValue={`${formatFixed(

@@ -9,6 +9,7 @@ interface MetaItem {
 interface AcademicPrintReportProps {
   reportTitle?: string;
   calculatorName: string;
+  studentName?: string;
   regulation?: string;
   semester?: string | number;
   calculationType?: string;
@@ -27,6 +28,7 @@ interface AcademicPrintReportProps {
 export const AcademicPrintReport: React.FC<AcademicPrintReportProps> = ({
   reportTitle = 'Academic Calculation Report',
   calculatorName,
+  studentName = '',
   regulation,
   semester,
   calculationType,
@@ -42,54 +44,111 @@ export const AcademicPrintReport: React.FC<AcademicPrintReportProps> = ({
   children,
 }) => {
   const currentDate = getFormattedCurrentDate();
+  const displayName = studentName.trim() || 'Student';
 
-  // Consolidate metadata
-  const allMeta: MetaItem[] = [
-    { label: 'Calculator', value: calculatorName },
-    ...(regulation ? [{ label: 'Regulation', value: regulation }] : []),
-    ...(semester ? [{ label: 'Semester', value: typeof semester === 'number' ? `Semester ${semester}` : semester }] : []),
-    ...(calculationType ? [{ label: 'Type', value: calculationType }] : []),
-    ...metaItems,
-    { label: 'Date', value: currentDate },
+  // Details for Student Information table
+  const infoRows: { label: string; value: React.ReactNode; isPrimary?: boolean }[] = [
+    {
+      label: 'Student Name',
+      value: displayName,
+      isPrimary: true,
+    },
+    {
+      label: 'Calculator',
+      value: calculatorName,
+    },
+    ...(regulation
+      ? [
+          {
+            label: 'Regulation',
+            value: regulation,
+          },
+        ]
+      : []),
+    ...(semester
+      ? [
+          {
+            label: 'Semester',
+            value: typeof semester === 'number' ? `Semester ${semester}` : semester,
+          },
+        ]
+      : []),
+    ...(calculationType
+      ? [
+          {
+            label: 'Assessment Type',
+            value: calculationType,
+          },
+        ]
+      : []),
+    ...metaItems.map((m) => ({ label: m.label, value: m.value })),
+    {
+      label: 'Date',
+      value: currentDate,
+    },
   ];
 
   return (
     <div className="hidden print:block w-full bg-white text-[#1D1D1F] p-0 m-0 print-report-container">
-      {/* Report Header */}
-      <header className="border-b border-[#D2D2D7] pb-4 mb-6">
+      {/* 1. Header: Brand & Document Category */}
+      <header className="border-b border-[#D2D2D7] pb-3 mb-5">
         <div className="flex justify-between items-start">
           <div>
             <h1 className="text-[24px] font-bold text-[#1D1D1F] tracking-tight leading-tight uppercase">
               Academic Calculator
             </h1>
-            <p className="text-[13px] font-medium text-[#6E6E73] mt-0.5">
+            <p className="text-[13px] font-semibold text-[#6E6E73] uppercase tracking-wide mt-0.5">
               {reportTitle}
             </p>
           </div>
           <div className="text-right">
-            <span className="text-[11px] font-semibold text-[#86868B] uppercase tracking-wider block">
-              Official Academic Record
+            <span className="text-[10px] font-bold text-[#86868B] uppercase tracking-wider block">
+              Official Academic Report
             </span>
             <span className="text-[12px] font-semibold text-[#1D1D1F]">
               {currentDate}
             </span>
           </div>
         </div>
-
-        {/* Metadata Grid */}
-        <div className="mt-4 pt-3 border-t border-[#E5E5EA] grid grid-cols-2 sm:grid-cols-4 gap-3 text-[12px]">
-          {allMeta.map((item, idx) => (
-            <div key={idx} className="flex flex-col">
-              <span className="text-[10px] uppercase font-bold tracking-wider text-[#6E6E73]">
-                {item.label}
-              </span>
-              <span className="font-semibold text-[#1D1D1F] mt-0.5">
-                {item.value}
-              </span>
-            </div>
-          ))}
-        </div>
       </header>
+
+      {/* 2. STUDENT INFORMATION BLOCK */}
+      <section className="border border-[#D2D2D7] rounded-xl bg-[#FAFAFA] p-4 sm:p-5 mb-6 break-inside-avoid">
+        <div className="border-b border-[#E5E5EA] pb-2 mb-3 flex items-center justify-between">
+          <h2 className="text-[11px] font-bold uppercase tracking-wider text-[#6E6E73]">
+            Student Information
+          </h2>
+          <span className="text-[10px] font-medium text-[#86868B] uppercase">
+            Official Identification
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-y-3.5 gap-x-6 text-[13px]">
+          {/* Prominent Student Name Card in Grid */}
+          <div className="col-span-2 sm:col-span-3 pb-3 border-b border-[#E5E5EA]">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-[#6E6E73] block">
+              Student Name
+            </span>
+            <div className="text-[19px] sm:text-[20px] font-bold text-[#1D1D1F] tracking-tight mt-0.5">
+              {displayName}
+            </div>
+          </div>
+
+          {/* Secondary Details */}
+          {infoRows
+            .filter((r) => !r.isPrimary)
+            .map((row, idx) => (
+              <div key={idx} className="flex flex-col">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#6E6E73]">
+                  {row.label}
+                </span>
+                <span className="font-semibold text-[#1D1D1F] mt-0.5">
+                  {row.value}
+                </span>
+              </div>
+            ))}
+        </div>
+      </section>
 
       {/* Empty State Warning if data uncalculated */}
       {isEmpty ? (
@@ -159,7 +218,7 @@ export const AcademicPrintReport: React.FC<AcademicPrintReportProps> = ({
         </>
       )}
 
-      {/* Professional Academic Print Footer */}
+      {/* Professional Academic Print Footer (Attribution to Developer) */}
       <footer className="mt-8 pt-4 border-t border-[#D2D2D7] text-[11px] text-[#6E6E73] flex flex-col gap-2 break-inside-avoid">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
           <div>

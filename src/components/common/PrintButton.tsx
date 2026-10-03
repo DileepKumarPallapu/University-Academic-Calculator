@@ -6,6 +6,10 @@ interface PrintButtonProps {
   onClick?: () => void;
   disabled?: boolean;
   label?: string;
+  studentName?: string;
+  calculatorType?: string;
+  onValidationError?: (errorMessage: string) => void;
+  inputRef?: React.RefObject<HTMLInputElement | null>;
 }
 
 export const PrintButton: React.FC<PrintButtonProps> = ({
@@ -13,16 +17,57 @@ export const PrintButton: React.FC<PrintButtonProps> = ({
   onClick,
   disabled = false,
   label = 'Print / Save PDF',
+  studentName = '',
+  calculatorType = 'Academic Report',
+  onValidationError,
+  inputRef,
 }) => {
   const handlePrint = () => {
     if (disabled) return;
+
+    // Validate Student Name
+    const trimmed = studentName.trim();
+    if (!trimmed) {
+      const error = 'Please enter the student name before printing.';
+      if (onValidationError) {
+        onValidationError(error);
+      }
+      if (inputRef?.current) {
+        inputRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        inputRef.current.focus();
+      }
+      return;
+    }
+
+    // Clear validation error if valid
+    if (onValidationError) {
+      onValidationError('');
+    }
+
     if (onClick) {
       onClick();
     }
-    // Small timeout to allow state/DOM to settle if any click handler runs
+
+    // Configure dynamic document title for browser Save as PDF naming
+    const originalTitle = document.title;
+    const cleanName = trimmed.replace(/[<>:"/\\|?*]/g, '');
+    document.title = `${cleanName} - ${calculatorType} - Academic Calculator`;
+
+    // Small delay to allow state/DOM to settle before opening browser print preview
     setTimeout(() => {
       window.print();
-    }, 50);
+
+      // Restore document title after print dialog
+      const handleAfterPrint = () => {
+        document.title = originalTitle;
+        window.removeEventListener('afterprint', handleAfterPrint);
+      };
+      window.addEventListener('afterprint', handleAfterPrint);
+
+      setTimeout(() => {
+        document.title = originalTitle;
+      }, 2000);
+    }, 60);
   };
 
   return (
