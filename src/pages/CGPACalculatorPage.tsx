@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Plus, Trash2, RotateCcw } from 'lucide-react';
 import { calculateCGPA, formatFixed } from '../utils/calculations';
 import { REGULATIONS, type RegulationId } from '../config/university';
@@ -11,15 +11,28 @@ import { GradeScaleModal } from '../components/common/GradeScaleModal';
 import { ResultActionButtons } from '../components/common/ResultActionButtons';
 import { ResetConfirmModal } from '../components/common/ResetConfirmModal';
 import { saveRecentCalculation } from '../utils/recentCalculations';
+import { DraftIndicator } from '../components/common/DraftIndicator';
+import { QuickStartPrompt } from '../components/common/QuickStartPrompt';
+import { CalculationStatus } from '../components/common/CalculationStatus';
+import { useAppToast } from '../components/layout/AppShell';
 
 export const CGPACalculatorPage: React.FC = () => {
   const { profile, studentName, setStudentName, updateProfile, nameError, setNameError } = useStudentProfile();
+  const { showToast } = useAppToast();
   const studentNameInputRef = useRef<HTMLInputElement>(null);
   const [isGradeScaleOpen, setIsGradeScaleOpen] = useState(false);
+  const [calcSuccess, setCalcSuccess] = useState<boolean>(false);
 
-  // Regulation selection with localStorage persistence
+  // Regulation selection with localStorage persistence or draft
   const [regulation, setRegulation] = useState<RegulationId>(() => {
     try {
+      const draft = localStorage.getItem('academic_draft_cgpa');
+      if (draft) {
+        const parsed = JSON.parse(draft);
+        if (parsed.regulation && REGULATIONS[parsed.regulation as RegulationId]) {
+          return parsed.regulation as RegulationId;
+        }
+      }
       const saved = localStorage.getItem('academic_selected_regulation') as RegulationId;
       return saved && REGULATIONS[saved] ? saved : 'VTR21';
     } catch {
@@ -28,14 +41,33 @@ export const CGPACalculatorPage: React.FC = () => {
   });
 
   const [semestersCountInput, setSemestersCountInput] = useState<number>(5);
-  // Default all semesters to 0
-  const [semesters, setSemesters] = useState<SemesterItem[]>([
-    { id: 'sem-1', semesterNumber: 1, gpa: 0, credits: 0 },
-    { id: 'sem-2', semesterNumber: 2, gpa: 0, credits: 0 },
-    { id: 'sem-3', semesterNumber: 3, gpa: 0, credits: 0 },
-    { id: 'sem-4', semesterNumber: 4, gpa: 0, credits: 0 },
-    { id: 'sem-5', semesterNumber: 5, gpa: 0, credits: 0 },
-  ]);
+  // Default all semesters to 0 or restore from draft
+  const [semesters, setSemesters] = useState<SemesterItem[]>(() => {
+    try {
+      const draft = localStorage.getItem('academic_draft_cgpa');
+      if (draft) {
+        const parsed = JSON.parse(draft);
+        if (Array.isArray(parsed.semesters) && parsed.semesters.length > 0) {
+          return parsed.semesters;
+        }
+      }
+    } catch {}
+    return [
+      { id: 'sem-1', semesterNumber: 1, gpa: 0, credits: 0 },
+      { id: 'sem-2', semesterNumber: 2, gpa: 0, credits: 0 },
+      { id: 'sem-3', semesterNumber: 3, gpa: 0, credits: 0 },
+      { id: 'sem-4', semesterNumber: 4, gpa: 0, credits: 0 },
+      { id: 'sem-5', semesterNumber: 5, gpa: 0, credits: 0 },
+    ];
+  });
+
+  const [hasDraft, setHasDraft] = useState<boolean>(() => {
+    try {
+      return !!localStorage.getItem('academic_draft_cgpa');
+    } catch {
+      return false;
+    }
+  });
 
   const handleRegulationChange = (newReg: RegulationId) => {
     setRegulation(newReg);
@@ -98,6 +130,10 @@ export const CGPACalculatorPage: React.FC = () => {
   const isDirty = semesters.some((s) => Number(s.gpa) > 0 || Number(s.credits) > 0) || semesters.length !== 5;
 
   const handleReset = () => {
+    try {
+      localStorage.removeItem('academic_draft_cgpa');
+      setHasDraft(false);
+    } catch {}
     setSemesters([
       { id: 'sem-1', semesterNumber: 1, gpa: 0, credits: 0 },
       { id: 'sem-2', semesterNumber: 2, gpa: 0, credits: 0 },
@@ -106,6 +142,27 @@ export const CGPACalculatorPage: React.FC = () => {
       { id: 'sem-5', semesterNumber: 5, gpa: 0, credits: 0 },
     ]);
     setShowResetModal(false);
+  };
+
+  useEffect(() => {
+    if (isDirty) {
+      try {
+        localStorage.setItem(
+          'academic_draft_cgpa',
+          JSON.stringify({ semesters, regulation })
+        );
+        setHasDraft(true);
+      } catch {}
+    }
+  }, [semesters, regulation, isDirty]);
+
+  const handleClearDraft = () => {
+    try {
+      localStorage.removeItem('academic_draft_cgpa');
+    } catch {}
+    setHasDraft(false);
+    handleReset();
+    showToast('Draft cleared.', 'info');
   };
 
   const handleResetClick = () => {
@@ -191,7 +248,11 @@ export const CGPACalculatorPage: React.FC = () => {
       {/* Main Content Layout: Grid of Semesters LEFT (7 cols), Result RIGHT (5 cols) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         {/* Left: Semesters Form */}
-        <div className="lg:col-span-7 flex flex-col gap-6">
+        <div className="lg:col-span-7 flex flex-col gap-4">
+          <DraftIndicator hasDraft={hasDraft} onClear={handleClearDraft} />
+          {semesters.every((s) => Number(s.credits) === 0 && Number(s.gpa) === 0) && (
+            <QuickStartPrompt message="Add your semester SGPAs and credit totals." />
+          )}
           <div className="apple-main-container p-6 sm:p-8 flex flex-col gap-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--border-primary)] pb-5">
               <span className="text-sm font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
@@ -400,6 +461,8 @@ export const CGPACalculatorPage: React.FC = () => {
                     subtext: `${cgpaResult.totalCredits} Total Credits`,
                     route: '/cgpa',
                   });
+                  setCalcSuccess(true);
+                  showToast('CGPA calculated successfully.', 'success');
                   if (window.innerWidth < 1024) {
                     const el = document.getElementById('cgpa-result-section');
                     if (el) el.scrollIntoView({ behavior: 'smooth' });
@@ -417,9 +480,12 @@ export const CGPACalculatorPage: React.FC = () => {
         <div id="cgpa-result-section" className="lg:col-span-5 lg:sticky lg:top-24">
           <div className="apple-result-card flex flex-col gap-6">
             <div>
-              <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-                YOUR CGPA
-              </span>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+                  YOUR CGPA
+                </span>
+                <CalculationStatus show={calcSuccess} onHide={() => setCalcSuccess(false)} />
+              </div>
               <div className="flex items-baseline gap-2 mt-2">
                 <span className="text-[44px] sm:text-[56px] font-bold tracking-tight text-[var(--text-primary)] tabular-nums leading-none">
                   {formatFixed(cgpaResult.cgpa, 2)}

@@ -22,113 +22,150 @@ export const AcademicSummaryCard: React.FC = () => {
     summary.cgpa || summary.sgpa || summary.attendance || summary.internals
   );
 
+  if (!hasAnyData) return null;
+
+  const getRelativeTime = (timestamp?: number): string => {
+    if (!timestamp) return 'Updated recently';
+    const diffHours = (Date.now() - timestamp) / (1000 * 60 * 60);
+    if (diffHours < 24) return 'Updated today';
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays === 1) return 'Updated yesterday';
+    return `Updated ${diffDays} days ago`;
+  };
+
   return (
     <div className="w-full">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-          My Academic Summary
+          Academic Snapshot
         </h2>
       </div>
 
-      {!hasAnyData ? (
-        <div className="apple-main-container p-6 sm:p-7 text-center rounded-2xl border border-[var(--border-primary)] flex flex-col items-center justify-center gap-2">
-          <p className="text-sm font-medium text-[var(--text-secondary)]">
-            Complete a calculation to see your academic summary.
-          </p>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {/* CGPA */}
+        {summary.cgpa && (
           <Link
-            to="/internals"
-            className="text-xs font-semibold text-[var(--text-primary)] hover:underline mt-1"
+            to={summary.cgpa.route}
+            className="apple-card p-5 flex flex-col justify-between hover:border-[var(--text-primary)] transition-all group no-underline text-inherit"
           >
-            Start with Internal Marks →
-          </Link>
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {/* CGPA */}
-          {summary.cgpa && (
-            <Link
-              to={summary.cgpa.route}
-              className="apple-card p-5 flex flex-col justify-between hover:border-[var(--text-primary)] transition-all group no-underline text-inherit"
-            >
-              <div>
-                <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)] block">
-                  Current CGPA
+            <div>
+              <div className="flex items-center justify-between gap-1">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)] block truncate">
+                  CGPA
                 </span>
-                <div className="text-[28px] sm:text-[32px] font-bold tracking-tight text-[var(--text-primary)] tabular-nums mt-1 leading-none">
-                  {summary.cgpa.value.replace(/\s*\/\s*10$/, '')}
+                <span className="text-[10px] text-[var(--text-tertiary)] shrink-0">
+                  {getRelativeTime(summary.cgpa.timestamp)}
+                </span>
+              </div>
+              <div className="text-[28px] sm:text-[32px] font-bold tracking-tight text-[var(--text-primary)] tabular-nums mt-1 leading-none">
+                {summary.cgpa.value.replace(/\s*\/\s*10$/, '')}
+              </div>
+              {summary.cgpa.subtitle && (
+                <div className="text-[11px] text-[var(--text-secondary)] mt-1.5 truncate">
+                  {summary.cgpa.subtitle}
                 </div>
-              </div>
-              <div className="mt-4 pt-3 border-t border-[var(--border-secondary)] flex items-center justify-between text-xs font-medium text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]">
-                <span>View Details</span>
-                <ArrowUpRight className="w-3.5 h-3.5" />
-              </div>
-            </Link>
-          )}
+              )}
+            </div>
+            <div className="mt-4 pt-3 border-t border-[var(--border-secondary)] flex items-center justify-between text-xs font-medium text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]">
+              <span>View Details</span>
+              <ArrowUpRight className="w-3.5 h-3.5" />
+            </div>
+          </Link>
+        )}
 
-          {/* SGPA */}
-          {summary.sgpa && (
-            <Link
-              to={summary.sgpa.route}
-              className="apple-card p-5 flex flex-col justify-between hover:border-[var(--text-primary)] transition-all group no-underline text-inherit"
-            >
-              <div>
-                <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)] block">
+        {/* SGPA */}
+        {summary.sgpa && (
+          <Link
+            to={summary.sgpa.route}
+            className="apple-card p-5 flex flex-col justify-between hover:border-[var(--text-primary)] transition-all group no-underline text-inherit"
+          >
+            <div>
+              <div className="flex items-center justify-between gap-1">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)] block truncate">
                   Latest SGPA
                 </span>
-                <div className="text-[28px] sm:text-[32px] font-bold tracking-tight text-[var(--text-primary)] tabular-nums mt-1 leading-none">
-                  {summary.sgpa.value.replace(/\s*\/\s*10$/, '')}
+                <span className="text-[10px] text-[var(--text-tertiary)] shrink-0">
+                  {getRelativeTime(summary.sgpa.timestamp)}
+                </span>
+              </div>
+              <div className="text-[28px] sm:text-[32px] font-bold tracking-tight text-[var(--text-primary)] tabular-nums mt-1 leading-none">
+                {summary.sgpa.value.replace(/\s*\/\s*10$/, '')}
+              </div>
+              {summary.sgpa.subtitle && (
+                <div className="text-[11px] text-[var(--text-secondary)] mt-1.5 truncate">
+                  {summary.sgpa.subtitle}
                 </div>
-              </div>
-              <div className="mt-4 pt-3 border-t border-[var(--border-secondary)] flex items-center justify-between text-xs font-medium text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]">
-                <span>View Details</span>
-                <ArrowUpRight className="w-3.5 h-3.5" />
-              </div>
-            </Link>
-          )}
+              )}
+            </div>
+            <div className="mt-4 pt-3 border-t border-[var(--border-secondary)] flex items-center justify-between text-xs font-medium text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]">
+              <span>View Details</span>
+              <ArrowUpRight className="w-3.5 h-3.5" />
+            </div>
+          </Link>
+        )}
 
-          {/* Attendance */}
-          {summary.attendance && (
-            <Link
-              to={summary.attendance.route}
-              className="apple-card p-5 flex flex-col justify-between hover:border-[var(--text-primary)] transition-all group no-underline text-inherit"
-            >
-              <div>
-                <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)] block">
+        {/* Attendance */}
+        {summary.attendance && (
+          <Link
+            to={summary.attendance.route}
+            className="apple-card p-5 flex flex-col justify-between hover:border-[var(--text-primary)] transition-all group no-underline text-inherit"
+          >
+            <div>
+              <div className="flex items-center justify-between gap-1">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)] block truncate">
                   Attendance
                 </span>
-                <div className="text-[28px] sm:text-[32px] font-bold tracking-tight text-[var(--text-primary)] tabular-nums mt-1 leading-none">
-                  {summary.attendance.value}
-                </div>
-              </div>
-              <div className="mt-4 pt-3 border-t border-[var(--border-secondary)] flex items-center justify-between text-xs font-medium text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]">
-                <span>View Details</span>
-                <ArrowUpRight className="w-3.5 h-3.5" />
-              </div>
-            </Link>
-          )}
-
-          {/* Latest Internal */}
-          {summary.internals && (
-            <Link
-              to={summary.internals.route}
-              className="apple-card p-5 flex flex-col justify-between hover:border-[var(--text-primary)] transition-all group no-underline text-inherit"
-            >
-              <div>
-                <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)] block">
-                  Latest Internal
+                <span className="text-[10px] text-[var(--text-tertiary)] shrink-0">
+                  {getRelativeTime(summary.attendance.timestamp)}
                 </span>
-                <div className="text-[28px] sm:text-[32px] font-bold tracking-tight text-[var(--text-primary)] tabular-nums mt-1 leading-none">
-                  {summary.internals.value}
+              </div>
+              <div className="text-[28px] sm:text-[32px] font-bold tracking-tight text-[var(--text-primary)] tabular-nums mt-1 leading-none">
+                {summary.attendance.value}
+              </div>
+              {summary.attendance.subtitle && (
+                <div className="text-[11px] text-[var(--text-secondary)] mt-1.5 truncate">
+                  {summary.attendance.subtitle}
                 </div>
+              )}
+            </div>
+            <div className="mt-4 pt-3 border-t border-[var(--border-secondary)] flex items-center justify-between text-xs font-medium text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]">
+              <span>View Details</span>
+              <ArrowUpRight className="w-3.5 h-3.5" />
+            </div>
+          </Link>
+        )}
+
+        {/* Latest Internal */}
+        {summary.internals && (
+          <Link
+            to={summary.internals.route}
+            className="apple-card p-5 flex flex-col justify-between hover:border-[var(--text-primary)] transition-all group no-underline text-inherit"
+          >
+            <div>
+              <div className="flex items-center justify-between gap-1">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)] block truncate">
+                  Internal Marks
+                </span>
+                <span className="text-[10px] text-[var(--text-tertiary)] shrink-0">
+                  {getRelativeTime(summary.internals.timestamp)}
+                </span>
               </div>
-              <div className="mt-4 pt-3 border-t border-[var(--border-secondary)] flex items-center justify-between text-xs font-medium text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]">
-                <span>View Details</span>
-                <ArrowUpRight className="w-3.5 h-3.5" />
+              <div className="text-[28px] sm:text-[32px] font-bold tracking-tight text-[var(--text-primary)] tabular-nums mt-1 leading-none">
+                {summary.internals.value}
               </div>
-            </Link>
-          )}
-        </div>
-      )}
+              {summary.internals.subtitle && (
+                <div className="text-[11px] text-[var(--text-secondary)] mt-1.5 truncate">
+                  {summary.internals.subtitle}
+                </div>
+              )}
+            </div>
+            <div className="mt-4 pt-3 border-t border-[var(--border-secondary)] flex items-center justify-between text-xs font-medium text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]">
+              <span>View Details</span>
+              <ArrowUpRight className="w-3.5 h-3.5" />
+            </div>
+          </Link>
+        )}
+      </div>
     </div>
   );
 };

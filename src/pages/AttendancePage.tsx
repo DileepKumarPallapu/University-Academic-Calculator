@@ -12,6 +12,10 @@ import { StudentNameInput } from '../components/common/StudentNameInput';
 import { ResultActionButtons } from '../components/common/ResultActionButtons';
 import { ResetConfirmModal } from '../components/common/ResetConfirmModal';
 import { saveRecentCalculation } from '../utils/recentCalculations';
+import { DraftIndicator } from '../components/common/DraftIndicator';
+import { QuickStartPrompt } from '../components/common/QuickStartPrompt';
+import { CalculationStatus } from '../components/common/CalculationStatus';
+import { useAppToast } from '../components/layout/AppShell';
 
 interface AttendanceRecord {
   id: string;
@@ -25,20 +29,78 @@ interface AttendanceRecord {
 
 export const AttendancePage: React.FC = () => {
   const { profile, studentName, setStudentName, updateProfile, nameError, setNameError } = useStudentProfile();
+  const { showToast } = useAppToast();
   const studentNameInputRef = useRef<HTMLInputElement>(null);
+  const [calcSuccess, setCalcSuccess] = useState<boolean>(false);
 
-  // Primary inputs defaulted to 0
-  const [totalSessionsInput, setTotalSessionsInput] = useState<string>('0');
-  const [facultySessionsInput, setFacultySessionsInput] = useState<string>('0');
-  const [attendedInput, setAttendedInput] = useState<string>('0');
+  // Primary inputs defaulted to 0 or restored from draft
+  const [totalSessionsInput, setTotalSessionsInput] = useState<string>(() => {
+    try {
+      const draft = localStorage.getItem('academic_draft_attendance');
+      if (draft) {
+        const parsed = JSON.parse(draft);
+        if (parsed.totalSessionsInput !== undefined) return parsed.totalSessionsInput;
+      }
+    } catch {}
+    return '0';
+  });
+
+  const [facultySessionsInput, setFacultySessionsInput] = useState<string>(() => {
+    try {
+      const draft = localStorage.getItem('academic_draft_attendance');
+      if (draft) {
+        const parsed = JSON.parse(draft);
+        if (parsed.facultySessionsInput !== undefined) return parsed.facultySessionsInput;
+      }
+    } catch {}
+    return '0';
+  });
+
+  const [attendedInput, setAttendedInput] = useState<string>(() => {
+    try {
+      const draft = localStorage.getItem('academic_draft_attendance');
+      if (draft) {
+        const parsed = JSON.parse(draft);
+        if (parsed.attendedInput !== undefined) return parsed.attendedInput;
+      }
+    } catch {}
+    return '0';
+  });
 
   // Error message state
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // Planning expandable state
   const [planExpanded, setPlanExpanded] = useState<boolean>(false);
-  const [targetPercentageInput, setTargetPercentageInput] = useState<string>('75');
-  const [futureSessionsInput, setFutureSessionsInput] = useState<string>('0');
+  const [targetPercentageInput, setTargetPercentageInput] = useState<string>(() => {
+    try {
+      const draft = localStorage.getItem('academic_draft_attendance');
+      if (draft) {
+        const parsed = JSON.parse(draft);
+        if (parsed.targetPercentageInput !== undefined) return parsed.targetPercentageInput;
+      }
+    } catch {}
+    return '75';
+  });
+
+  const [futureSessionsInput, setFutureSessionsInput] = useState<string>(() => {
+    try {
+      const draft = localStorage.getItem('academic_draft_attendance');
+      if (draft) {
+        const parsed = JSON.parse(draft);
+        if (parsed.futureSessionsInput !== undefined) return parsed.futureSessionsInput;
+      }
+    } catch {}
+    return '0';
+  });
+
+  const [hasDraft, setHasDraft] = useState<boolean>(() => {
+    try {
+      return !!localStorage.getItem('academic_draft_attendance');
+    } catch {
+      return false;
+    }
+  });
 
   // History state saved in localStorage
   const [history, setHistory] = useState<AttendanceRecord[]>(() => {
@@ -128,6 +190,15 @@ export const AttendancePage: React.FC = () => {
       percentage: attendanceResult.percentage,
     };
     setHistory((prev) => [newRecord, ...prev.slice(0, 9)]);
+    saveRecentCalculation({
+      type: 'attendance',
+      title: 'Attendance Calculation',
+      value: `${formatFixed(attendanceResult.percentage, 2)}%`,
+      subtitle: `${attended}/${facultySessions} Attended • ${status.label}`,
+      route: '/attendance',
+    });
+    setCalcSuccess(true);
+    showToast('Attendance saved to local history.', 'success');
   };
 
   // Reset confirmation state
@@ -136,6 +207,10 @@ export const AttendancePage: React.FC = () => {
 
   // Reset action - sets everything to 0
   const handleReset = () => {
+    try {
+      localStorage.removeItem('academic_draft_attendance');
+      setHasDraft(false);
+    } catch {}
     setTotalSessionsInput('0');
     setFacultySessionsInput('0');
     setAttendedInput('0');
@@ -143,6 +218,33 @@ export const AttendancePage: React.FC = () => {
     setFutureSessionsInput('0');
     setErrorMsg(null);
     setShowResetModal(false);
+  };
+
+  useEffect(() => {
+    if (isDirty) {
+      try {
+        localStorage.setItem(
+          'academic_draft_attendance',
+          JSON.stringify({
+            totalSessionsInput,
+            facultySessionsInput,
+            attendedInput,
+            targetPercentageInput,
+            futureSessionsInput,
+          })
+        );
+        setHasDraft(true);
+      } catch {}
+    }
+  }, [totalSessionsInput, facultySessionsInput, attendedInput, targetPercentageInput, futureSessionsInput, isDirty]);
+
+  const handleClearDraft = () => {
+    try {
+      localStorage.removeItem('academic_draft_attendance');
+    } catch {}
+    setHasDraft(false);
+    handleReset();
+    showToast('Draft cleared.', 'info');
   };
 
   const handleResetClick = () => {
@@ -179,6 +281,11 @@ export const AttendancePage: React.FC = () => {
             profile={profile}
             onProfileChange={updateProfile}
           />
+
+          <DraftIndicator hasDraft={hasDraft} onClear={handleClearDraft} />
+          {facultySessions === 0 && (
+            <QuickStartPrompt message="Enter your total conducted and attended sessions." />
+          )}
 
           <div className="apple-main-container p-6 sm:p-8 flex flex-col gap-6">
             <div className="flex items-center justify-between border-b border-[var(--border-primary)] pb-4">
@@ -555,9 +662,12 @@ export const AttendancePage: React.FC = () => {
         <div id="attendance-result-section" className="lg:col-span-5 lg:sticky lg:top-24">
           <div className="apple-result-card flex flex-col gap-6">
             <div>
-              <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-                ATTENDANCE PERCENTAGE
-              </span>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+                  ATTENDANCE PERCENTAGE
+                </span>
+                <CalculationStatus show={calcSuccess} onHide={() => setCalcSuccess(false)} />
+              </div>
               <div className="flex items-baseline gap-2 mt-2">
                 <span className="text-[44px] sm:text-[56px] font-bold tracking-tight text-[var(--text-primary)] tabular-nums leading-none">
                   {formatFixed(attendanceResult.percentage, 2)}%

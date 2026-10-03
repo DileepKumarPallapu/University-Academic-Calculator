@@ -12,16 +12,27 @@ import { ResultActionButtons } from '../components/common/ResultActionButtons';
 import { ResetConfirmModal } from '../components/common/ResetConfirmModal';
 import { saveRecentCalculation } from '../utils/recentCalculations';
 import { useAppToast } from '../components/layout/AppShell';
+import { DraftIndicator } from '../components/common/DraftIndicator';
+import { QuickStartPrompt } from '../components/common/QuickStartPrompt';
+import { CalculationStatus } from '../components/common/CalculationStatus';
 
 export const GPACalculatorPage: React.FC = () => {
   const { profile, studentName, setStudentName, updateProfile, nameError, setNameError } = useStudentProfile();
   const { showToast } = useAppToast();
   const studentNameInputRef = useRef<HTMLInputElement>(null);
   const [isGradeScaleOpen, setIsGradeScaleOpen] = useState(false);
+  const [calcSuccess, setCalcSuccess] = useState(false);
 
-  // Regulation selection with localStorage persistence
+  // Regulation selection with localStorage persistence or draft
   const [regulation, setRegulation] = useState<RegulationId>(() => {
     try {
+      const draft = localStorage.getItem('academic_draft_sgpa');
+      if (draft) {
+        const parsed = JSON.parse(draft);
+        if (parsed.regulation && REGULATIONS[parsed.regulation as RegulationId]) {
+          return parsed.regulation as RegulationId;
+        }
+      }
       const saved = localStorage.getItem('academic_selected_regulation') as RegulationId;
       return saved && REGULATIONS[saved] ? saved : 'VTR21';
     } catch {
@@ -29,14 +40,33 @@ export const GPACalculatorPage: React.FC = () => {
     }
   });
 
-  const [selectedSemester, setSelectedSemester] = useState<number>(5);
+  const [selectedSemester, setSelectedSemester] = useState<number>(() => {
+    try {
+      const draft = localStorage.getItem('academic_draft_sgpa');
+      if (draft) {
+        const parsed = JSON.parse(draft);
+        if (parsed.selectedSemester) return Number(parsed.selectedSemester);
+      }
+    } catch {}
+    return 5;
+  });
+
   const [subjectCountInput, setSubjectCountInput] = useState<number>(6);
 
   const regConfig = REGULATIONS[regulation];
   const gradeOptions = regConfig.grades;
 
-  // Subjects state defaulted to 0 credits
+  // Subjects state defaulted to 0 credits or restored from draft
   const [subjects, setSubjects] = useState<SubjectItem[]>(() => {
+    try {
+      const draft = localStorage.getItem('academic_draft_sgpa');
+      if (draft) {
+        const parsed = JSON.parse(draft);
+        if (Array.isArray(parsed.subjects) && parsed.subjects.length > 0) {
+          return parsed.subjects;
+        }
+      }
+    } catch {}
     const defaultGrade = REGULATIONS.VTR21.grades[0];
     return [
       { id: 'sub-1', name: 'Subject 1', credits: 0, grade: defaultGrade.grade, gradePoint: defaultGrade.points },
@@ -46,6 +76,14 @@ export const GPACalculatorPage: React.FC = () => {
       { id: 'sub-5', name: 'Subject 5', credits: 0, grade: defaultGrade.grade, gradePoint: defaultGrade.points },
       { id: 'sub-6', name: 'Subject 6', credits: 0, grade: defaultGrade.grade, gradePoint: defaultGrade.points },
     ];
+  });
+
+  const [hasDraft, setHasDraft] = useState<boolean>(() => {
+    try {
+      return !!localStorage.getItem('academic_draft_sgpa');
+    } catch {
+      return false;
+    }
   });
 
   // Handle regulation change
@@ -132,6 +170,10 @@ export const GPACalculatorPage: React.FC = () => {
     subjects.length !== 6;
 
   const handleReset = () => {
+    try {
+      localStorage.removeItem('academic_draft_sgpa');
+      setHasDraft(false);
+    } catch {}
     const defaultGrade = gradeOptions[0];
     setSubjects([
       { id: 'sub-1', name: 'Subject 1', credits: 0, grade: defaultGrade.grade, gradePoint: defaultGrade.points },
@@ -143,6 +185,27 @@ export const GPACalculatorPage: React.FC = () => {
     ]);
     setNameError(null);
     setShowResetModal(false);
+  };
+
+  useEffect(() => {
+    if (isDirty) {
+      try {
+        localStorage.setItem(
+          'academic_draft_sgpa',
+          JSON.stringify({ subjects, regulation, selectedSemester })
+        );
+        setHasDraft(true);
+      } catch {}
+    }
+  }, [subjects, regulation, selectedSemester, isDirty]);
+
+  const handleClearDraft = () => {
+    try {
+      localStorage.removeItem('academic_draft_sgpa');
+    } catch {}
+    setHasDraft(false);
+    handleReset();
+    showToast('Draft cleared.', 'info');
   };
 
   const handleResetClick = () => {
@@ -326,7 +389,11 @@ export const GPACalculatorPage: React.FC = () => {
       {/* Main Content Layout: Grid of Subjects LEFT (7 cols), Result RIGHT (5 cols) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         {/* Left: Subjects Section */}
-        <div className="lg:col-span-7 flex flex-col gap-6">
+        <div className="lg:col-span-7 flex flex-col gap-4">
+          <DraftIndicator hasDraft={hasDraft} onClear={handleClearDraft} />
+          {subjects.every((s) => Number(s.credits) === 0) && (
+            <QuickStartPrompt message="Add your subjects, credits and grades." />
+          )}
           <div className="apple-main-container p-6 sm:p-8 flex flex-col gap-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--border-primary)] pb-5">
               <div className="flex items-center gap-3">
@@ -635,6 +702,7 @@ export const GPACalculatorPage: React.FC = () => {
                       subtext: `${gpaResult.totalCredits} Credits • ${subjects.length} Subjects`,
                       route: '/sgpa',
                     });
+                    setCalcSuccess(true);
                     showToast('SGPA calculated successfully.', 'success');
                   }
                   if (window.innerWidth < 1024) {
@@ -915,9 +983,12 @@ export const GPACalculatorPage: React.FC = () => {
         <div id="sgpa-result-section" className="lg:col-span-5 lg:sticky lg:top-24">
           <div className="apple-result-card flex flex-col gap-6">
             <div>
-              <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-                SGPA
-              </span>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+                  SGPA
+                </span>
+                <CalculationStatus show={calcSuccess} onHide={() => setCalcSuccess(false)} />
+              </div>
               {gpaResult.totalCredits > 0 ? (
                 <>
                   <div className="flex items-baseline gap-2 mt-2">

@@ -4,6 +4,7 @@ export interface RecentCalculation {
   title: string;
   value: string;
   subtext?: string;
+  subtitle?: string;
   route: string;
   timestamp: number;
 }
@@ -28,6 +29,8 @@ export const saveRecentCalculation = (entry: Omit<RecentCalculation, 'id' | 'tim
     );
     const newEntry: RecentCalculation = {
       ...entry,
+      subtitle: entry.subtitle || entry.subtext,
+      subtext: entry.subtext || entry.subtitle,
       id: `${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       timestamp: Date.now(),
     };

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Calculator, Award, Layers, Clock, ShieldCheck, Trash2 } from 'lucide-react';
 import { AcademicSummaryCard } from '../components/common/AcademicSummaryCard';
+import { ContinueCalculationCard } from '../components/common/ContinueCalculationCard';
 import { RecentCalculationsList } from '../components/common/RecentCalculationsList';
 import { ResetConfirmModal } from '../components/common/ResetConfirmModal';
 import { clearAllLocalAcademicData } from '../utils/recentCalculations';
@@ -37,10 +38,31 @@ export const LandingPage: React.FC = () => {
           <span>PDF reports</span>
         </div>
 
-        <div className="mt-7">
-          <Link to="/internals" className="apple-btn-primary gap-2.5">
-            <span>Start Calculating</span>
-            <ArrowRight className="w-4 h-4" />
+        {/* Quick Actions Row */}
+        <div className="flex flex-wrap items-center justify-center gap-2 mt-6">
+          <Link
+            to="/gpa"
+            className="apple-btn-secondary text-xs h-9 px-3.5 py-0 rounded-full font-medium"
+          >
+            Calculate SGPA
+          </Link>
+          <Link
+            to="/attendance"
+            className="apple-btn-secondary text-xs h-9 px-3.5 py-0 rounded-full font-medium"
+          >
+            Check Attendance
+          </Link>
+          <Link
+            to="/internals"
+            className="apple-btn-secondary text-xs h-9 px-3.5 py-0 rounded-full font-medium"
+          >
+            Calculate Internal
+          </Link>
+          <Link
+            to="/cgpa"
+            className="apple-btn-secondary text-xs h-9 px-3.5 py-0 rounded-full font-medium"
+          >
+            Calculate CGPA
           </Link>
         </div>
       </section>
@@ -51,22 +73,21 @@ export const LandingPage: React.FC = () => {
           {/* Card 1: Internal Marks */}
           <Link
             to="/internals"
-            className="apple-card p-7 flex flex-col justify-between group no-underline text-inherit"
+            className="apple-card p-6 sm:p-7 flex flex-col justify-between group no-underline text-inherit"
           >
             <div>
-              {/* Apple Monochrome Icon Container: intentional dark container with crisp white icon */}
               <div className="w-12 h-12 rounded-[12px] bg-[#1D1D1F] dark:bg-[#2C2C2E] border border-black/10 dark:border-white/10 flex items-center justify-center text-[#FFFFFF] mb-5 shadow-sm">
                 <Calculator className="w-6 h-6 text-[#FFFFFF]" />
               </div>
               <h2 className="text-[20px] font-semibold text-[var(--text-primary)] tracking-tight">
                 Internal Marks
               </h2>
-              <p className="text-[15px] text-[var(--text-secondary)] mt-2.5 leading-relaxed">
-                Calculate theory tests (30 → 10), integrated lab (20), attendance (5) and assignments (5).
+              <p className="text-[14px] text-[var(--text-secondary)] mt-2 leading-relaxed">
+                Calculate your internal assessment.
               </p>
             </div>
-            <div className="mt-8 pt-4 -mx-7 -mb-7 px-7 pb-5 rounded-b-[20px] border-t border-[var(--border-primary)] flex items-center justify-between text-[15px] font-medium text-[var(--text-primary)] group-hover:bg-[var(--bg-tertiary)] transition-colors">
-              <span className="font-medium text-[var(--text-primary)]">Open Calculator</span>
+            <div className="mt-7 pt-4 -mx-6 sm:-mx-7 -mb-6 sm:-mb-7 px-6 sm:px-7 pb-5 rounded-b-[20px] border-t border-[var(--border-primary)] flex items-center justify-between text-[14px] font-medium text-[var(--text-primary)] group-hover:bg-[var(--bg-tertiary)] transition-colors">
+              <span className="font-medium text-[var(--text-primary)]">Open</span>
               <ArrowRight className="w-4 h-4 text-[var(--text-primary)] transition-transform group-hover:translate-x-1" />
             </div>
           </Link>
@@ -74,7 +95,7 @@ export const LandingPage: React.FC = () => {
           {/* Card 2: SGPA */}
           <Link
             to="/gpa"
-            className="apple-card p-7 flex flex-col justify-between group no-underline text-inherit"
+            className="apple-card p-6 sm:p-7 flex flex-col justify-between group no-underline text-inherit"
           >
             <div>
               <div className="w-12 h-12 rounded-[12px] bg-[#1D1D1F] dark:bg-[#2C2C2E] border border-black/10 dark:border-white/10 flex items-center justify-center text-[#FFFFFF] mb-5 shadow-sm">
@@ -83,12 +104,12 @@ export const LandingPage: React.FC = () => {
               <h2 className="text-[20px] font-semibold text-[var(--text-primary)] tracking-tight">
                 SGPA
               </h2>
-              <p className="text-[15px] text-[var(--text-secondary)] mt-2.5 leading-relaxed">
-                Semester Grade Point Average based on course credits and institutional regulations.
+              <p className="text-[14px] text-[var(--text-secondary)] mt-2 leading-relaxed">
+                Calculate your semester GPA.
               </p>
             </div>
-            <div className="mt-8 pt-4 -mx-7 -mb-7 px-7 pb-5 rounded-b-[20px] border-t border-[var(--border-primary)] flex items-center justify-between text-[15px] font-medium text-[var(--text-primary)] group-hover:bg-[var(--bg-tertiary)] transition-colors">
-              <span className="font-medium text-[var(--text-primary)]">Open Calculator</span>
+            <div className="mt-7 pt-4 -mx-6 sm:-mx-7 -mb-6 sm:-mb-7 px-6 sm:px-7 pb-5 rounded-b-[20px] border-t border-[var(--border-primary)] flex items-center justify-between text-[14px] font-medium text-[var(--text-primary)] group-hover:bg-[var(--bg-tertiary)] transition-colors">
+              <span className="font-medium text-[var(--text-primary)]">Open</span>
               <ArrowRight className="w-4 h-4 text-[var(--text-primary)] transition-transform group-hover:translate-x-1" />
             </div>
           </Link>
@@ -96,7 +117,7 @@ export const LandingPage: React.FC = () => {
           {/* Card 3: CGPA */}
           <Link
             to="/cgpa"
-            className="apple-card p-7 flex flex-col justify-between group no-underline text-inherit"
+            className="apple-card p-6 sm:p-7 flex flex-col justify-between group no-underline text-inherit"
           >
             <div>
               <div className="w-12 h-12 rounded-[12px] bg-[#1D1D1F] dark:bg-[#2C2C2E] border border-black/10 dark:border-white/10 flex items-center justify-center text-[#FFFFFF] mb-5 shadow-sm">
@@ -105,12 +126,12 @@ export const LandingPage: React.FC = () => {
               <h2 className="text-[20px] font-semibold text-[var(--text-primary)] tracking-tight">
                 CGPA
               </h2>
-              <p className="text-[15px] text-[var(--text-secondary)] mt-2.5 leading-relaxed">
-                Cumulative Grade Point Average across all semesters with strict credit weighting.
+              <p className="text-[14px] text-[var(--text-secondary)] mt-2 leading-relaxed">
+                Calculate your cumulative GPA.
               </p>
             </div>
-            <div className="mt-8 pt-4 -mx-7 -mb-7 px-7 pb-5 rounded-b-[20px] border-t border-[var(--border-primary)] flex items-center justify-between text-[15px] font-medium text-[var(--text-primary)] group-hover:bg-[var(--bg-tertiary)] transition-colors">
-              <span className="font-medium text-[var(--text-primary)]">Open Calculator</span>
+            <div className="mt-7 pt-4 -mx-6 sm:-mx-7 -mb-6 sm:-mb-7 px-6 sm:px-7 pb-5 rounded-b-[20px] border-t border-[var(--border-primary)] flex items-center justify-between text-[14px] font-medium text-[var(--text-primary)] group-hover:bg-[var(--bg-tertiary)] transition-colors">
+              <span className="font-medium text-[var(--text-primary)]">Open</span>
               <ArrowRight className="w-4 h-4 text-[var(--text-primary)] transition-transform group-hover:translate-x-1" />
             </div>
           </Link>
@@ -118,7 +139,7 @@ export const LandingPage: React.FC = () => {
           {/* Card 4: Attendance */}
           <Link
             to="/attendance"
-            className="apple-card p-7 flex flex-col justify-between group no-underline text-inherit"
+            className="apple-card p-6 sm:p-7 flex flex-col justify-between group no-underline text-inherit"
           >
             <div>
               <div className="w-12 h-12 rounded-[12px] bg-[#1D1D1F] dark:bg-[#2C2C2E] border border-black/10 dark:border-white/10 flex items-center justify-center text-[#FFFFFF] mb-5 shadow-sm">
@@ -127,16 +148,21 @@ export const LandingPage: React.FC = () => {
               <h2 className="text-[20px] font-semibold text-[var(--text-primary)] tracking-tight">
                 Attendance
               </h2>
-              <p className="text-[15px] text-[var(--text-secondary)] mt-2.5 leading-relaxed">
-                Calculate percentage based on faculty sessions and plan target attendance thresholds.
+              <p className="text-[14px] text-[var(--text-secondary)] mt-2 leading-relaxed">
+                Calculate and plan your attendance.
               </p>
             </div>
-            <div className="mt-8 pt-4 -mx-7 -mb-7 px-7 pb-5 rounded-b-[20px] border-t border-[var(--border-primary)] flex items-center justify-between text-[15px] font-medium text-[var(--text-primary)] group-hover:bg-[var(--bg-tertiary)] transition-colors">
-              <span className="font-medium text-[var(--text-primary)]">Open Calculator</span>
+            <div className="mt-7 pt-4 -mx-6 sm:-mx-7 -mb-6 sm:-mb-7 px-6 sm:px-7 pb-5 rounded-b-[20px] border-t border-[var(--border-primary)] flex items-center justify-between text-[14px] font-medium text-[var(--text-primary)] group-hover:bg-[var(--bg-tertiary)] transition-colors">
+              <span className="font-medium text-[var(--text-primary)]">Open</span>
               <ArrowRight className="w-4 h-4 text-[var(--text-primary)] transition-transform group-hover:translate-x-1" />
             </div>
           </Link>
         </div>
+      </section>
+
+      {/* Continue Where You Left Off */}
+      <section className="w-full">
+        <ContinueCalculationCard />
       </section>
 
       {/* Academic Summary Section */}

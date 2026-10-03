@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom';
 import { Navbar } from './Navbar';
 import { Footer } from './Footer';
 import { ToastContainer } from '../common/Toast';
+import { OfflineBadge } from '../common/OfflineBadge';
 
 interface ToastItem {
   id: string;
@@ -33,6 +34,7 @@ export const AppShell: React.FC = () => {
   return (
     <ToastContext.Provider value={{ showToast }}>
       <div className="min-h-screen flex flex-col bg-[var(--bg-primary)] text-[var(--text-primary)] transition-colors">
+        <OfflineBadge />
         <Navbar />
 
         <main className="flex-1 max-w-[1200px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">

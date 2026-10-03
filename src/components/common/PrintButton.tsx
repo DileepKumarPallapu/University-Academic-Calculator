@@ -48,10 +48,15 @@ export const PrintButton: React.FC<PrintButtonProps> = ({
       onClick();
     }
 
-    // Configure dynamic document title for browser Save as PDF naming
+    // Configure dynamic document title for browser Save as PDF naming (Section 12)
     const originalTitle = document.title;
-    const cleanName = trimmed.replace(/[<>:"/\\|?*]/g, '');
-    document.title = `${cleanName} - ${calculatorType} - Academic Calculator`;
+    const dateStr = new Date().toISOString().split('T')[0];
+    const sanitizedStudent = trimmed.replace(/[/\\:*?"<>|]/g, '').trim().replace(/\s+/g, '_');
+    const calcNormalized = calculatorType.replace(/[/\\:*?"<>|]/g, '').trim().replace(/\s+/g, '_');
+    const targetFilename = sanitizedStudent
+      ? `${sanitizedStudent}_${calcNormalized}_${dateStr}`
+      : `Academic_Calculator_${calcNormalized}_${dateStr}`;
+    document.title = targetFilename;
 
     // Small delay to allow state/DOM to settle before opening browser print preview
     setTimeout(() => {

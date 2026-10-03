@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   calculateTheoryInternal,
   calculateIntegratedInternal,
@@ -14,31 +14,70 @@ import { StudentNameInput } from '../components/common/StudentNameInput';
 import { ResultActionButtons } from '../components/common/ResultActionButtons';
 import { ResetConfirmModal } from '../components/common/ResetConfirmModal';
 import { saveRecentCalculation } from '../utils/recentCalculations';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, BookmarkPlus } from 'lucide-react';
+import { DraftIndicator } from '../components/common/DraftIndicator';
+import { QuickStartPrompt } from '../components/common/QuickStartPrompt';
+import { CalculationStatus } from '../components/common/CalculationStatus';
+import { useAppToast } from '../components/layout/AppShell';
 
 export const InternalCalculatorPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'theory' | 'integrated'>('theory');
+  const { showToast } = useAppToast();
+  const [activeTab, setActiveTab] = useState<'theory' | 'integrated'>(() => {
+    try {
+      const draft = localStorage.getItem('academic_draft_internals');
+      if (draft) {
+        const parsed = JSON.parse(draft);
+        if (parsed.activeTab) return parsed.activeTab;
+      }
+    } catch {}
+    return 'theory';
+  });
   const { profile, studentName, setStudentName, updateProfile, nameError, setNameError } = useStudentProfile();
   const studentNameInputRef = useRef<HTMLInputElement>(null);
+  const [calcSuccess, setCalcSuccess] = useState<boolean>(false);
 
-
-
-  // Theory inputs defaulted to 0
-  const [theory, setTheory] = useState<TheoryInputs>({
-    test1: 0,
-    test2: 0,
-    test3: 0,
-    attendance: 0,
-    assignment: 0,
+  // Theory inputs defaulted to 0 or restored from draft
+  const [theory, setTheory] = useState<TheoryInputs>(() => {
+    try {
+      const draft = localStorage.getItem('academic_draft_internals');
+      if (draft) {
+        const parsed = JSON.parse(draft);
+        if (parsed.theory) return parsed.theory;
+      }
+    } catch {}
+    return {
+      test1: 0,
+      test2: 0,
+      test3: 0,
+      attendance: 0,
+      assignment: 0,
+    };
   });
 
-  // Integrated inputs defaulted to 0
-  const [integrated, setIntegrated] = useState<IntegratedInputs>({
-    mid1: 0,
-    mid2: 0,
-    lab: 0,
-    attendance: 0,
-    assignment: 0,
+  // Integrated inputs defaulted to 0 or restored from draft
+  const [integrated, setIntegrated] = useState<IntegratedInputs>(() => {
+    try {
+      const draft = localStorage.getItem('academic_draft_internals');
+      if (draft) {
+        const parsed = JSON.parse(draft);
+        if (parsed.integrated) return parsed.integrated;
+      }
+    } catch {}
+    return {
+      mid1: 0,
+      mid2: 0,
+      lab: 0,
+      attendance: 0,
+      assignment: 0,
+    };
+  });
+
+  const [hasDraft, setHasDraft] = useState<boolean>(() => {
+    try {
+      return !!localStorage.getItem('academic_draft_internals');
+    } catch {
+      return false;
+    }
   });
 
   const handleTheoryChange = (field: keyof TheoryInputs, value: string) => {
@@ -131,8 +170,43 @@ export const InternalCalculatorPage: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    if (isTheoryDirty || isIntegratedDirty) {
+      try {
+        localStorage.setItem(
+          'academic_draft_internals',
+          JSON.stringify({ theory, integrated, activeTab })
+        );
+        setHasDraft(true);
+      } catch {}
+    }
+  }, [theory, integrated, activeTab, isTheoryDirty, isIntegratedDirty]);
+
+  const handleClearDraft = () => {
+    try {
+      localStorage.removeItem('academic_draft_internals');
+    } catch {}
+    setHasDraft(false);
+    resetTheory();
+    resetIntegrated();
+    showToast('Draft cleared.', 'info');
+  };
+
   const theoryResult = calculateTheoryInternal(theory);
   const integratedResult = calculateIntegratedInternal(integrated);
+
+  const handleSaveResult = () => {
+    const score = activeTab === 'theory' ? theoryResult.totalInternal : integratedResult.totalInternal;
+    saveRecentCalculation({
+      type: 'internals',
+      title: activeTab === 'theory' ? 'Internal Marks (Theory)' : 'Internal Marks (Integrated)',
+      value: `${formatFixed(score, 2)} / 40`,
+      subtitle: `${formatFixed(activeTab === 'theory' ? theoryResult.percentage : integratedResult.percentage, 1)}% Assessment`,
+      route: '/internals',
+    });
+    setCalcSuccess(true);
+    showToast('Internal marks saved to recent calculations.', 'success');
+  };
 
   const t1Raw = typeof theory.test1 === 'number' ? theory.test1 : (parseFloat(theory.test1 as string) || 0);
   const t2Raw = typeof theory.test2 === 'number' ? theory.test2 : (parseFloat(theory.test2 as string) || 0);
@@ -193,6 +267,11 @@ export const InternalCalculatorPage: React.FC = () => {
             profile={profile}
             onProfileChange={updateProfile}
           />
+
+          <DraftIndicator hasDraft={hasDraft} onClear={handleClearDraft} />
+          {((activeTab === 'theory' && !isTheoryDirty) || (activeTab === 'integrated' && !isIntegratedDirty)) && (
+            <QuickStartPrompt message="Enter your test marks and attendance details." />
+          )}
 
           <div className="apple-main-container p-6 sm:p-8 flex flex-col gap-6">
             {activeTab === 'theory' ? (
@@ -696,9 +775,12 @@ export const InternalCalculatorPage: React.FC = () => {
         <div id="internal-result-section" className="lg:col-span-5 lg:sticky lg:top-24">
           <div className="apple-result-card flex flex-col gap-6">
             <div>
-              <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-                YOUR INTERNAL
-              </span>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+                  YOUR INTERNAL
+                </span>
+                <CalculationStatus show={calcSuccess} onHide={() => setCalcSuccess(false)} />
+              </div>
               <div className="flex items-baseline gap-2 mt-2">
                 <span className="text-[44px] sm:text-[56px] font-bold tracking-tight text-[var(--text-primary)] tabular-nums leading-none">
                   {formatFixed(
@@ -835,6 +917,19 @@ export const InternalCalculatorPage: React.FC = () => {
                   2
                 )}%)`}
               />
+            </div>
+
+            {/* Save to History Button */}
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={handleSaveResult}
+                disabled={activeTab === 'theory' ? !isTheoryDirty : !isIntegratedDirty}
+                className="w-full apple-btn-secondary text-xs h-10 gap-1.5 disabled:opacity-40"
+              >
+                <BookmarkPlus className="w-3.5 h-3.5" />
+                <span>Save to Local History</span>
+              </button>
             </div>
 
             {/* Print / Save PDF Action Button */}

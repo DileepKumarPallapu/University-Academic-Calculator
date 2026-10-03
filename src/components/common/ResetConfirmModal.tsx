@@ -7,6 +7,8 @@ interface ResetConfirmModalProps {
   onConfirm: () => void;
   title?: string;
   description?: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
 }
 
 export const ResetConfirmModal: React.FC<ResetConfirmModalProps> = ({
@@ -15,6 +17,8 @@ export const ResetConfirmModal: React.FC<ResetConfirmModalProps> = ({
   onConfirm,
   title = 'Reset calculation?',
   description = 'Are you sure you want to reset? All entered inputs and calculated results will be cleared. This action cannot be undone.',
+  confirmLabel = 'Reset',
+  cancelLabel = 'Cancel',
 }) => {
   return (
     <Modal
@@ -22,12 +26,13 @@ export const ResetConfirmModal: React.FC<ResetConfirmModalProps> = ({
       onClose={onClose}
       title={title}
       description={description}
-      confirmText="Reset"
+      confirmText={confirmLabel}
+      cancelText={cancelLabel}
       confirmDestructive={true}
       onConfirm={onConfirm}
     >
       <div className="text-xs text-[var(--text-tertiary)] py-1">
-        Clicking Reset will restore all fields to their default starting values.
+        This action cannot be undone.
       </div>
     </Modal>
   );

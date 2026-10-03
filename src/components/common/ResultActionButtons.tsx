@@ -33,27 +33,31 @@ export const ResultActionButtons: React.FC<ResultActionButtonsProps> = ({
   const generateFormattedText = (withRoll: boolean = false): string => {
     const lines = [
       'ACADEMIC CALCULATOR',
-      '--------------------------------',
-      title,
-      `${resultLabel}: ${resultValue}`,
-      '--------------------------------',
+      `${title.toUpperCase()}`,
+      '',
     ];
 
-    items.forEach((item) => {
-      lines.push(`${item.label}: ${item.value}`);
-    });
-
     if (studentName.trim()) {
-      lines.push(`Student: ${studentName.trim()}`);
+      lines.push(`Student:\n${studentName.trim()}`, '');
     }
 
     if (withRoll && rollNumber.trim()) {
-      lines.push(`Register No: ${rollNumber.trim()}`);
+      lines.push(`Register Number:\n${rollNumber.trim()}`, '');
     }
 
-    lines.push('--------------------------------');
-    lines.push('https://university-academic-calculator.vercel.app/');
+    items.forEach((item) => {
+      lines.push(`${item.label}:\n${item.value}`, '');
+    });
 
+    lines.push(`${resultLabel}:\n${resultValue}`, '');
+
+    const dateFormatted = new Intl.DateTimeFormat('en-GB', {
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric',
+    }).format(new Date());
+
+    lines.push(`Generated:\n${dateFormatted}`);
     return lines.join('\n');
   };
 
@@ -218,7 +222,7 @@ export const ResultActionButtons: React.FC<ResultActionButtonsProps> = ({
               <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 text-xs text-[var(--text-secondary)] pt-2 border-t border-[var(--border-secondary)] w-full">
                 {items.slice(0, 3).map((item, idx) => (
                   <span key={idx}>
-                    <strong>{item.label}:</strong> {item.value}
+                    {item.value}
                   </span>
                 ))}
               </div>
@@ -233,6 +237,9 @@ export const ResultActionButtons: React.FC<ResultActionButtonsProps> = ({
                       {rollNumber.trim()}
                     </div>
                   )}
+                  <div className="text-[10px] text-[var(--text-tertiary)] mt-1 font-mono">
+                    Generated {new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date())}
+                  </div>
                 </div>
               )}
             </div>

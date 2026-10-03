@@ -8,6 +8,7 @@ interface ModalProps {
   description?: string;
   children: React.ReactNode;
   confirmText?: string;
+  cancelText?: string;
   onConfirm?: () => void;
   confirmDestructive?: boolean;
 }
@@ -19,6 +20,7 @@ export const Modal: React.FC<ModalProps> = ({
   description,
   children,
   confirmText,
+  cancelText = 'Cancel',
   onConfirm,
   confirmDestructive = false,
 }) => {
@@ -84,7 +86,7 @@ export const Modal: React.FC<ModalProps> = ({
             onClick={onClose}
             className="px-5 py-2.5 text-sm font-semibold rounded-xl text-[var(--text-secondary)] hover:bg-[var(--border-secondary)] transition-colors min-h-[44px]"
           >
-            Cancel
+            {cancelText}
           </button>
           {confirmText && onConfirm && (
             <button

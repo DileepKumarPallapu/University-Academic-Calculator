@@ -12,6 +12,8 @@ import { ResetConfirmModal } from './ResetConfirmModal';
 export const RecentCalculationsList: React.FC<{ className?: string }> = ({ className = '' }) => {
   const [items, setItems] = useState<RecentCalculation[]>([]);
   const [showClearConfirm, setShowClearConfirm] = useState<boolean>(false);
+  const [itemToDelete, setItemToDelete] = useState<RecentCalculation | null>(null);
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   const loadItems = () => {
     setItems(getRecentCalculations());
@@ -58,6 +60,28 @@ export const RecentCalculationsList: React.FC<{ className?: string }> = ({ class
     setShowClearConfirm(false);
   };
 
+  const handleDeleteItem = () => {
+    if (itemToDelete) {
+      deleteRecentCalculation(itemToDelete.id);
+      setItemToDelete(null);
+    }
+  };
+
+  const filteredItems = items.filter((item) => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase().trim();
+    const typeLabel = getTypeLabel(item.type).toLowerCase();
+    const title = (item.title || '').toLowerCase();
+    const value = (item.value || '').toLowerCase();
+    const subtitle = (item.subtitle || '').toLowerCase();
+    return (
+      typeLabel.includes(query) ||
+      title.includes(query) ||
+      value.includes(query) ||
+      subtitle.includes(query)
+    );
+  });
+
   return (
     <>
       <div className={`apple-main-container p-6 sm:p-7 flex flex-col gap-4 no-print ${className}`}>
@@ -77,41 +101,59 @@ export const RecentCalculationsList: React.FC<{ className?: string }> = ({ class
           </button>
         </div>
 
-        <div className="flex flex-col divide-y divide-[var(--border-secondary)] text-sm">
-          {items.map((item) => (
-            <div key={item.id} className="py-3 flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3 sm:gap-6 min-w-0">
-                <span className="w-20 sm:w-24 text-xs font-bold uppercase tracking-wide text-[var(--text-secondary)] shrink-0">
-                  {getTypeLabel(item.type)}
-                </span>
-                <span className="font-mono font-bold text-[var(--text-primary)] text-sm sm:text-base shrink-0">
-                  {item.value}
-                </span>
-                <span className="hidden sm:inline text-xs text-[var(--text-secondary)] shrink-0 font-mono">
-                  {formatDate(item.timestamp)}
-                </span>
-              </div>
+        {items.length > 10 && (
+          <div className="pt-1">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search recent calculations..."
+              className="apple-input text-xs py-2 px-3 w-full"
+            />
+          </div>
+        )}
 
-              <div className="flex items-center gap-2 shrink-0">
-                <Link
-                  to={item.route}
-                  className="h-8 px-3 rounded-lg bg-[var(--surface)] border border-[var(--border-primary)] text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] flex items-center gap-1 transition-colors"
-                >
-                  <span>Open</span>
-                  <ArrowUpRight className="w-3.5 h-3.5" />
-                </Link>
-                <button
-                  type="button"
-                  onClick={() => deleteRecentCalculation(item.id)}
-                  aria-label={`Delete ${item.title}`}
-                  className="p-1.5 rounded-lg text-[var(--text-tertiary)] hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+        {filteredItems.length === 0 ? (
+          <div className="py-6 text-center text-xs text-[var(--text-tertiary)]">
+            No calculations matching &quot;{searchQuery}&quot;
+          </div>
+        ) : (
+          <div className="flex flex-col divide-y divide-[var(--border-secondary)] text-sm">
+            {filteredItems.map((item) => (
+              <div key={item.id} className="py-3 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3 sm:gap-6 min-w-0">
+                  <span className="w-20 sm:w-24 text-xs font-bold uppercase tracking-wide text-[var(--text-secondary)] shrink-0">
+                    {getTypeLabel(item.type)}
+                  </span>
+                  <span className="font-mono font-bold text-[var(--text-primary)] text-sm sm:text-base shrink-0">
+                    {item.value}
+                  </span>
+                  <span className="hidden sm:inline text-xs text-[var(--text-secondary)] shrink-0 font-mono">
+                    {formatDate(item.timestamp)}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <Link
+                    to={item.route}
+                    className="h-8 px-3 rounded-lg bg-[var(--surface)] border border-[var(--border-primary)] text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] flex items-center gap-1 transition-colors"
+                  >
+                    <span>Open</span>
+                    <ArrowUpRight className="w-3.5 h-3.5" />
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => setItemToDelete(item)}
+                    aria-label={`Delete ${item.title}`}
+                    className="p-1.5 rounded-lg text-[var(--text-tertiary)] hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <ResetConfirmModal
@@ -120,6 +162,16 @@ export const RecentCalculationsList: React.FC<{ className?: string }> = ({ class
         onConfirm={handleClearHistory}
         title="Clear recent calculations?"
         description="Are you sure you want to clear your calculation history from this device? This action cannot be undone."
+      />
+
+      <ResetConfirmModal
+        isOpen={!!itemToDelete}
+        onClose={() => setItemToDelete(null)}
+        onConfirm={handleDeleteItem}
+        title="Delete this calculation?"
+        description="Are you sure you want to delete this calculation from history?"
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
       />
     </>
   );
