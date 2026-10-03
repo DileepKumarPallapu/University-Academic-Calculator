@@ -9,13 +9,16 @@ import {
 import type { TheoryInputs, IntegratedInputs } from '../types';
 import { PrintButton } from '../components/common/PrintButton';
 import { AcademicPrintReport } from '../components/common/AcademicPrintReport';
-import { useStudentName } from '../hooks/useStudentName';
+import { useStudentProfile } from '../hooks/useStudentProfile';
 import { StudentNameInput } from '../components/common/StudentNameInput';
+import { ResultActionButtons } from '../components/common/ResultActionButtons';
+import { saveRecentCalculation } from '../utils/recentCalculations';
 
 export const InternalCalculatorPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'theory' | 'integrated'>('theory');
-  const { studentName, setStudentName, nameError, setNameError } = useStudentName();
+  const { profile, studentName, setStudentName, updateProfile, nameError, setNameError } = useStudentProfile();
   const studentNameInputRef = useRef<HTMLInputElement>(null);
+
 
 
   // Theory inputs defaulted to 0
@@ -151,12 +154,14 @@ export const InternalCalculatorPage: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         {/* Left Form: 7 cols */}
         <div className="lg:col-span-7 flex flex-col gap-6">
-          {/* Student Name Input */}
+          {/* Student Profile Input */}
           <StudentNameInput
             value={studentName}
             onChange={setStudentName}
             errorMessage={nameError}
             inputRef={studentNameInputRef}
+            profile={profile}
+            onProfileChange={updateProfile}
           />
 
           <div className="apple-main-container p-6 sm:p-8 flex flex-col gap-6">
@@ -488,6 +493,15 @@ export const InternalCalculatorPage: React.FC = () => {
                 type="button"
                 className="apple-btn-primary w-full h-[52px]"
                 onClick={() => {
+                  const total = activeTab === 'theory' ? theoryResult.totalInternal : integratedResult.totalInternal;
+                  const pct = activeTab === 'theory' ? theoryResult.percentage : integratedResult.percentage;
+                  saveRecentCalculation({
+                    type: 'internals',
+                    title: `Internal Marks (${activeTab === 'theory' ? 'Theory' : 'Integrated'})`,
+                    value: `${formatFixed(total, 2)} / 40`,
+                    subtext: `${formatFixed(pct, 2)}%`,
+                    route: '/internals',
+                  });
                   const el = document.getElementById('internal-result-section');
                   if (el) el.scrollIntoView({ behavior: 'smooth' });
                 }}
@@ -610,8 +624,41 @@ export const InternalCalculatorPage: React.FC = () => {
               )}
             </div>
 
-            {/* Print / Save PDF Action Button */}
+            {/* Result Action Buttons: Copy & Share */}
             <div className="pt-2">
+              <ResultActionButtons
+                title={activeTab === 'theory' ? 'Theory Internal Marks' : 'Integrated Internal Marks'}
+                studentName={studentName}
+                items={
+                  activeTab === 'theory'
+                    ? [
+                        { label: 'Test 1', value: `${formatFixed(theoryResult.t1Converted, 2)} / 10` },
+                        { label: 'Test 2', value: `${formatFixed(theoryResult.t2Converted, 2)} / 10` },
+                        { label: 'Test 3', value: `${formatFixed(theoryResult.t3Converted, 2)} / 10` },
+                        { label: 'Attendance', value: `${theoryResult.attendance} / 5` },
+                        { label: 'Assignment', value: `${theoryResult.assignment} / 5` },
+                      ]
+                    : [
+                        { label: 'Mid 1', value: `${formatFixed(integratedResult.mid1Converted, 2)} / 5` },
+                        { label: 'Mid 2', value: `${formatFixed(integratedResult.mid2Converted, 2)} / 5` },
+                        { label: 'Model Lab', value: `${integratedResult.lab} / 20` },
+                        { label: 'Attendance', value: `${integratedResult.attendance} / 5` },
+                        { label: 'Assignment', value: `${integratedResult.assignment} / 5` },
+                      ]
+                }
+                resultLabel="Total Internal"
+                resultValue={`${formatFixed(
+                  activeTab === 'theory' ? theoryResult.totalInternal : integratedResult.totalInternal,
+                  2
+                )} / 40 (${formatFixed(
+                  activeTab === 'theory' ? theoryResult.percentage : integratedResult.percentage,
+                  2
+                )}%)`}
+              />
+            </div>
+
+            {/* Print / Save PDF Action Button */}
+            <div className="pt-1">
               <PrintButton
                 studentName={studentName}
                 calculatorType="Internal Marks"
@@ -629,6 +676,7 @@ export const InternalCalculatorPage: React.FC = () => {
       reportTitle="Internal Marks Report"
       calculatorName="Internal Marks Calculator"
       studentName={studentName}
+      profile={profile}
       calculationType={activeTab === 'theory' ? 'Theory Internal' : 'Integrated Internal'}
       resultLabel="TOTAL INTERNAL MARKS"
       resultValue={`${formatFixed(

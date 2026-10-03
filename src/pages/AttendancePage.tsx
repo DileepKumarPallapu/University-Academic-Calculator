@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ChevronDown, Check, Copy, RotateCcw, BookmarkPlus, Calendar } from 'lucide-react';
+import { ChevronDown, RotateCcw, BookmarkPlus, Calendar } from 'lucide-react';
 import {
   calculateAttendance,
   calculateRequiredAttendance,
@@ -8,8 +8,10 @@ import {
 } from '../utils/calculations';
 import { PrintButton } from '../components/common/PrintButton';
 import { AcademicPrintReport } from '../components/common/AcademicPrintReport';
-import { useStudentName } from '../hooks/useStudentName';
+import { useStudentProfile } from '../hooks/useStudentProfile';
 import { StudentNameInput } from '../components/common/StudentNameInput';
+import { ResultActionButtons } from '../components/common/ResultActionButtons';
+import { saveRecentCalculation } from '../utils/recentCalculations';
 
 interface AttendanceRecord {
   id: string;
@@ -22,7 +24,7 @@ interface AttendanceRecord {
 }
 
 export const AttendancePage: React.FC = () => {
-  const { studentName, setStudentName, nameError, setNameError } = useStudentName();
+  const { profile, studentName, setStudentName, updateProfile, nameError, setNameError } = useStudentProfile();
   const studentNameInputRef = useRef<HTMLInputElement>(null);
 
   // Primary inputs defaulted to 0
@@ -38,9 +40,6 @@ export const AttendancePage: React.FC = () => {
   const [targetPercentageInput, setTargetPercentageInput] = useState<string>('75');
   const [futureSessionsInput, setFutureSessionsInput] = useState<string>('0');
   const [futureAbsencesInput, setFutureAbsencesInput] = useState<string>('0');
-
-  // Copy feedback
-  const [copied, setCopied] = useState<boolean>(false);
 
   // History state saved in localStorage
   const [history, setHistory] = useState<AttendanceRecord[]>(() => {
@@ -114,14 +113,6 @@ export const AttendancePage: React.FC = () => {
       })
     : { futureAttended: attended, futureTotal: facultySessions, projectedPercentage: attendanceResult.percentage };
 
-  // Copy result action
-  const handleCopy = () => {
-    const text = `Attendance: ${formatFixed(attendanceResult.percentage, 2)}%\nTotal Sessions: ${totalSessions}\nFaculty Sessions: ${facultySessions}\nAttended: ${attended}\nAbsent: ${attendanceResult.absent}`;
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
   // Save result to history
   const handleSaveResult = () => {
     if (!isValid || facultySessions === 0) return;
@@ -174,6 +165,8 @@ export const AttendancePage: React.FC = () => {
             onChange={setStudentName}
             errorMessage={nameError}
             inputRef={studentNameInputRef}
+            profile={profile}
+            onProfileChange={updateProfile}
           />
 
           <div className="apple-main-container p-6 sm:p-8 flex flex-col gap-6">
@@ -267,6 +260,15 @@ export const AttendancePage: React.FC = () => {
                 type="button"
                 className="apple-btn-primary w-full h-[52px]"
                 onClick={() => {
+                  if (isValid && facultySessions > 0) {
+                    saveRecentCalculation({
+                      type: 'attendance',
+                      title: 'Attendance Calculation',
+                      value: `${formatFixed(attendanceResult.percentage, 2)}%`,
+                      subtext: `${attended} / ${facultySessions} Attended • ${status.label}`,
+                      route: '/attendance',
+                    });
+                  }
                   const el = document.getElementById('attendance-result-section');
                   if (el) el.scrollIntoView({ behavior: 'smooth' });
                 }}
@@ -484,24 +486,33 @@ export const AttendancePage: React.FC = () => {
               </div>
             </div>
 
-            {/* Action Row */}
-            <div className="flex items-center gap-3 pt-2 border-t border-[var(--border-primary)]">
-              <button
-                type="button"
-                onClick={handleCopy}
-                className="flex-1 apple-btn-secondary text-xs h-11 gap-1.5"
-              >
-                {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copied ? 'Copied' : 'Copy Result'}</span>
-              </button>
+            {/* Result Action Buttons: Copy & Share */}
+            <div className="pt-2">
+              <ResultActionButtons
+                title="Attendance Calculation"
+                studentName={studentName}
+                items={[
+                  { label: 'Total Sessions', value: `${totalSessions}` },
+                  { label: 'Faculty Sessions', value: `${facultySessions}` },
+                  { label: 'Attended Sessions', value: `${attended}` },
+                  { label: 'Absent Sessions', value: `${attendanceResult.absent}` },
+                  { label: 'Attendance Status', value: status.label },
+                ]}
+                resultLabel="Attendance"
+                resultValue={`${formatFixed(attendanceResult.percentage, 2)}%`}
+              />
+            </div>
+
+            {/* Save to History Button */}
+            <div className="pt-1">
               <button
                 type="button"
                 onClick={handleSaveResult}
                 disabled={facultySessions === 0}
-                className="flex-1 apple-btn-primary text-xs h-11 gap-1.5 disabled:opacity-40"
+                className="w-full apple-btn-secondary text-xs h-10 gap-1.5 disabled:opacity-40"
               >
                 <BookmarkPlus className="w-3.5 h-3.5" />
-                <span>Save Result</span>
+                <span>Save to Local History</span>
               </button>
             </div>
 
@@ -534,6 +545,7 @@ export const AttendancePage: React.FC = () => {
       reportTitle="Attendance Report"
       calculatorName="Attendance Calculator"
       studentName={studentName}
+      profile={profile}
       resultLabel="ATTENDANCE PERCENTAGE"
       resultValue={`${formatFixed(attendanceResult.percentage, 2)}%`}
       resultSubtext={`${attended} / ${facultySessions} sessions attended • ${status.label}`}

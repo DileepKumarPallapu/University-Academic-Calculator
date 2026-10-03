@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Calculator, Award, Layers, Clock } from 'lucide-react';
+import { ArrowRight, Calculator, Award, Layers, Clock, ShieldCheck } from 'lucide-react';
+import { RecentCalculationsList } from '../components/common/RecentCalculationsList';
 
 export const LandingPage: React.FC = () => {
   return (
@@ -113,6 +114,19 @@ export const LandingPage: React.FC = () => {
               <ArrowRight className="w-4 h-4 text-[var(--text-primary)] transition-transform group-hover:translate-x-1" />
             </div>
           </Link>
+        </div>
+      </section>
+
+      {/* Recent Calculations Section */}
+      <section className="w-full">
+        <RecentCalculationsList />
+      </section>
+
+      {/* Privacy Notice */}
+      <section className="w-full max-w-[700px] -mt-4">
+        <div className="flex items-center justify-center gap-2.5 text-xs text-[var(--text-secondary)] text-center py-3 px-5 rounded-xl bg-[var(--surface)] border border-[var(--border-primary)]">
+          <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+          <span>Your calculations are processed locally in your browser. No account is required.</span>
         </div>
       </section>
     </div>

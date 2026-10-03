@@ -1,5 +1,7 @@
 import React from 'react';
 import { getFormattedCurrentDate } from '../../utils/date';
+import { PrintQRCode } from './PrintQRCode';
+import type { StudentProfile } from '../../hooks/useStudentProfile';
 
 interface MetaItem {
   label: string;
@@ -10,6 +12,7 @@ interface AcademicPrintReportProps {
   reportTitle?: string;
   calculatorName: string;
   studentName?: string;
+  profile?: StudentProfile;
   regulation?: string;
   semester?: string | number;
   calculationType?: string;
@@ -29,6 +32,7 @@ export const AcademicPrintReport: React.FC<AcademicPrintReportProps> = ({
   reportTitle = 'Academic Calculation Report',
   calculatorName,
   studentName = '',
+  profile,
   regulation,
   semester,
   calculationType,
@@ -44,7 +48,7 @@ export const AcademicPrintReport: React.FC<AcademicPrintReportProps> = ({
   children,
 }) => {
   const currentDate = getFormattedCurrentDate();
-  const displayName = studentName.trim() || 'Student';
+  const displayName = (profile?.name || studentName || '').trim() || 'Student';
 
   // Details for Student Information table
   const infoRows: { label: string; value: React.ReactNode; isPrimary?: boolean }[] = [
@@ -53,23 +57,50 @@ export const AcademicPrintReport: React.FC<AcademicPrintReportProps> = ({
       value: displayName,
       isPrimary: true,
     },
+    ...(profile?.rollNumber
+      ? [
+          {
+            label: 'Register / Roll No',
+            value: profile.rollNumber,
+          },
+        ]
+      : []),
+    ...(profile?.department
+      ? [
+          {
+            label: 'Department',
+            value: profile.department,
+          },
+        ]
+      : []),
+    ...(profile?.year
+      ? [
+          {
+            label: 'Year',
+            value: profile.year,
+          },
+        ]
+      : []),
     {
       label: 'Calculator',
       value: calculatorName,
     },
-    ...(regulation
+    ...(regulation || profile?.regulation
       ? [
           {
             label: 'Regulation',
-            value: regulation,
+            value: regulation || profile?.regulation,
           },
         ]
       : []),
-    ...(semester
+    ...(semester || profile?.semester
       ? [
           {
             label: 'Semester',
-            value: typeof semester === 'number' ? `Semester ${semester}` : semester,
+            value:
+              typeof semester === 'number'
+                ? `Semester ${semester}`
+                : semester || profile?.semester,
           },
         ]
       : []),
@@ -92,9 +123,9 @@ export const AcademicPrintReport: React.FC<AcademicPrintReportProps> = ({
     <div className="print-report-container w-full bg-white text-[#1D1D1F] p-0 m-0">
       {/* Upper Content Section */}
       <div className="report-content w-full">
-        {/* 1. Header: Brand & Document Category */}
+        {/* 1. Header: Brand, Document Category, Date & Small Verification QR */}
         <header className="print-header border-b border-[#D2D2D7] pb-3 mb-5">
-          <div className="flex justify-between items-start">
+          <div className="flex justify-between items-start gap-4">
             <div>
               <h1 className="text-[24px] font-bold text-[#1D1D1F] tracking-tight leading-tight uppercase">
                 Academic Calculator
@@ -103,13 +134,17 @@ export const AcademicPrintReport: React.FC<AcademicPrintReportProps> = ({
                 {reportTitle}
               </p>
             </div>
-            <div className="text-right">
-              <span className="text-[10px] font-bold text-[#86868B] uppercase tracking-wider block">
-                Official Academic Report
-              </span>
-              <span className="text-[12px] font-semibold text-[#1D1D1F]">
-                {currentDate}
-              </span>
+
+            <div className="flex items-center gap-4 text-right">
+              <div className="flex flex-col items-end">
+                <span className="text-[10px] font-bold text-[#86868B] uppercase tracking-wider block">
+                  Official Academic Report
+                </span>
+                <span className="text-[12px] font-semibold text-[#1D1D1F]">
+                  {currentDate}
+                </span>
+              </div>
+              <PrintQRCode />
             </div>
           </div>
         </header>
@@ -125,9 +160,9 @@ export const AcademicPrintReport: React.FC<AcademicPrintReportProps> = ({
             </span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-y-3.5 gap-x-6 text-[13px]">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-y-3.5 gap-x-6 text-[13px]">
             {/* Prominent Student Name Card in Grid */}
-            <div className="col-span-2 sm:col-span-3 pb-3 border-b border-[#E5E5EA]">
+            <div className="col-span-2 sm:col-span-3 lg:col-span-4 pb-3 border-b border-[#E5E5EA]">
               <span className="text-[11px] font-semibold uppercase tracking-wider text-[#6E6E73] block">
                 Student Name
               </span>

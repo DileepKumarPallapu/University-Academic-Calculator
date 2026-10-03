@@ -5,12 +5,16 @@ import { REGULATIONS, type RegulationId } from '../config/university';
 import type { SemesterItem } from '../types';
 import { PrintButton } from '../components/common/PrintButton';
 import { AcademicPrintReport } from '../components/common/AcademicPrintReport';
-import { useStudentName } from '../hooks/useStudentName';
+import { useStudentProfile } from '../hooks/useStudentProfile';
 import { StudentNameInput } from '../components/common/StudentNameInput';
+import { GradeScaleModal } from '../components/common/GradeScaleModal';
+import { ResultActionButtons } from '../components/common/ResultActionButtons';
+import { saveRecentCalculation } from '../utils/recentCalculations';
 
 export const CGPACalculatorPage: React.FC = () => {
-  const { studentName, setStudentName, nameError, setNameError } = useStudentName();
+  const { profile, studentName, setStudentName, updateProfile, nameError, setNameError } = useStudentProfile();
   const studentNameInputRef = useRef<HTMLInputElement>(null);
+  const [isGradeScaleOpen, setIsGradeScaleOpen] = useState(false);
 
   // Regulation selection with localStorage persistence
   const [regulation, setRegulation] = useState<RegulationId>(() => {
@@ -114,11 +118,23 @@ export const CGPACalculatorPage: React.FC = () => {
         onChange={setStudentName}
         errorMessage={nameError}
         inputRef={studentNameInputRef}
+        profile={profile}
+        onProfileChange={updateProfile}
       />
 
       {/* Regulation Selection Card */}
       <div className="apple-main-container p-6 sm:p-7 flex flex-col gap-4">
-        <span className="apple-label text-base">Choose your regulation</span>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <span className="apple-label text-base">Choose your regulation</span>
+          <button
+            type="button"
+            onClick={() => setIsGradeScaleOpen(true)}
+            className="text-xs font-semibold text-[var(--accent)] hover:underline flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
+          >
+            <span>View Grade Scale & Regulations</span>
+            <span aria-hidden="true">→</span>
+          </button>
+        </div>
         <div className="flex flex-wrap gap-2.5">
           {(['VTR15', 'VTR18', 'VTR21', 'VTR25'] as RegulationId[]).map((regId) => (
             <button
@@ -135,8 +151,17 @@ export const CGPACalculatorPage: React.FC = () => {
             </button>
           ))}
         </div>
-        <div className="pt-2 border-t border-[var(--border-secondary)] text-xs text-[var(--text-secondary)]">
-          Selected: <strong className="text-[var(--text-primary)]">{regulation}</strong> ({REGULATIONS[regulation].description})
+        <div className="pt-2 border-t border-[var(--border-secondary)] text-xs text-[var(--text-secondary)] flex flex-wrap items-center justify-between gap-2">
+          <div>
+            Selected: <strong className="text-[var(--text-primary)]">{regulation}</strong> ({REGULATIONS[regulation].description})
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsGradeScaleOpen(true)}
+            className="font-medium text-[var(--accent)] hover:underline"
+          >
+            View scale details
+          </button>
         </div>
       </div>
 
@@ -334,6 +359,13 @@ export const CGPACalculatorPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => {
+                  saveRecentCalculation({
+                    type: 'cgpa',
+                    title: `CGPA (${semesters.length} Semesters, ${regulation})`,
+                    value: `${formatFixed(cgpaResult.cgpa, 2)} / 10`,
+                    subtext: `${cgpaResult.totalCredits} Total Credits`,
+                    route: '/cgpa',
+                  });
                   const el = document.getElementById('cgpa-result-section');
                   if (el) el.scrollIntoView({ behavior: 'smooth' });
                 }}
@@ -394,6 +426,22 @@ export const CGPACalculatorPage: React.FC = () => {
               </div>
             </div>
 
+            {/* Result Action Buttons: Copy & Share */}
+            <div className="pt-2">
+              <ResultActionButtons
+                title={`CGPA Summary (${regulation})`}
+                studentName={studentName}
+                items={[
+                  { label: 'Regulation', value: regulation },
+                  { label: 'Completed Semesters', value: `${semesters.length}` },
+                  { label: 'Total Credits', value: `${cgpaResult.totalCredits}` },
+                  { label: 'Total Weighted Points', value: formatFixed(totalQualityPoints, 2) },
+                ]}
+                resultLabel="CGPA"
+                resultValue={`${formatFixed(cgpaResult.cgpa, 2)} / 10`}
+              />
+            </div>
+
             {/* Print / Save PDF Action Button */}
             <div className="pt-2">
               <PrintButton
@@ -413,6 +461,7 @@ export const CGPACalculatorPage: React.FC = () => {
       reportTitle="CGPA Report"
       calculatorName="CGPA Calculator"
       studentName={studentName}
+      profile={profile}
       regulation={regulation}
       resultLabel="CUMULATIVE GRADE POINT AVERAGE (CGPA)"
       resultValue={`${formatFixed(cgpaResult.cgpa, 2)} / 10`}
@@ -469,6 +518,13 @@ export const CGPACalculatorPage: React.FC = () => {
         </tfoot>
       </table>
     </AcademicPrintReport>
+
+    {/* Grade Scale Modal */}
+    <GradeScaleModal
+      isOpen={isGradeScaleOpen}
+      onClose={() => setIsGradeScaleOpen(false)}
+      regulation={regulation}
+    />
     </>
   );
 };
