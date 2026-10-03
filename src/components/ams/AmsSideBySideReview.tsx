@@ -12,15 +12,18 @@ import {
   CheckCircle2,
   Sparkles,
   X,
+  Eye,
+  Maximize2,
 } from 'lucide-react';
 import type {
   AmsExtractionResult,
   AmsStudentInfo,
   AmsSubject,
   AmsAuditSummary,
+  FieldSource,
 } from '../../types/ams';
 import { REGULATIONS, type RegulationId } from '../../config/university';
-import { computeAmsAuditSummary } from '../../utils/amsExtractor';
+import { computeAmsAuditSummary, detectAndFlagDuplicates } from '../../utils/amsExtractor';
 import { useStudentProfile } from '../../hooks/useStudentProfile';
 
 interface AmsSideBySideReviewProps {
@@ -33,6 +36,31 @@ interface AmsSideBySideReviewProps {
   ) => void;
   onCancel: () => void;
 }
+
+export const SourceBadge: React.FC<{ source: FieldSource | string; className?: string }> = ({
+  source,
+  className = '',
+}) => {
+  let badgeStyle = 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] border-[var(--border-secondary)]';
+
+  if (source.includes('AMS')) {
+    badgeStyle = 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20';
+  } else if (source.includes('USER')) {
+    badgeStyle = 'bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/20';
+  } else if (source.includes('REGULATION')) {
+    badgeStyle = 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20';
+  } else if (source.includes('PROFILE')) {
+    badgeStyle = 'bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/20';
+  }
+
+  return (
+    <span
+      className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border shrink-0 ${badgeStyle} ${className}`}
+    >
+      {source}
+    </span>
+  );
+};
 
 export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
   initialResult,
@@ -48,11 +76,13 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
   const [activePageIdx, setActivePageIdx] = useState<number>(0);
   const [previewZoom, setPreviewZoom] = useState<number>(1);
   const [previewRotation, setPreviewRotation] = useState<number>(0);
+  const [isViewerModalOpen, setIsViewerModalOpen] = useState<boolean>(false);
+  const [modalZoom, setModalZoom] = useState<number>(1);
 
   // Editable Student Info State
   const [studentInfo, setStudentInfo] = useState<AmsStudentInfo>({ ...initialResult.studentInfo });
 
-  // Subjects state with audit tracking
+  // Subjects state with audit tracking & original values
   const [subjects, setSubjects] = useState<AmsSubject[]>(
     initialResult.subjects.map((s) => ({
       ...s,
@@ -75,19 +105,22 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
       ...prev,
       regulation: regId,
       regulationConfidence: 'high',
+      regulationSource: 'USER',
     }));
 
     const config = REGULATIONS[regId];
-    setSubjects((prev) =>
-      prev.map((s) => {
+    setSubjects((prev) => {
+      const updated = prev.map((s) => {
         if (!s.grade) return s;
         const matched = config.grades.find((g) => g.grade.toUpperCase() === s.grade.toUpperCase());
         return {
           ...s,
           gradePoint: matched ? matched.points : s.gradePoint,
+          gradePointSource: 'REGULATION' as const,
         };
-      })
-    );
+      });
+      return detectAndFlagDuplicates(updated);
+    });
   };
 
   // Student Profile comparison check
@@ -100,33 +133,43 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
     setStudentInfo((prev) => ({
       ...prev,
       name: profile.name || prev.name,
+      nameSource: profile.name ? 'PROFILE' : prev.nameSource,
       registerNumber: profile.rollNumber || prev.registerNumber,
+      regSource: profile.rollNumber ? 'PROFILE' : prev.regSource,
       department: profile.department || prev.department,
       semester: profile.semester ? parseInt(profile.semester) || prev.semester : prev.semester,
+      semesterSource: profile.semester ? 'PROFILE' : prev.semesterSource,
       regulation: (profile.regulation as RegulationId) || prev.regulation,
+      regulationSource: profile.regulation ? 'PROFILE' : prev.regulationSource,
     }));
   };
 
-  // Subject field changes
+  // Subject field changes (triggers duplicate check)
   const handleSubjectFieldChange = (
     id: string,
     field: keyof AmsSubject,
     value: any
   ) => {
-    setSubjects((prev) =>
-      prev.map((s) => {
+    setSubjects((prev) => {
+      const updated = prev.map((s) => {
         if (s.id !== id) return s;
-        const updated = { ...s, [field]: value, isManuallyEdited: true };
+        const modified = { ...s, [field]: value, isManuallyEdited: true };
 
         // If grade changed, update gradePoint according to active regulation
         if (field === 'grade' && regConfig) {
           const matched = regConfig.grades.find((g) => g.grade.toUpperCase() === String(value).toUpperCase());
-          updated.gradePoint = matched ? matched.points : null;
+          modified.gradePoint = matched ? matched.points : null;
+          modified.gradePointSource = 'REGULATION';
+        }
+        if (field === 'credits') {
+          modified.creditsSource = 'USER';
         }
 
-        return updated;
-      })
-    );
+        return modified;
+      });
+      // Second duplicate check pass after user enters or edits credits/names
+      return detectAndFlagDuplicates(updated);
+    });
   };
 
   // Toggle duplicate inclusion
@@ -173,6 +216,7 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
       isDuplicate: false,
       isExcluded: false,
       isManuallyEdited: true,
+      hasOriginalCredits: false,
       confidence: {
         code: 'high',
         name: 'high',
@@ -181,7 +225,7 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
         gradePoint: 'high',
       },
     };
-    setSubjects((prev) => [...prev, newSub]);
+    setSubjects((prev) => detectAndFlagDuplicates([...prev, newSub]));
   };
 
   // Delete subject row
@@ -225,37 +269,35 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
   const handleApplyBulkCredits = () => {
     if (!bulkCreditCountMatches) return;
     let idx = 0;
-    setSubjects((prev) =>
-      prev.map((s) => {
+    setSubjects((prev) => {
+      const updated = prev.map((s) => {
         if (s.isExcluded) return s;
         const newCredit = validBulkCredits[idx++];
         return {
           ...s,
           credits: newCredit,
-          creditsSource: 'USER',
+          creditsSource: 'USER' as const,
           isManuallyEdited: true,
         };
-      })
-    );
+      });
+      return detectAndFlagDuplicates(updated);
+    });
     setShowBulkCreditModal(false);
     setBulkCreditText('');
   };
 
-  // Audit calculations
+  // Comprehensive Audit calculation with accuracy gates
   const audit = computeAmsAuditSummary(subjects, studentInfo);
 
-  // Validation before calculation:
-  // 1. Regulation must be selected
-  // 2. All included subjects must have numeric credits >= 0
-  // 3. All included subjects must have valid grade and grade point
-  const hasMissingCredits = subjects.some(
-    (s) => !s.isExcluded && (s.credits === '' || s.credits === null || Number(s.credits) < 0)
-  );
-  const hasMissingGrades = subjects.some((s) => !s.isExcluded && (!s.grade || s.gradePoint === null));
-  const canCalculate = Boolean(studentInfo.regulation) && !hasMissingCredits && !hasMissingGrades;
+  // Scanning metadata summary calculations (Requirement 2)
+  const totalExtracted = subjects.length;
+  const courseNamesCount = subjects.filter((s) => s.subjectName && s.subjectName.trim() !== '').length;
+  const courseCodesCount = subjects.filter((s) => s.subjectCode && s.subjectCode.trim() !== '').length;
+  const gradesFoundCount = subjects.filter((s) => s.grade && s.grade.trim() !== '').length;
+  const creditsAvailableCount = subjects.filter((s) => s.credits !== '' && s.credits !== null && Number(s.credits) >= 0).length;
 
   const handleConfirm = () => {
-    if (!canCalculate) return;
+    if (!audit.readyToCalculate) return;
     onConfirmCalculation(
       studentInfo,
       subjects,
@@ -294,7 +336,7 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
 
   return (
     <div className="w-full flex flex-col gap-6">
-      {/* Top Banner & Audit Overview */}
+      {/* Top Banner & Header Card */}
       <div className="apple-card p-6 border border-[var(--border-primary)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
@@ -308,11 +350,21 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
             Verify Extracted Academic Information
           </h2>
           <p className="text-xs text-[var(--text-secondary)] mt-1">
-            Review the extracted student details, subject credits, and grades. Please confirm all fields before calculating SGPA.
+            Review the extracted student details, subject credits, and grades. Verify every row before calculating SGPA.
           </p>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          {initialResult.previewUrls.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setIsViewerModalOpen(true)}
+              className="apple-btn-secondary text-xs h-9 px-3 gap-1.5 flex items-center"
+            >
+              <Eye className="w-3.5 h-3.5 text-[var(--text-primary)]" />
+              <span>View Original AMS Result</span>
+            </button>
+          )}
           <button
             type="button"
             onClick={handleResetToImported}
@@ -328,6 +380,125 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
           >
             Cancel
           </button>
+        </div>
+      </div>
+
+      {/* 2. SCAN SUMMARY CARD (Requirement 2 & 3) */}
+      <div className="apple-card p-5 border border-[var(--border-primary)] flex flex-col gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[var(--border-secondary)] pb-2.5">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold uppercase tracking-wider text-[var(--accent)]">
+              SCAN SUMMARY
+            </span>
+            <span className="text-xs text-[var(--text-secondary)]">• Summary of detected values</span>
+          </div>
+          <span className="text-[11px] text-[var(--text-tertiary)]">
+            Verified across document & result table
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 text-xs">
+          {/* Student Name */}
+          <div className="p-3 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-secondary)] flex flex-col gap-1">
+            <span className="text-[10px] uppercase font-bold text-[var(--text-tertiary)]">Student</span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="font-bold text-[var(--text-primary)] truncate">{studentInfo.name || 'Not detected'}</span>
+              {studentInfo.name && <SourceBadge source={studentInfo.nameSource || 'AMS'} />}
+            </div>
+          </div>
+
+          {/* Register Number */}
+          <div className="p-3 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-secondary)] flex flex-col gap-1">
+            <span className="text-[10px] uppercase font-bold text-[var(--text-tertiary)]">Register No</span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="font-bold text-[var(--text-primary)] font-mono">{studentInfo.registerNumber || 'Not detected'}</span>
+              {studentInfo.registerNumber && <SourceBadge source={studentInfo.regSource || 'AMS'} />}
+            </div>
+          </div>
+
+          {/* Subjects Found */}
+          <div className="p-3 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-secondary)] flex flex-col gap-1">
+            <span className="text-[10px] uppercase font-bold text-[var(--text-tertiary)]">Subjects Found</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-base font-bold text-[var(--text-primary)] font-mono">{totalExtracted}</span>
+              <SourceBadge source="AMS" />
+            </div>
+          </div>
+
+          {/* Grades Found */}
+          <div className="p-3 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-secondary)] flex flex-col gap-1">
+            <span className="text-[10px] uppercase font-bold text-[var(--text-tertiary)]">Grades Found</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-base font-bold text-[var(--text-primary)] font-mono">{gradesFoundCount} / {totalExtracted}</span>
+              <SourceBadge source="AMS" />
+            </div>
+          </div>
+
+          {/* Course Names Found */}
+          <div className="p-3 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-secondary)] flex flex-col gap-1">
+            <span className="text-[10px] uppercase font-bold text-[var(--text-tertiary)]">Course Names Found</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-base font-bold text-[var(--text-primary)] font-mono">{courseNamesCount} / {totalExtracted}</span>
+              <SourceBadge source="AMS" />
+            </div>
+          </div>
+
+          {/* Course Codes Found */}
+          <div className="p-3 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-secondary)] flex flex-col gap-1">
+            <span className="text-[10px] uppercase font-bold text-[var(--text-tertiary)]">Course Codes Found</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-base font-bold text-[var(--text-primary)] font-mono">{courseCodesCount} / {totalExtracted}</span>
+              <SourceBadge source="AMS" />
+            </div>
+          </div>
+
+          {/* Credits */}
+          <div className="p-3 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-secondary)] flex flex-col gap-1">
+            <span className="text-[10px] uppercase font-bold text-[var(--text-tertiary)]">Credits</span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {audit.creditsDetectedInSource ? (
+                <>
+                  <span className="font-bold text-[var(--text-primary)] font-mono">{creditsAvailableCount} / {totalExtracted}</span>
+                  <SourceBadge source="AMS" />
+                </>
+              ) : (
+                <>
+                  <span className="font-semibold text-amber-600 dark:text-amber-400">Not available</span>
+                  <SourceBadge source="USER" />
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Regulation */}
+          <div className="p-3 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-secondary)] flex flex-col gap-1">
+            <span className="text-[10px] uppercase font-bold text-[var(--text-tertiary)]">Regulation</span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {studentInfo.regulation ? (
+                <>
+                  <span className="font-bold text-[var(--text-primary)]">{studentInfo.regulation}</span>
+                  <SourceBadge source={studentInfo.regulationSource || 'USER'} />
+                </>
+              ) : (
+                <span className="font-semibold text-amber-600 dark:text-amber-400">Not detected</span>
+              )}
+            </div>
+          </div>
+
+          {/* Semester */}
+          <div className="p-3 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-secondary)] flex flex-col gap-1">
+            <span className="text-[10px] uppercase font-bold text-[var(--text-tertiary)]">Semester</span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {studentInfo.semester ? (
+                <>
+                  <span className="font-bold text-[var(--text-primary)]">Semester {studentInfo.semester}</span>
+                  <SourceBadge source={studentInfo.semesterSource || 'AMS'} />
+                </>
+              ) : (
+                <span className="font-semibold text-amber-600 dark:text-amber-400">Not detected</span>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -359,6 +530,158 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
           </div>
         </div>
       )}
+
+      {/* 4. STUDENT INFORMATION VERIFICATION (Requirement 4) */}
+      <div className="apple-main-container p-6 flex flex-col gap-4">
+        <div className="flex items-center justify-between border-b border-[var(--border-secondary)] pb-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+              STUDENT INFORMATION
+            </span>
+            <span className="text-[11px] text-[var(--text-tertiary)]">• Verified from AMS source</span>
+          </div>
+          <span className="text-[11px] text-[var(--text-tertiary)]">
+            Only missing data needs user input
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+          {/* Student Name */}
+          <div className="flex flex-col gap-1 p-2.5 rounded-xl bg-[var(--surface)] border border-[var(--border-secondary)]">
+            <span className="text-[11px] font-semibold text-[var(--text-secondary)]">Student Name</span>
+            <div className="flex items-center justify-between gap-2 mt-0.5">
+              <span className="font-bold text-sm text-[var(--text-primary)] truncate">{studentInfo.name || 'Not detected'}</span>
+              <SourceBadge source={studentInfo.nameSource || (studentInfo.name ? 'AMS' : 'USER')} />
+            </div>
+          </div>
+
+          {/* Student ID */}
+          <div className="flex flex-col gap-1 p-2.5 rounded-xl bg-[var(--surface)] border border-[var(--border-secondary)]">
+            <span className="text-[11px] font-semibold text-[var(--text-secondary)]">Student ID</span>
+            <div className="flex items-center justify-between gap-2 mt-0.5">
+              <span className="font-bold text-sm text-[var(--text-primary)] font-mono truncate">{studentInfo.studentId || 'Not detected'}</span>
+              <SourceBadge source={studentInfo.studentIdSource || (studentInfo.studentId ? 'AMS' : 'USER')} />
+            </div>
+          </div>
+
+          {/* Register Number */}
+          <div className="flex flex-col gap-1 p-2.5 rounded-xl bg-[var(--surface)] border border-[var(--border-secondary)]">
+            <span className="text-[11px] font-semibold text-[var(--text-secondary)]">Register Number</span>
+            <div className="flex items-center justify-between gap-2 mt-0.5">
+              <span className="font-bold text-sm text-[var(--text-primary)] font-mono truncate">{studentInfo.registerNumber || 'Not detected'}</span>
+              <SourceBadge source={studentInfo.regSource || (studentInfo.registerNumber ? 'AMS' : 'USER')} />
+            </div>
+          </div>
+
+          {/* Degree */}
+          <div className="flex flex-col gap-1 p-2.5 rounded-xl bg-[var(--surface)] border border-[var(--border-secondary)]">
+            <span className="text-[11px] font-semibold text-[var(--text-secondary)]">Degree</span>
+            <div className="flex items-center justify-between gap-2 mt-0.5">
+              <span className="font-bold text-sm text-[var(--text-primary)] truncate">{studentInfo.degree || 'B.Tech'}</span>
+              <SourceBadge source={studentInfo.degreeSource || 'AMS'} />
+            </div>
+          </div>
+
+          {/* Branch */}
+          <div className="flex flex-col gap-1 p-2.5 rounded-xl bg-[var(--surface)] border border-[var(--border-secondary)]">
+            <span className="text-[11px] font-semibold text-[var(--text-secondary)]">Branch</span>
+            <div className="flex items-center justify-between gap-2 mt-0.5">
+              <span className="font-bold text-sm text-[var(--text-primary)] truncate">{studentInfo.branch || 'Not detected'}</span>
+              <SourceBadge source={studentInfo.branchSource || 'AMS'} />
+            </div>
+          </div>
+
+          {/* Batch */}
+          <div className="flex flex-col gap-1 p-2.5 rounded-xl bg-[var(--surface)] border border-[var(--border-secondary)]">
+            <span className="text-[11px] font-semibold text-[var(--text-secondary)]">Batch</span>
+            <div className="flex items-center justify-between gap-2 mt-0.5">
+              <span className="font-bold text-sm text-[var(--text-primary)] font-mono truncate">{studentInfo.batch || 'Not detected'}</span>
+              <SourceBadge source={studentInfo.batchSource || 'AMS'} />
+            </div>
+          </div>
+
+          {/* Result Month */}
+          <div className="flex flex-col gap-1 p-2.5 rounded-xl bg-[var(--surface)] border border-[var(--border-secondary)]">
+            <span className="text-[11px] font-semibold text-[var(--text-secondary)]">Result Month</span>
+            <div className="flex items-center justify-between gap-2 mt-0.5">
+              <span className="font-bold text-sm text-[var(--text-primary)] truncate">{studentInfo.resultMonthYear || 'Not detected'}</span>
+              <SourceBadge source={studentInfo.resultMonthYearSource || 'AMS'} />
+            </div>
+          </div>
+
+          {/* Result Type */}
+          <div className="flex flex-col gap-1 p-2.5 rounded-xl bg-[var(--surface)] border border-[var(--border-secondary)]">
+            <span className="text-[11px] font-semibold text-[var(--text-secondary)]">Result Type</span>
+            <div className="flex items-center justify-between gap-2 mt-0.5">
+              <span className="font-bold text-sm text-[var(--text-primary)] truncate">{studentInfo.resultType || 'Regular'}</span>
+              <SourceBadge source={studentInfo.resultTypeSource || 'AMS'} />
+            </div>
+          </div>
+
+          {/* Semester (Required completion if missing) */}
+          <div className="flex flex-col gap-1 p-2.5 rounded-xl bg-[var(--surface)] border border-[var(--border-secondary)]">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-semibold text-[var(--text-secondary)]">Semester</span>
+              {studentInfo.semester ? (
+                <SourceBadge source={studentInfo.semesterSource || 'AMS'} />
+              ) : (
+                <span className="text-[10px] text-amber-600 font-bold">Select</span>
+              )}
+            </div>
+            <select
+              value={studentInfo.semester || 1}
+              onChange={(e) =>
+                setStudentInfo((prev) => ({
+                  ...prev,
+                  semester: parseInt(e.target.value) || 1,
+                  semesterSource: 'USER',
+                }))
+              }
+              className="apple-input text-xs h-8 mt-0.5 py-0 cursor-pointer"
+            >
+              {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
+                <option key={s} value={s}>
+                  Semester {s}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Academic Regulation Selector (Required completion) */}
+          <div className="flex flex-col gap-1 p-2.5 rounded-xl bg-[var(--surface)] border border-[var(--border-secondary)] sm:col-span-2 lg:col-span-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-semibold text-[var(--text-primary)]">
+                Regulation {studentInfo.regulation ? `(Active: ${studentInfo.regulation})` : '(Selection Required)'}
+              </span>
+              {studentInfo.regulation ? (
+                <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                  <Check className="w-3.5 h-3.5" /> ✓ {studentInfo.regulation} selected
+                </span>
+              ) : (
+                <span className="text-[11px] font-bold text-rose-600 flex items-center gap-1">
+                  <AlertTriangle className="w-3.5 h-3.5" /> Please select regulation
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-4 gap-2 mt-1">
+              {(['VTR15', 'VTR18', 'VTR21', 'VTR25'] as RegulationId[]).map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => handleRegulationSelect(r)}
+                  className={`py-2 rounded-lg text-xs font-bold border transition-all ${
+                    studentInfo.regulation === r
+                      ? 'bg-[var(--button-primary)] text-[var(--button-primary-text)] border-transparent shadow-xs'
+                      : 'bg-[var(--surface)] text-[var(--text-secondary)] border-[var(--border-secondary)] hover:bg-[var(--bg-tertiary)]'
+                  }`}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Mobile Switcher (Preview vs Review) */}
       <div className="lg:hidden flex rounded-xl bg-[var(--border-secondary)] p-1 border border-[var(--border-primary)]">
@@ -400,6 +723,14 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
                 Original AMS Document
               </span>
               <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setIsViewerModalOpen(true)}
+                  className="p-1 rounded-md border border-[var(--border-secondary)] hover:bg-[var(--bg-tertiary)]"
+                  title="Expand to Fullscreen Modal"
+                >
+                  <Maximize2 className="w-3.5 h-3.5" />
+                </button>
                 <button
                   type="button"
                   onClick={() => setPreviewRotation((prev) => (prev + 90) % 360)}
@@ -480,344 +811,16 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
             mobileTab === 'review' ? 'flex' : 'hidden lg:flex'
           }`}
         >
-          {/* Information Required for SGPA Checklist Card */}
-          <div className="apple-main-container p-5 flex flex-col gap-3 border border-[var(--border-primary)]">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[var(--border-secondary)] pb-2.5">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold uppercase tracking-wider text-[var(--accent)]">
-                  Information Required for SGPA
-                </span>
-                <span className="text-xs text-[var(--text-secondary)]">
-                  {canCalculate ? '✓ All requirements met' : '⚠ Action required below'}
-                </span>
-              </div>
-              <span className="text-[11px] text-[var(--text-tertiary)]">
-                Source: AMS Examination Portal
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-              {/* 1. Student Details */}
-              <div className="p-3 rounded-xl bg-[var(--surface)] border border-[var(--border-secondary)] flex flex-col gap-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-[var(--text-primary)]">1. Student Details</span>
-                  <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5">
-                    <Check className="w-3 h-3" /> Auto-detected
-                  </span>
-                </div>
-                <p className="text-[11px] text-[var(--text-secondary)] line-clamp-2">
-                  {studentInfo.name || 'Student Name'} {studentInfo.registerNumber ? `(${studentInfo.registerNumber})` : ''}
-                  {studentInfo.degree ? ` • ${studentInfo.degree}` : ''}
-                  {studentInfo.branch ? ` • ${studentInfo.branch}` : ''}
-                </p>
-              </div>
-
-              {/* 2. Course Credits */}
-              <div className={`p-3 rounded-xl border flex flex-col gap-1.5 ${
-                hasMissingCredits
-                  ? 'bg-amber-500/5 border-amber-500/30'
-                  : 'bg-[var(--surface)] border-[var(--border-secondary)]'
-              }`}>
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-[var(--text-primary)]">2. Course Credits</span>
-                  {hasMissingCredits ? (
-                    <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 flex items-center gap-0.5">
-                      <AlertTriangle className="w-3 h-3" /> Missing in AMS
-                    </span>
-                  ) : (
-                    <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5">
-                      <Check className="w-3 h-3" /> All {includedSubjects.length} entered
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center justify-between gap-2 mt-auto">
-                  <span className="text-[11px] text-[var(--text-secondary)]">
-                    {hasMissingCredits
-                      ? `${subjects.filter(s => !s.isExcluded && (s.credits === '' || s.credits === null)).length} need credits`
-                      : `${audit.totalCredits} total credits`}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setShowBulkCreditModal(true)}
-                    className="text-[10px] font-bold px-2 py-1 rounded-md bg-[var(--bg-tertiary)] hover:bg-[var(--border-secondary)] text-[var(--text-primary)] flex items-center gap-1 transition-colors"
-                  >
-                    <Sparkles className="w-3 h-3 text-[var(--accent)]" />
-                    <span>Enter quickly</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* 3. Academic Regulation */}
-              <div className={`p-3 rounded-xl border flex flex-col gap-1.5 ${
-                !studentInfo.regulation
-                  ? 'bg-rose-500/5 border-rose-500/30'
-                  : 'bg-[var(--surface)] border-[var(--border-secondary)]'
-              }`}>
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-[var(--text-primary)]">3. Regulation</span>
-                  {studentInfo.regulation ? (
-                    <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5">
-                      <Check className="w-3 h-3" /> {studentInfo.regulation} (GP Derived)
-                    </span>
-                  ) : (
-                    <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 flex items-center gap-0.5">
-                      <AlertTriangle className="w-3 h-3" /> Select below
-                    </span>
-                  )}
-                </div>
-                <p className="text-[11px] text-[var(--text-secondary)]">
-                  {studentInfo.regulation
-                    ? `Grade points derived automatically using ${studentInfo.regulation} rules.`
-                    : 'Choose regulation below to derive Grade Points.'}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Student Information Card */}
-          <div className="apple-main-container p-6 flex flex-col gap-4">
-            <div className="flex items-center justify-between border-b border-[var(--border-secondary)] pb-3">
-              <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-                Student & Examination Information
-              </span>
-              <span className="text-[11px] text-[var(--text-tertiary)]">
-                Auto-extracted from AMS document
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-[var(--text-primary)] flex items-center justify-between">
-                  <span>Student Name</span>
-                  {studentInfo.nameVerified ? (
-                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5 font-medium">
-                      <Check className="w-3 h-3" /> Verified across table
-                    </span>
-                  ) : studentInfo.nameConfidence === 'high' ? (
-                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5">
-                      <Check className="w-3 h-3" /> Confidently detected
-                    </span>
-                  ) : (
-                    <span className="text-[10px] text-amber-600 dark:text-amber-400">
-                      ⚠ Please verify
-                    </span>
-                  )}
-                </label>
-                <input
-                  type="text"
-                  value={studentInfo.name}
-                  onChange={(e) =>
-                    setStudentInfo((prev) => ({
-                      ...prev,
-                      name: e.target.value,
-                      nameConfidence: 'high',
-                    }))
-                  }
-                  placeholder="Enter student name"
-                  className="apple-input text-sm h-10"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-[var(--text-primary)] flex items-center justify-between">
-                  <span>Register Number</span>
-                  {studentInfo.regConfidence === 'high' ? (
-                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5">
-                      <Check className="w-3 h-3" /> Confidently detected
-                    </span>
-                  ) : (
-                    <span className="text-[10px] text-amber-600 dark:text-amber-400">
-                      ⚠ Please verify
-                    </span>
-                  )}
-                </label>
-                <input
-                  type="text"
-                  value={studentInfo.registerNumber}
-                  onChange={(e) =>
-                    setStudentInfo((prev) => ({
-                      ...prev,
-                      registerNumber: e.target.value,
-                      regConfidence: 'high',
-                    }))
-                  }
-                  placeholder="e.g. 24UECS0805"
-                  className="apple-input text-sm h-10 font-mono"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-[var(--text-primary)] flex items-center justify-between">
-                  <span>Student ID (Stu Id)</span>
-                  {studentInfo.studentId && studentInfo.studentId.startsWith('VTU') && (
-                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono">
-                      VTU Portal
-                    </span>
-                  )}
-                </label>
-                <input
-                  type="text"
-                  value={studentInfo.studentId || ''}
-                  onChange={(e) =>
-                    setStudentInfo((prev) => ({
-                      ...prev,
-                      studentId: e.target.value,
-                    }))
-                  }
-                  placeholder="e.g. VTU29962"
-                  className="apple-input text-sm h-10 font-mono"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5 sm:col-span-2 lg:col-span-1">
-                <label className="text-xs font-semibold text-[var(--text-primary)]">
-                  Degree & Branch
-                </label>
-                <input
-                  type="text"
-                  value={
-                    studentInfo.degree && studentInfo.branch
-                      ? `${studentInfo.degree} - ${studentInfo.branch}`
-                      : studentInfo.branch || studentInfo.degree || ''
-                  }
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    const parts = val.split('-');
-                    if (parts.length > 1) {
-                      setStudentInfo((prev) => ({
-                        ...prev,
-                        degree: parts[0].trim(),
-                        branch: parts.slice(1).join('-').trim(),
-                        department: parts.slice(1).join('-').trim(),
-                      }));
-                    } else {
-                      setStudentInfo((prev) => ({
-                        ...prev,
-                        branch: val.trim(),
-                        department: val.trim(),
-                      }));
-                    }
-                  }}
-                  placeholder="e.g. B.Tech - CSE (AIML)"
-                  className="apple-input text-sm h-10"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-[var(--text-primary)]">
-                  Batch & Result Period
-                </label>
-                <input
-                  type="text"
-                  value={
-                    studentInfo.batch && studentInfo.resultMonthYear
-                      ? `${studentInfo.batch} (${studentInfo.resultMonthYear})`
-                      : studentInfo.batch || studentInfo.resultMonthYear || ''
-                  }
-                  onChange={(e) =>
-                    setStudentInfo((prev) => ({
-                      ...prev,
-                      batch: e.target.value,
-                    }))
-                  }
-                  placeholder="e.g. 2024-2025 (Nov.2024)"
-                  className="apple-input text-sm h-10"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-[var(--text-primary)]">
-                  Semester
-                </label>
-                <select
-                  value={studentInfo.semester || 1}
-                  onChange={(e) =>
-                    setStudentInfo((prev) => ({
-                      ...prev,
-                      semester: parseInt(e.target.value) || 1,
-                    }))
-                  }
-                  className="apple-input text-sm h-10 py-0 cursor-pointer"
-                >
-                  {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
-                    <option key={s} value={s}>
-                      Semester {s}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-[var(--text-primary)] flex items-center justify-between">
-                  <span>Academic Regulation</span>
-                  {!studentInfo.regulation && (
-                    <span className="text-[10px] text-rose-600 font-semibold">
-                      Required
-                    </span>
-                  )}
-                </label>
-                <div className="flex gap-1.5">
-                  {(['VTR15', 'VTR18', 'VTR21', 'VTR25'] as RegulationId[]).map((r) => (
-                    <button
-                      key={r}
-                      type="button"
-                      onClick={() => handleRegulationSelect(r)}
-                      className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-all ${
-                        studentInfo.regulation === r
-                          ? 'bg-[var(--button-primary)] text-[var(--button-primary-text)] border-transparent'
-                          : 'bg-[var(--surface)] text-[var(--text-secondary)] border-[var(--border-secondary)] hover:bg-[var(--bg-tertiary)]'
-                      }`}
-                    >
-                      {r}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Duplicate Warning Alert if any duplicate subjects detected */}
-          {audit.duplicatesCount > 0 && (
-            <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 flex items-start gap-3 text-xs text-amber-900 dark:text-amber-200">
-              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-              <div className="flex flex-col gap-1">
-                <span className="font-bold">Possible duplicate subjects detected</span>
-                <span>
-                  {audit.duplicatesCount} {audit.duplicatesCount === 1 ? 'subject appears' : 'subjects appear'} multiple times in the document. Duplicates have been automatically excluded from the calculation to prevent double-counting.
-                </span>
-              </div>
-            </div>
-          )}
-
           {/* Subjects Table Card */}
           <div className="apple-main-container p-6 flex flex-col gap-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[var(--border-secondary)] pb-3">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-                  Extracted Subjects ({subjects.length})
+                  Subject Verification Table ({subjects.length})
                 </span>
                 <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-[var(--bg-tertiary)] text-[var(--text-secondary)]">
                   {audit.creditBearingCount} Credit-bearing • {audit.nonCreditCount} Non-credit
                 </span>
-                {(audit.detectedRowsCount ?? 0) > 0 && (
-                  <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${
-                      audit.rowAccountingVerified
-                        ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
-                        : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
-                    }`}
-                  >
-                    {audit.rowAccountingVerified ? (
-                      <>
-                        <Check className="w-3 h-3" /> All {audit.detectedRowsCount} rows accounted for
-                      </>
-                    ) : (
-                      <>
-                        <AlertTriangle className="w-3 h-3" /> Missing row(s): {(audit.missingRowNumbers ?? []).join(', ')}
-                      </>
-                    )}
-                  </span>
-                )}
               </div>
               <div className="flex items-center gap-2 self-start sm:self-auto">
                 <button
@@ -840,28 +843,103 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
               </div>
             </div>
 
+            {/* Verification Status Badges: Row Coverage, Duplicate Check, Credit Indicator */}
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              {/* Row Coverage (Requirement 10 & 11) */}
+              <div className={`px-2.5 py-1 rounded-lg border font-semibold flex items-center gap-1.5 ${
+                audit.rowAccountingVerified
+                  ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                  : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+              }`}>
+                {audit.rowAccountingVerified ? (
+                  <>
+                    <Check className="w-3.5 h-3.5" />
+                    <span>ROW COVERAGE: {audit.extractedRowsCount} / {audit.detectedRowsCount} ✓ All result rows accounted for</span>
+                  </>
+                ) : (
+                  <>
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    <span>ROW COVERAGE: ⚠ Missing result row(s): {(audit.missingRowNumbers ?? []).join(', ')}</span>
+                  </>
+                )}
+              </div>
+
+              {/* Duplicate Check (Requirement 12) */}
+              <div className={`px-2.5 py-1 rounded-lg border font-semibold flex items-center gap-1.5 ${
+                audit.duplicatesCount === 0
+                  ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                  : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+              }`}>
+                {audit.duplicatesCount === 0 ? (
+                  <>
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Duplicate Check: ✓ No duplicates detected</span>
+                  </>
+                ) : (
+                  <>
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    <span>Duplicate Check: ⚠ {audit.duplicatesCount} possible duplicate detected</span>
+                  </>
+                )}
+              </div>
+
+              {/* Credit Completion Indicator (Requirement 15) */}
+              <div className={`px-2.5 py-1 rounded-lg border font-semibold flex items-center gap-1.5 ${
+                audit.creditsEnteredCount === audit.totalSubjectsCount
+                  ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                  : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+              }`}>
+                {audit.creditsEnteredCount === audit.totalSubjectsCount ? (
+                  <>
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Credits entered: {audit.creditsEnteredCount} / {audit.totalSubjectsCount} ✓ All credits entered</span>
+                  </>
+                ) : (
+                  <>
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    <span>Credits entered: {audit.creditsEnteredCount} / {audit.totalSubjectsCount} (Credits are required for SGPA)</span>
+                  </>
+                )}
+              </div>
+            </div>
+
             {/* Desktop Table View */}
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="border-b border-[var(--border-secondary)] text-[var(--text-secondary)] font-bold uppercase tracking-wider text-[10px]">
-                    <th className="py-2.5 px-2 text-center w-10">#</th>
-                    <th className="py-2.5 px-2 w-28">Code</th>
-                    <th className="py-2.5 px-2">Subject Name</th>
+                    <th className="py-2.5 px-2 text-center w-8">#</th>
+                    <th className="py-2.5 px-2 w-28">Course Code</th>
+                    <th className="py-2.5 px-2">Subject</th>
                     <th className="py-2.5 px-2 text-center w-20">Credits</th>
                     <th className="py-2.5 px-2 text-center w-20">Grade</th>
-                    <th className="py-2.5 px-2 text-center w-16">GP</th>
-                    <th className="py-2.5 px-2 text-right w-20">Credit Pts</th>
-                    <th className="py-2.5 px-2 text-center w-20">Actions</th>
+                    <th className="py-2.5 px-2 text-center w-12">GP</th>
+                    <th className="py-2.5 px-2 text-right w-20">Credit Points</th>
+                    <th className="py-2.5 px-2 text-center w-20">Source</th>
+                    <th className="py-2.5 px-2 text-center w-24">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--border-secondary)]">
                   {subjects.map((s, idx) => {
                     const c = Number(s.credits) || 0;
                     const gp = s.gradePoint ?? 0;
-                    const cp = c * gp;
-                    const isMissingCredit = s.credits === '' || s.credits === null;
+                    const cp = s.credits === 0 ? 0 : c * gp;
+                    const isMissingCredit = s.credits === '' || s.credits === null || Number(s.credits) < 0;
+                    const isMissingName = !s.subjectName || s.subjectName.trim() === '';
                     const isMissingGrade = !s.grade || s.gradePoint === null;
+                    const isComplete = !isMissingCredit && !isMissingName && !isMissingGrade;
+
+                    // Regulation grade validation check
+                    const regGrades = regConfig ? new Set(regConfig.grades.map(g => g.grade.toUpperCase())) : null;
+                    const isGradeValidUnderReg = !s.grade || (regGrades ? regGrades.has(s.grade.toUpperCase()) : true);
+
+                    const canRestore =
+                      s.isManuallyEdited &&
+                      Boolean(
+                        (s.originalValues?.subjectName && s.originalValues.subjectName !== s.subjectName) ||
+                        (s.originalValues?.grade && s.originalValues.grade !== s.grade) ||
+                        (s.hasOriginalCredits && s.originalValues?.credits !== s.credits)
+                      );
 
                     return (
                       <tr
@@ -869,15 +947,17 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
                         className={`transition-colors ${
                           s.isExcluded
                             ? 'opacity-40 bg-[var(--bg-secondary)]'
+                            : !isComplete
+                            ? 'bg-amber-500/5 hover:bg-amber-500/10'
                             : 'hover:bg-[var(--bg-tertiary)]'
                         }`}
                       >
-                        {/* S.No */}
+                        {/* 1. S.No */}
                         <td className="py-2.5 px-2 text-center font-mono text-[11px] text-[var(--text-tertiary)]">
                           {s.sno || idx + 1}
                         </td>
 
-                        {/* Code */}
+                        {/* 2. Course Code (Optional) */}
                         <td className="py-2.5 px-2 font-mono font-semibold text-[var(--text-primary)]">
                           <input
                             type="text"
@@ -891,41 +971,36 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
                             }
                             placeholder="—"
                             className="w-24 bg-transparent border-b border-transparent focus:border-[var(--text-primary)] outline-none font-mono font-bold text-xs"
-                            title="Course code (optional)"
+                            title="Course code (optional: displays '—' if absent)"
                           />
                         </td>
 
-                        {/* Name */}
+                        {/* 3. Subject Name (Required) */}
                         <td className="py-2.5 px-2 font-medium text-[var(--text-primary)]">
                           <input
                             type="text"
                             value={s.subjectName}
                             onChange={(e) => handleSubjectFieldChange(s.id, 'subjectName', e.target.value)}
-                            placeholder="Enter Course Name"
-                            className={`w-full bg-transparent border-b outline-none text-xs ${
-                              !s.subjectName || s.subjectName.trim() === ''
+                            placeholder="Enter subject name"
+                            className={`w-full bg-transparent border-b outline-none text-xs font-medium ${
+                              isMissingName
                                 ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 placeholder:text-amber-600'
                                 : 'border-transparent focus:border-[var(--text-primary)]'
                             }`}
                           />
-                          {(!s.subjectName || s.subjectName.trim() === '') && (
+                          {isMissingName && (
                             <span className="text-[10px] text-amber-600 font-semibold block mt-0.5 flex items-center gap-1">
-                              <AlertTriangle className="w-3 h-3" /> Course name not detected for Row {s.sno || idx + 1}
+                              <AlertTriangle className="w-3 h-3" /> ⚠ Subject name not detected
                             </span>
                           )}
                           {s.isManuallyEdited && (
                             <span className="text-[9px] text-blue-600 dark:text-blue-400 font-semibold inline-block mr-1">
-                              Edited
-                            </span>
-                          )}
-                          {s.isDuplicate && (
-                            <span className="text-[10px] text-amber-600 block mt-0.5">
-                              Duplicate record ({s.isExcluded ? 'Excluded' : 'Included'})
+                              Manual correction
                             </span>
                           )}
                         </td>
 
-                        {/* Credits */}
+                        {/* 4. Credits (Required for SGPA, no auto-fill default values!) */}
                         <td className="py-2.5 px-2 text-center">
                           <input
                             type="number"
@@ -937,6 +1012,7 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
                               const v = e.target.value === '' ? '' : Math.max(0, parseFloat(e.target.value) || 0);
                               handleSubjectFieldChange(s.id, 'credits', v);
                             }}
+                            placeholder="Credits"
                             className={`w-14 h-8 text-center rounded-lg border text-xs font-semibold outline-none ${
                               isMissingCredit
                                 ? 'border-rose-500 bg-rose-50 dark:bg-rose-950/40 text-rose-700'
@@ -945,13 +1021,13 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
                           />
                         </td>
 
-                        {/* Grade */}
+                        {/* 5. Grade */}
                         <td className="py-2.5 px-2 text-center">
                           <select
                             value={s.grade}
                             onChange={(e) => handleSubjectFieldChange(s.id, 'grade', e.target.value)}
                             className={`w-16 h-8 text-center rounded-lg border text-xs font-semibold cursor-pointer outline-none ${
-                              isMissingGrade
+                              isMissingGrade || !isGradeValidUnderReg
                                 ? 'border-rose-500 bg-rose-50 dark:bg-rose-950/40 text-rose-700'
                                 : 'border-[var(--border-secondary)] bg-[var(--surface)] text-[var(--text-primary)]'
                             }`}
@@ -963,27 +1039,37 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
                               </option>
                             ))}
                           </select>
+                          {!isGradeValidUnderReg && (
+                            <span className="text-[9px] text-rose-600 block mt-0.5">
+                              ⚠ Invalid
+                            </span>
+                          )}
                         </td>
 
-                        {/* Grade Point */}
+                        {/* 6. GP (Grade Point) */}
                         <td className="py-2.5 px-2 text-center font-mono font-bold text-[var(--text-primary)]">
                           {s.gradePoint ?? '—'}
                         </td>
 
-                        {/* Credit Points */}
+                        {/* 7. Credit Points */}
                         <td className="py-2.5 px-2 text-right font-mono font-bold text-[var(--text-primary)]">
-                          {s.isExcluded ? '0.0' : cp.toFixed(1)}
+                          {s.isExcluded ? '0.0' : s.credits === 0 ? '0.0 (Non-credit)' : cp.toFixed(1)}
                         </td>
 
-                        {/* Actions */}
+                        {/* 8. Source */}
+                        <td className="py-2.5 px-2 text-center">
+                          <SourceBadge source={s.creditsSource === 'USER' ? 'AMS + User' : 'AMS'} />
+                        </td>
+
+                        {/* 9. Actions */}
                         <td className="py-2.5 px-2 text-center">
                           <div className="flex items-center justify-center gap-1">
-                            {s.isManuallyEdited && (
+                            {canRestore && (
                               <button
                                 type="button"
                                 onClick={() => handleRestoreOriginalValues(s.id)}
                                 className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-800 hover:bg-amber-200 transition-colors"
-                                title="Restore original extracted value"
+                                title="Restore imported value"
                               >
                                 Restore
                               </button>
@@ -1019,15 +1105,28 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
               </table>
             </div>
 
-            {/* Mobile Stacked View */}
+            {/* Mobile Cards View */}
             <div className="md:hidden flex flex-col gap-3">
               {subjects.map((s, idx) => {
+                const isMissingCredit = s.credits === '' || s.credits === null || Number(s.credits) < 0;
+                const isMissingName = !s.subjectName || s.subjectName.trim() === '';
+                const isMissingGrade = !s.grade || s.gradePoint === null;
+                const canRestore =
+                  s.isManuallyEdited &&
+                  Boolean(
+                    (s.originalValues?.subjectName && s.originalValues.subjectName !== s.subjectName) ||
+                    (s.originalValues?.grade && s.originalValues.grade !== s.grade) ||
+                    (s.hasOriginalCredits && s.originalValues?.credits !== s.credits)
+                  );
+
                 return (
                   <div
                     key={s.id}
                     className={`p-4 rounded-xl border flex flex-col gap-3 ${
                       s.isExcluded
                         ? 'opacity-40 bg-[var(--bg-secondary)] border-[var(--border-secondary)]'
+                        : isMissingCredit || isMissingName || isMissingGrade
+                        ? 'bg-amber-500/5 border-amber-500/30'
                         : 'bg-[var(--surface)] border-[var(--border-primary)]'
                     }`}
                   >
@@ -1039,30 +1138,42 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
                         <span className="font-mono text-xs font-bold text-[var(--text-primary)]">
                           {s.subjectCode || '—'}
                         </span>
+                        <SourceBadge source={s.creditsSource === 'USER' ? 'AMS + User' : 'AMS'} />
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteRow(s.id)}
-                        className="p-1 text-[var(--text-tertiary)] hover:text-rose-600"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center gap-1">
+                        {canRestore && (
+                          <button
+                            type="button"
+                            onClick={() => handleRestoreOriginalValues(s.id)}
+                            className="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-800"
+                          >
+                            Restore
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteRow(s.id)}
+                          className="p-1 text-[var(--text-tertiary)] hover:text-rose-600"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
 
                     <input
                       type="text"
                       value={s.subjectName}
                       onChange={(e) => handleSubjectFieldChange(s.id, 'subjectName', e.target.value)}
-                      placeholder="Enter Course Name"
+                      placeholder="Enter subject name"
                       className={`apple-input text-xs h-9 ${
-                        !s.subjectName || s.subjectName.trim() === ''
+                        isMissingName
                           ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200'
                           : ''
                       }`}
                     />
-                    {(!s.subjectName || s.subjectName.trim() === '') && (
+                    {isMissingName && (
                       <span className="text-[10px] text-amber-600 font-semibold flex items-center gap-1">
-                        <AlertTriangle className="w-3 h-3" /> Course name not detected for Row {s.sno || idx + 1}
+                        <AlertTriangle className="w-3 h-3" /> ⚠ Subject name not detected
                       </span>
                     )}
 
@@ -1077,6 +1188,7 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
                             const v = e.target.value === '' ? '' : Math.max(0, parseFloat(e.target.value) || 0);
                             handleSubjectFieldChange(s.id, 'credits', v);
                           }}
+                          placeholder="Credits"
                           className="apple-input text-xs h-9 text-center"
                         />
                       </div>
@@ -1097,58 +1209,52 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
                       </div>
                     </div>
 
-                    {s.isManuallyEdited && (
-                      <div className="flex items-center justify-between text-[11px] pt-1 border-t border-[var(--border-secondary)]">
-                        <span className="text-blue-600 dark:text-blue-400 font-semibold">Edited</span>
-                        <button
-                          type="button"
-                          onClick={() => handleRestoreOriginalValues(s.id)}
-                          className="text-[10px] font-semibold text-amber-700 dark:text-amber-300 underline"
-                        >
-                          Restore Imported Value
-                        </button>
-                      </div>
-                    )}
+                    <div className="flex items-center justify-between text-xs pt-1 border-t border-[var(--border-secondary)]">
+                      <span className="text-[11px] text-[var(--text-secondary)]">
+                        GP: <strong>{s.gradePoint ?? '—'}</strong>
+                      </span>
+                      <span className="font-mono font-bold text-[var(--text-primary)]">
+                        Points: {s.credits === 0 ? '0.0 (Non-credit)' : ((Number(s.credits) || 0) * (s.gradePoint ?? 0)).toFixed(1)}
+                      </span>
+                    </div>
                   </div>
                 );
               })}
             </div>
 
-            {/* PRE-CALCULATION AUDIT CARD (Requirements 23 & 24) */}
-            <div className="p-4 rounded-xl bg-[var(--surface)] border border-[var(--border-secondary)] flex flex-col gap-3">
-              <div className="flex items-center justify-between border-b border-[var(--border-secondary)] pb-2">
+            {/* 18 & 19. CALCULATION STATUS & ACCURACY GATE */}
+            <div className="p-5 rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] flex flex-col gap-4 shadow-xs mt-2">
+              <div className="flex items-center justify-between border-b border-[var(--border-secondary)] pb-3">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-bold uppercase tracking-wider text-[var(--accent)]">
-                    IMPORT AUDIT
-                  </span>
-                  <span className="text-[11px] text-[var(--text-tertiary)]">
-                    Pre-Calculation Verification
+                    CALCULATION STATUS
                   </span>
                 </div>
                 {audit.readyToCalculate ? (
-                  <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                    <Check className="w-3.5 h-3.5" /> Ready to calculate
+                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5">
+                    <Check className="w-3.5 h-3.5" /> READY
                   </span>
                 ) : (
-                  <span className="text-xs font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                    <AlertTriangle className="w-3.5 h-3.5" /> Action required
+                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30 flex items-center gap-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5" /> NOT READY
                   </span>
                 )}
               </div>
 
+              {/* 10 Checkpoints */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                 {audit.preCalculationAudit?.map((item) => (
                   <div
                     key={item.id}
-                    className="flex items-center justify-between p-2 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-secondary)]"
+                    className="flex items-center justify-between p-2.5 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border-secondary)]"
                   >
-                    <div className="flex items-center gap-1.5 min-w-0">
+                    <div className="flex items-center gap-2 min-w-0">
                       {item.status === 'passed' ? (
-                        <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <Check className="w-4 h-4 text-emerald-600 shrink-0" />
                       ) : item.status === 'warning' ? (
-                        <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
                       ) : (
-                        <X className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                        <X className="w-4 h-4 text-rose-600 shrink-0" />
                       )}
                       <span className="font-semibold text-[var(--text-primary)] truncate">{item.label}</span>
                     </div>
@@ -1158,25 +1264,106 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
                   </div>
                 ))}
               </div>
-            </div>
 
-            {/* Primary Action Button */}
-            <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-[var(--border-secondary)]">
-              <div className="text-xs text-[var(--text-secondary)]">
-                Total Credits to compute: <strong>{audit.totalCredits}</strong> • Included subjects: <strong>{audit.subjectsIncluded}</strong>
+              {/* If NOT READY: List ONLY the specific problems */}
+              {!audit.readyToCalculate && audit.calculationIssues && audit.calculationIssues.length > 0 && (
+                <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 flex flex-col gap-1.5 text-xs text-amber-900 dark:text-amber-200">
+                  <span className="font-bold flex items-center gap-1.5 text-amber-800 dark:text-amber-300">
+                    <AlertTriangle className="w-3.5 h-3.5" /> Action required before calculation:
+                  </span>
+                  <ul className="list-disc list-inside space-y-0.5 text-[11px]">
+                    {audit.calculationIssues.map((issue, idx) => (
+                      <li key={idx}>⚠ {issue}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Calculation Action Button */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 border-t border-[var(--border-secondary)]">
+                <div className="text-xs text-[var(--text-secondary)]">
+                  Total Credits to compute: <strong>{audit.totalCredits}</strong> • Included courses: <strong>{audit.subjectsIncluded}</strong>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleConfirm}
+                  disabled={!audit.readyToCalculate}
+                  className="apple-btn-primary w-full sm:w-auto text-sm h-11 px-8 font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Calculate SGPA from AMS Result
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={handleConfirm}
-                disabled={!audit.readyToCalculate}
-                className="apple-btn-primary w-full sm:w-auto text-sm h-11 px-6 font-semibold disabled:opacity-40"
-              >
-                Calculate SGPA from AMS Result
-              </button>
             </div>
           </div>
         </div>
       </div>
+
+      {/* 25. CLEAN MODAL VIEWER FOR ORIGINAL AMS RESULT */}
+      {isViewerModalOpen && initialResult.previewUrls.length > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+          <div className="relative w-full max-w-5xl h-[85vh] bg-[var(--surface)] border border-[var(--border-primary)] rounded-2xl flex flex-col overflow-hidden shadow-2xl">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-4 border-b border-[var(--border-secondary)] bg-[var(--surface-secondary)]">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-sm text-[var(--text-primary)]">
+                  Original AMS Result Document
+                </span>
+                <span className="text-xs text-[var(--text-secondary)] font-mono">
+                  ({initialResult.fileName})
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setModalZoom((z) => Math.max(0.5, z - 0.2))}
+                  className="p-1.5 rounded-lg border border-[var(--border-secondary)] hover:bg-[var(--bg-tertiary)] text-[var(--text-primary)]"
+                  title="Zoom Out"
+                >
+                  <ZoomOut className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModalZoom(1)}
+                  className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-[var(--border-secondary)] hover:bg-[var(--bg-tertiary)] text-[var(--text-primary)]"
+                  title="Fit to screen"
+                >
+                  Fit (100%)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModalZoom((z) => Math.min(3, z + 0.2))}
+                  className="p-1.5 rounded-lg border border-[var(--border-secondary)] hover:bg-[var(--bg-tertiary)] text-[var(--text-primary)]"
+                  title="Zoom In"
+                >
+                  <ZoomIn className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsViewerModalOpen(false)}
+                  className="p-1.5 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-colors ml-2"
+                  title="Close viewer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Image Body with full panning */}
+            <div className="flex-1 overflow-auto p-4 bg-[var(--bg-tertiary)] flex items-center justify-center">
+              <img
+                src={initialResult.previewUrls[activePageIdx]}
+                alt="AMS Result Full View"
+                style={{
+                  transform: `scale(${modalZoom})`,
+                  transformOrigin: 'center center',
+                  transition: 'transform 0.2s ease',
+                }}
+                className="max-h-full max-w-full object-contain rounded shadow-md"
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Bulk Credit Entry Modal */}
       {showBulkCreditModal && (

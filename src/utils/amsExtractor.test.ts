@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import type { AmsSubject, AmsStudentInfo } from '../types/ams';
 import {
   extractStudentInfo,
   extractSubjectsFromText,
@@ -469,6 +470,156 @@ describe('AMS Result Extractor', () => {
     expect(subjects[0].originalValues?.subjectName).toBe('Data Structures');
     expect(subjects[0].originalValues?.grade).toBe('A');
     expect(subjects[0].originalValues?.gradePoint).toBe(9);
+  });
+
+  it('correctly reconstructs multi-line wrapped branch, batch, and top-right student name', () => {
+    const raw = `
+      PALLAPU DILEEP
+      KUMAR
+      Branch: CSE
+      (AIML)
+      Batch: 2024-
+      2025
+    `;
+    const info = extractStudentInfo(raw);
+    expect(info.name).toBe('PALLAPU DILEEP KUMAR');
+    expect(info.branch).toBe('CSE (AIML)');
+    expect(info.batch).toBe('2024-2025');
+    expect(info.branchSource).toBe('AMS');
+    expect(info.batchSource).toBe('AMS');
+  });
+
+  it('generates itemized calculationTrace with exact formula strings and non-credit course annotation', () => {
+    const subjects: AmsSubject[] = [
+      {
+        id: '1',
+        sno: 1,
+        subjectCode: '10210CS101',
+        subjectName: 'Algorithms',
+        credits: 4,
+        grade: 'S',
+        gradePoint: 10,
+        isDuplicate: false,
+        isExcluded: false,
+        source: 'AMS',
+        confidence: { code: 'high', name: 'high', grade: 'high', credits: 'high', gradePoint: 'high' },
+        creditsSource: 'USER',
+        status: 'Pass',
+        isManuallyEdited: false,
+      },
+      {
+        id: '2',
+        sno: 2,
+        subjectCode: '10217GE901',
+        subjectName: 'Engineers and Society',
+        credits: 0,
+        grade: 'S',
+        gradePoint: 10,
+        isDuplicate: false,
+        isExcluded: false,
+        source: 'AMS',
+        confidence: { code: 'high', name: 'high', grade: 'high', credits: 'high', gradePoint: 'high' },
+        creditsSource: 'USER',
+        status: 'Pass',
+        isManuallyEdited: false,
+      },
+      {
+        id: '3',
+        sno: 3,
+        subjectCode: '10210CS102',
+        subjectName: 'Web Development',
+        credits: 3,
+        grade: 'A',
+        gradePoint: 9,
+        isDuplicate: false,
+        isExcluded: false,
+        source: 'AMS',
+        confidence: { code: 'high', name: 'high', grade: 'high', credits: 'high', gradePoint: 'high' },
+        creditsSource: 'USER',
+        status: 'Pass',
+        isManuallyEdited: false,
+      },
+    ];
+
+    const studentInfo: AmsStudentInfo = {
+      name: 'Test Student',
+      nameConfidence: 'high',
+      registerNumber: '12345',
+      regConfidence: 'high',
+      department: 'CSE',
+      program: 'B.Tech',
+      academicYear: '2024-2025',
+      college: 'Vel Tech',
+      regulation: 'VTR21',
+      regulationConfidence: 'high',
+      semester: 1,
+      semesterConfidence: 'high',
+    };
+
+    const audit = computeAmsAuditSummary(subjects, studentInfo);
+    expect(audit.readyToCalculate).toBe(true);
+    expect(audit.calculationTrace).toBeDefined();
+    expect(audit.calculationTrace?.length).toBe(3);
+
+    // Row 1: 4 * 10 = 40
+    expect(audit.calculationTrace![0].formulaStr).toBe('4 × 10 = 40');
+    expect(audit.calculationTrace![0].isNonCredit).toBe(false);
+
+    // Row 2: 0 credits (Non-credit) = 0.00
+    expect(audit.calculationTrace![1].formulaStr).toBe('0 credits (Non-credit) = 0.00');
+    expect(audit.calculationTrace![1].isNonCredit).toBe(true);
+
+    // Row 3: 3 * 9 = 27
+    expect(audit.calculationTrace![2].formulaStr).toBe('3 × 9 = 27');
+
+    // Total credits: 4 + 3 = 7 (0-credit course omitted from denominator)
+    expect(audit.totalCredits).toBe(7);
+    expect(audit.totalQualityPoints).toBe(67);
+    expect(audit.sgpa).toBeCloseTo(67 / 7, 4);
+    expect(audit.creditsEnteredCount).toBe(3);
+    expect(audit.totalSubjectsCount).toBe(3);
+  });
+
+  it('identifies exact calculationIssues and locks readyToCalculate when invalid grades or missing credits exist', () => {
+    const invalidSubjects: AmsSubject[] = [
+      {
+        id: '1',
+        sno: 1,
+        subjectCode: '10210CS101',
+        subjectName: 'Algorithms',
+        credits: '', // Missing credits
+        grade: 'Z', // Invalid grade in VTR21
+        gradePoint: null,
+        isDuplicate: false,
+        isExcluded: false,
+        source: 'AMS',
+        confidence: { code: 'high', name: 'high', grade: 'low', credits: 'none', gradePoint: 'none' },
+        creditsSource: 'USER',
+        status: 'Pass',
+        isManuallyEdited: false,
+      },
+    ];
+
+    const studentInfo: AmsStudentInfo = {
+      name: 'Test Student',
+      nameConfidence: 'high',
+      registerNumber: '12345',
+      regConfidence: 'high',
+      department: 'CSE',
+      program: 'B.Tech',
+      academicYear: '2024-2025',
+      college: 'Vel Tech',
+      regulation: 'VTR21',
+      regulationConfidence: 'high',
+      semester: 1,
+      semesterConfidence: 'high',
+    };
+
+    const audit = computeAmsAuditSummary(invalidSubjects, studentInfo);
+    expect(audit.readyToCalculate).toBe(false);
+    expect(audit.calculationIssues).toBeDefined();
+    expect(audit.calculationIssues!.some((issue) => issue.includes('credit(s) missing'))).toBe(true);
+    expect(audit.calculationIssues!.some((issue) => issue.includes('Grade not recognized under VTR21'))).toBe(true);
   });
 });
 

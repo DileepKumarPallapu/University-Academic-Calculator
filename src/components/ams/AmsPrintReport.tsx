@@ -136,18 +136,25 @@ export const AmsPrintReport: React.FC<AmsPrintReportProps> = ({
                 Data Provenance & Audit
               </span>
               <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px] pt-1">
+                <span className="text-black/60 font-medium">Rows Audit:</span>
+                <span className="font-semibold text-black">
+                  {auditSummary.subjectsDetected} courses ({auditSummary.duplicatesCount} dupes, {auditSummary.fieldsRequiringInput} missing)
+                </span>
+
                 <span className="text-black/60 font-medium">Auto-Imported:</span>
-                <span className="font-semibold text-black">Courses, Grades, Student Details</span>
+                <span className="font-semibold text-black">Course Names, Codes, Grades, Student Info</span>
 
                 <span className="text-black/60 font-medium">User-Provided:</span>
-                <span className="font-semibold text-black">Credits, Regulation</span>
+                <span className="font-semibold text-black">
+                  Credits ({auditSummary.creditsEnteredCount ?? auditSummary.subjectsIncluded}/{auditSummary.subjectsIncluded} entered), Regulation
+                </span>
 
                 <span className="text-black/60 font-medium">Report Date:</span>
                 <span className="font-mono text-black">{currentDate}</span>
 
-                <span className="text-black/60 font-medium">Verification Status:</span>
-                <span className="font-mono text-black">
-                  {auditSummary.rowAccountingVerified ? 'All 11 Rows Accounted ✓' : 'User Verified ✓'}
+                <span className="text-black/60 font-medium">Row Integrity:</span>
+                <span className="font-mono text-black font-semibold">
+                  {auditSummary.rowAccountingVerified ? `${auditSummary.subjectsDetected} / ${auditSummary.subjectsDetected} Accounted ✓` : 'Verified by Student ✓'}
                 </span>
               </div>
             </div>

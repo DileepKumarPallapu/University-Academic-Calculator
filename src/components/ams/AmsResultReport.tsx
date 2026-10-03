@@ -124,137 +124,206 @@ export const AmsResultReport: React.FC<AmsResultReportProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left: Audit Summary & Subject Breakdown (7 cols) */}
         <div className="lg:col-span-7 flex flex-col gap-6">
-          {/* Imported Result Summary Card */}
+          {/* 23. FINAL IMPORT AUDIT CARD */}
           <div className="apple-main-container p-6 flex flex-col gap-4">
-            <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] border-b border-[var(--border-secondary)] pb-2.5">
-              Imported Result Summary & Accuracy Audit
-            </span>
+            <div className="flex items-center justify-between border-b border-[var(--border-secondary)] pb-2.5">
+              <span className="text-xs font-bold uppercase tracking-wider text-[var(--accent)]">
+                FINAL IMPORT AUDIT
+              </span>
+              <span className="text-[11px] text-[var(--text-tertiary)]">
+                Source: AMS Result
+              </span>
+            </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
               <div className="p-3 rounded-xl bg-[var(--surface)] border border-[var(--border-secondary)]">
-                <span className="text-[10px] font-bold uppercase text-[var(--text-secondary)] block">
-                  Subjects Detected
+                <span className="text-[10px] font-bold uppercase text-[var(--text-tertiary)] block">
+                  Source
                 </span>
-                <span className="text-lg font-bold text-[var(--text-primary)] mt-0.5 block tabular-nums">
-                  {auditSummary.subjectsDetected}
+                <span className="text-sm font-bold text-[var(--text-primary)] mt-0.5 block">
+                  AMS Result
                 </span>
               </div>
 
               <div className="p-3 rounded-xl bg-[var(--surface)] border border-[var(--border-secondary)]">
-                <span className="text-[10px] font-bold uppercase text-[var(--text-secondary)] block">
+                <span className="text-[10px] font-bold uppercase text-[var(--text-tertiary)] block">
+                  Rows Detected
+                </span>
+                <span className="text-base font-bold text-[var(--text-primary)] mt-0.5 block font-mono">
+                  {auditSummary.detectedRowsCount ?? auditSummary.subjectsDetected}
+                </span>
+              </div>
+
+              <div className="p-3 rounded-xl bg-[var(--surface)] border border-[var(--border-secondary)]">
+                <span className="text-[10px] font-bold uppercase text-[var(--text-tertiary)] block">
+                  Rows Verified
+                </span>
+                <span className="text-base font-bold text-emerald-600 dark:text-emerald-400 mt-0.5 block font-mono">
+                  {auditSummary.extractedRowsCount ?? auditSummary.subjectsDetected}
+                </span>
+              </div>
+
+              <div className="p-3 rounded-xl bg-[var(--surface)] border border-[var(--border-secondary)]">
+                <span className="text-[10px] font-bold uppercase text-[var(--text-tertiary)] block">
                   Subjects Included
                 </span>
-                <span className="text-lg font-bold text-[var(--text-primary)] mt-0.5 block tabular-nums">
+                <span className="text-base font-bold text-[var(--text-primary)] mt-0.5 block font-mono">
                   {auditSummary.subjectsIncluded}
                 </span>
               </div>
 
               <div className="p-3 rounded-xl bg-[var(--surface)] border border-[var(--border-secondary)]">
-                <span className="text-[10px] font-bold uppercase text-[var(--text-secondary)] block">
-                  Credit-bearing
-                </span>
-                <span className="text-lg font-bold text-[var(--text-primary)] mt-0.5 block tabular-nums">
-                  {auditSummary.creditBearingCount}
-                </span>
-              </div>
-
-              <div className="p-3 rounded-xl bg-[var(--surface)] border border-[var(--border-secondary)]">
-                <span className="text-[10px] font-bold uppercase text-[var(--text-secondary)] block">
-                  Non-credit (0 Cr)
-                </span>
-                <span className="text-lg font-bold text-[var(--text-primary)] mt-0.5 block tabular-nums">
-                  {auditSummary.nonCreditCount}
-                </span>
-              </div>
-
-              <div className="p-3 rounded-xl bg-[var(--surface)] border border-[var(--border-secondary)]">
-                <span className="text-[10px] font-bold uppercase text-[var(--text-secondary)] block">
+                <span className="text-[10px] font-bold uppercase text-[var(--text-tertiary)] block">
                   Duplicates Excluded
                 </span>
-                <span className="text-lg font-bold text-[var(--text-primary)] mt-0.5 block tabular-nums">
-                  {auditSummary.duplicatesExcluded}
+                <span className="text-base font-bold text-[var(--text-primary)] mt-0.5 block font-mono">
+                  {auditSummary.duplicatesCount}
                 </span>
               </div>
 
               <div className="p-3 rounded-xl bg-[var(--surface)] border border-[var(--border-secondary)]">
-                <span className="text-[10px] font-bold uppercase text-[var(--text-secondary)] block">
-                  Data Status
+                <span className="text-[10px] font-bold uppercase text-[var(--text-tertiary)] block">
+                  Manual Corrections
                 </span>
-                <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400 mt-1 block">
-                  Verified ✓
+                <span className="text-base font-bold text-[var(--text-primary)] mt-0.5 block font-mono">
+                  {auditSummary.manualCorrectionsCount}
+                </span>
+              </div>
+
+              <div className="p-3 rounded-xl bg-[var(--surface)] border border-[var(--border-secondary)]">
+                <span className="text-[10px] font-bold uppercase text-[var(--text-tertiary)] block">
+                  Credits Entered
+                </span>
+                <span className="text-base font-bold text-[var(--text-primary)] mt-0.5 block font-mono">
+                  {auditSummary.creditsEnteredCount ?? auditSummary.subjectsIncluded}
+                </span>
+              </div>
+
+              <div className="p-3 rounded-xl bg-[var(--surface)] border border-[var(--border-secondary)]">
+                <span className="text-[10px] font-bold uppercase text-[var(--text-tertiary)] block">
+                  Grade Points Derived
+                </span>
+                <span className="text-base font-bold text-[var(--text-primary)] mt-0.5 block font-mono">
+                  {auditSummary.subjectsIncluded}
+                </span>
+              </div>
+
+              <div className="p-3 rounded-xl bg-[var(--surface)] border border-[var(--border-secondary)]">
+                <span className="text-[10px] font-bold uppercase text-[var(--text-tertiary)] block">
+                  Final SGPA
+                </span>
+                <span className="text-base font-bold text-[var(--accent)] mt-0.5 block font-mono">
+                  {formattedSgpa}
                 </span>
               </div>
             </div>
 
-            {/* Provenance Audit Details */}
-            <div className="p-3.5 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] flex flex-col gap-2 text-xs">
-              <span className="font-bold text-[var(--text-primary)]">Data Provenance Summary</span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
-                <div className="flex flex-col gap-1">
-                  <span className="font-semibold text-[var(--text-secondary)]">Auto-Detected from Document:</span>
+            {/* Provenance Transparency Summary (Requirement 28 & 29) */}
+            <div className="p-4 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] flex flex-col gap-2.5 text-xs">
+              <span className="font-bold text-[var(--text-primary)] text-xs uppercase tracking-wider">
+                Report Data Provenance
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px]">
+                <div className="flex flex-col gap-1 p-2 rounded-lg bg-[var(--surface)] border border-[var(--border-secondary)]">
+                  <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                    Data automatically detected from source:
+                  </span>
                   <span className="text-[var(--text-primary)]">
-                    {auditSummary.fieldsDetectedAutomatically?.join(', ') || 'Student Info, Subject Codes, Titles, Grades'}
+                    Student details, Subject details, Grades
                   </span>
                 </div>
-                <div className="flex flex-col gap-1">
-                  <span className="font-semibold text-[var(--text-secondary)]">User Verified / Entered:</span>
+                <div className="flex flex-col gap-1 p-2 rounded-lg bg-[var(--surface)] border border-[var(--border-secondary)]">
+                  <span className="font-semibold text-blue-600 dark:text-blue-400">
+                    Data supplied by user:
+                  </span>
                   <span className="text-[var(--text-primary)]">
-                    {auditSummary.fieldsEnteredByUser?.join(', ') || 'Course Credits, Regulation'}
+                    Course Credits, Regulation{studentInfo.semester ? '' : ', Semester'}
                   </span>
                 </div>
               </div>
             </div>
-
-            {auditSummary.duplicatesExcluded > 0 && (
-              <div className="p-3 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] text-xs text-[var(--text-secondary)]">
-                <strong>Duplicate Audit:</strong> {auditSummary.duplicatesExcluded} duplicate subject {auditSummary.duplicatesExcluded === 1 ? 'record was' : 'records were'} detected and safely excluded from calculation to avoid double-counting.
-              </div>
-            )}
           </div>
 
-          {/* Subject Breakdown List */}
+          {/* 21. CALCULATION TRACE (Requirement 21) */}
           <div className="apple-main-container p-6 flex flex-col gap-3">
-            <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] border-b border-[var(--border-secondary)] pb-2.5">
-              Subject Contribution Breakdown
-            </span>
+            <div className="flex items-center justify-between border-b border-[var(--border-secondary)] pb-2.5">
+              <span className="text-xs font-bold uppercase tracking-wider text-[var(--accent)]">
+                CALCULATION TRACE
+              </span>
+              <span className="text-[11px] text-[var(--text-tertiary)]">
+                Row-by-Row SGPA Verification
+              </span>
+            </div>
 
             <div className="flex flex-col divide-y divide-[var(--border-secondary)] text-xs">
-              {subjects
-                .filter((s) => !s.isExcluded)
-                .map((s) => {
-                  const c = Number(s.credits) || 0;
-                  const gp = s.gradePoint ?? 0;
-                  const cp = c * gp;
-
-                  return (
-                    <div key={s.id} className="py-2.5 flex items-center justify-between gap-3">
-                      <div className="flex flex-col min-w-0">
-                        <div className="flex items-center gap-2">
-                          {s.subjectCode && (
-                            <span className="font-mono font-bold text-[var(--text-primary)]">
-                              {s.subjectCode}
-                            </span>
-                          )}
+              {auditSummary.calculationTrace && auditSummary.calculationTrace.length > 0 ? (
+                auditSummary.calculationTrace.map((tr) => (
+                  <div key={tr.sno} className="py-2.5 flex items-center justify-between gap-3">
+                    <div className="flex flex-col min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-mono px-1 py-0.5 rounded bg-[var(--bg-tertiary)] text-[var(--text-tertiary)]">
+                          #{tr.sno}
+                        </span>
+                        {tr.subjectCode && (
+                          <span className="font-mono font-bold text-[var(--text-primary)]">
+                            {tr.subjectCode}
+                          </span>
+                        )}
+                        <span className="font-medium text-[var(--text-primary)] truncate">
+                          {tr.subjectName}
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-[var(--text-secondary)] mt-0.5">
+                        Grade {tr.grade} (GP {tr.gradePoint}) • {tr.formulaStr}
+                      </span>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="font-mono font-bold text-sm text-[var(--text-primary)]">
+                        {tr.creditPoints.toFixed(1)}
+                      </span>
+                      <span className="text-[10px] text-[var(--text-tertiary)] block">
+                        Credit Pts
+                      </span>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                subjects
+                  .filter((s) => !s.isExcluded)
+                  .map((s) => {
+                    const c = Number(s.credits) || 0;
+                    const gp = s.gradePoint ?? 0;
+                    const cp = c * gp;
+                    return (
+                      <div key={s.id} className="py-2.5 flex items-center justify-between gap-3">
+                        <div className="flex flex-col min-w-0">
                           <span className="font-medium text-[var(--text-primary)] truncate">
                             {s.subjectName}
                           </span>
+                          <span className="text-[11px] text-[var(--text-secondary)]">
+                            {c} × {gp} = {cp}
+                          </span>
                         </div>
-                        <span className="text-[11px] text-[var(--text-secondary)]">
-                          {c} {c === 1 ? 'Credit' : 'Credits'} • Grade {s.grade} (GP: {gp})
-                          {c === 0 && ' • Non-credit course'}
-                        </span>
-                      </div>
-                      <div className="text-right shrink-0">
                         <span className="font-mono font-bold text-sm text-[var(--text-primary)]">
                           {cp.toFixed(1)}
                         </span>
-                        <span className="text-[10px] text-[var(--text-tertiary)] block">
-                          Credit Pts
-                        </span>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })
+              )}
+            </div>
+
+            {/* Trace Summary Footer */}
+            <div className="p-3.5 rounded-xl bg-[var(--surface)] border border-[var(--border-secondary)] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs font-mono font-semibold text-[var(--text-primary)] mt-2">
+              <div>
+                Total Credit Points: <strong className="text-sm font-bold">{formatFixed(auditSummary.totalQualityPoints, 2)}</strong>
+              </div>
+              <div>
+                Total Credits: <strong className="text-sm font-bold">{auditSummary.totalCredits}</strong>
+              </div>
+              <div className="text-[var(--accent)] font-bold text-sm">
+                SGPA: {formattedSgpa}
+              </div>
             </div>
           </div>
         </div>

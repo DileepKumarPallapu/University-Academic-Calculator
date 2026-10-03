@@ -1,25 +1,36 @@
 import type { RegulationId } from '../config/university';
 
 export type ConfidenceLevel = 'high' | 'medium' | 'low' | 'none';
+export type FieldSource = 'AMS' | 'USER' | 'PROFILE' | 'REGULATION' | 'AMS + User';
 
 export interface AmsStudentInfo {
   name: string;
   nameConfidence: ConfidenceLevel;
+  nameSource?: 'AMS' | 'USER' | 'PROFILE';
   studentId?: string;
+  studentIdSource?: 'AMS' | 'USER';
   registerNumber: string;
   regConfidence: ConfidenceLevel;
+  regSource?: 'AMS' | 'USER' | 'PROFILE';
   degree?: string;
+  degreeSource?: 'AMS' | 'USER';
   branch?: string;
+  branchSource?: 'AMS' | 'USER';
   department: string;
   program: string;
   batch?: string;
+  batchSource?: 'AMS' | 'USER';
   resultMonthYear?: string;
+  resultMonthYearSource?: 'AMS' | 'USER';
   resultType?: string;
+  resultTypeSource?: 'AMS' | 'USER';
   semester: number | null;
   semesterConfidence: ConfidenceLevel;
+  semesterSource?: 'AMS' | 'USER' | 'PROFILE';
   academicYear: string;
   regulation: RegulationId | null;
   regulationConfidence: ConfidenceLevel;
+  regulationSource?: 'AMS' | 'USER' | 'REGULATION' | 'PROFILE';
   college: string;
   studentNameMismatch?: boolean;
   nameVerified?: boolean;
@@ -40,6 +51,7 @@ export interface AmsSubject {
   isDuplicate: boolean;
   isExcluded: boolean;
   isManuallyEdited: boolean;
+  hasOriginalCredits?: boolean;
   originalValues?: {
     subjectCode: string | null;
     subjectName: string;
@@ -65,6 +77,25 @@ export interface AuditChecklistItem {
   detail?: string;
 }
 
+export interface ScanStepItem {
+  step: number;
+  title: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'failed';
+  detail?: string;
+}
+
+export interface CalculationTraceItem {
+  sno?: number;
+  subjectName: string;
+  subjectCode?: string | null;
+  credits: number;
+  grade: string;
+  gradePoint: number;
+  creditPoints: number;
+  isNonCredit: boolean;
+  formulaStr: string;
+}
+
 export interface AmsExtractionResult {
   studentInfo: AmsStudentInfo;
   subjects: AmsSubject[];
@@ -86,6 +117,7 @@ export interface AmsExtractionResult {
   extractedRowsCount?: number;
   missingRowNumbers?: number[];
   rowAccountingVerified?: boolean;
+  scanSteps?: ScanStepItem[];
 }
 
 export interface AmsAuditSummary {
@@ -110,4 +142,9 @@ export interface AmsAuditSummary {
   creditsDetectedInSource?: boolean;
   preCalculationAudit?: AuditChecklistItem[];
   readyToCalculate?: boolean;
+  calculationIssues?: string[];
+  creditsEnteredCount?: number;
+  totalSubjectsCount?: number;
+  calculationTrace?: CalculationTraceItem[];
 }
+

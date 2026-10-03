@@ -8,6 +8,8 @@ import type {
   AmsAuditSummary,
   AmsPageType,
   AuditChecklistItem,
+  CalculationTraceItem,
+  ScanStepItem,
 } from '../types/ams';
 
 // Configure pdfjs worker using standard ESM URL
@@ -114,10 +116,12 @@ export const extractStudentInfo = (text: string): AmsStudentInfo => {
   const vtuMatch = text.match(/\b(VTU\d{4,8})\b/i);
   if (vtuMatch) {
     info.studentId = vtuMatch[1].toUpperCase();
+    info.studentIdSource = 'AMS';
   } else {
     const stuIdMatch = text.match(/(?:stu\s*id|student\s*id)\s*[:\-]?\s*([0-9a-zA-Z]{6,15})/i);
     if (stuIdMatch && stuIdMatch[1]) {
       info.studentId = stuIdMatch[1].trim().toUpperCase();
+      info.studentIdSource = 'AMS';
     }
   }
 
@@ -135,14 +139,15 @@ export const extractStudentInfo = (text: string): AmsStudentInfo => {
       if (!regCandidate.startsWith('VTU')) {
         info.registerNumber = regCandidate;
         info.regConfidence = 'high';
+        info.regSource = 'AMS';
         break;
       }
     }
   }
 
-  // Name patterns
+  // Priority 1: Explicit Name patterns
   const namePatterns = [
-    /(?:student\s*name|candidate\s*name|name\s*of\s*the\s*candidate|name)\s*[:\-]\s*([a-zA-Z\s\.]+)/i,
+    /(?:student\s*name|candidate\s*name|name\s*of\s*the\s*candidate)\s*[:\-]\s*([a-zA-Z\s\.]+)/i,
     /name\s*[:]\s*([a-zA-Z\s\.]+)/i,
   ];
 
@@ -153,6 +158,7 @@ export const extractStudentInfo = (text: string): AmsStudentInfo => {
       if (candidate.length > 2 && !/^(student|candidate|result|grade|marks)$/i.test(candidate)) {
         info.name = candidate;
         info.nameConfidence = 'high';
+        info.nameSource = 'AMS';
         break;
       }
     }
@@ -163,20 +169,33 @@ export const extractStudentInfo = (text: string): AmsStudentInfo => {
     text.match(/\b(B\.Tech|M\.Tech|B\.E|B\.Sc|M\.Sc|BBA|MBA|BCA|MCA)\b/i);
   if (degreeMatch && degreeMatch[1]) {
     info.degree = degreeMatch[1].trim();
+    info.degreeSource = 'AMS';
   }
 
-  // Branch / Department patterns: "Branch: CSE (AIML)", "Branch - CSE (AIML)"
-  const branchMatch = text.match(/(?:branch)\s*[:\-]?\s*([A-Za-z0-9\s\(\)&/\-_]{2,30}?)(?:\r?\n|$)/i) ||
-    text.match(/(?:department|program(?:me)?)\s*[:\-]?\s*([A-Za-z0-9\s\(\)&/\-_]{2,30}?)(?:\r?\n|$)/i);
-  if (branchMatch && branchMatch[1]) {
-    info.branch = branchMatch[1].trim();
-    info.department = branchMatch[1].trim();
+  // Branch / Department patterns (handles multi-line e.g. "CSE \n (AIML)" or "CSE (AIML)")
+  const multiLineBranchMatch = text.match(
+    /(?:branch|dept|department)\s*[:\-]?\s*([^\r\n]+(?:\r?\n\s*\([A-Za-z0-9&/\-_\s]+\))?)/i
+  );
+  if (multiLineBranchMatch && multiLineBranchMatch[1]) {
+    const cleanedBranch = multiLineBranchMatch[1].replace(/\r?\n\s*/g, ' ').replace(/\s+/g, ' ').trim();
+    info.branch = cleanedBranch;
+    info.department = cleanedBranch;
+    info.branchSource = 'AMS';
+  } else {
+    const branchMatch = text.match(/\b(CSE(?:\s*\([A-Za-z0-9\s]+\))?|ECE|EEE|MECH|CIVIL|IT|AIDS)(?!\w)/i);
+    if (branchMatch && branchMatch[1]) {
+      info.branch = branchMatch[1].trim();
+      info.department = branchMatch[1].trim();
+      info.branchSource = 'AMS';
+    }
   }
 
-  // Batch patterns: "Batch: 2024-2025", "Batch - 2024-2025"
-  const batchMatch = text.match(/(?:batch)\s*[:\-]?\s*(\d{4}\s*[-–/]\s*\d{2,4})/i);
+  // Batch patterns (handles multi-line e.g. "2024- \n 2025" or "2024-2025")
+  const batchMatch = text.match(/(?:batch)\s*[:\-]?\s*(\d{4}\s*[-–/]\s*\r?\n?\s*\d{2,4})/i) ||
+    text.match(/\b(\d{4}\s*[-–/]\s*\r?\n?\s*\d{4})\b/);
   if (batchMatch && batchMatch[1]) {
-    info.batch = batchMatch[1].trim().replace(/\s+/g, '');
+    info.batch = batchMatch[1].replace(/\r?\n\s*/g, '').replace(/\s+/g, '').trim();
+    info.batchSource = 'AMS';
   }
 
   // Month & Year of Result: "Month & Year of Result: Nov.2024"
@@ -184,39 +203,51 @@ export const extractStudentInfo = (text: string): AmsStudentInfo => {
     text.match(/\b((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s*\d{4})\b/i);
   if (monthYearMatch && monthYearMatch[1]) {
     info.resultMonthYear = monthYearMatch[1].trim();
+    info.resultMonthYearSource = 'AMS';
   }
 
   // Result Type: "Result Type: Regular", "Result Type - Regular"
   const resTypeMatch = text.match(/(?:result\s*type)\s*[:\-]?\s*(Regular|Arrear|Supplementary|Revaluation|Improvement)/i);
   if (resTypeMatch && resTypeMatch[1]) {
     info.resultType = resTypeMatch[1].trim();
+    info.resultTypeSource = 'AMS';
   }
 
-  // If table row contained repeating metadata:
+  // Priority 2: If table row contained repeating metadata:
   // e.g. "1 VTU29962 24UECS0805 PALLAPU DILEEP KUMAR B.Tech CSE (AIML) 2024-2025 10210BM101 ..."
   const rowPattern = /(?:^\s*\d+\s+)?(VTU\d{4,8}|[0-9A-Za-z]{6,12})\s+([0-9]{2}[A-Za-z]{2,5}[0-9]{3,5}|[0-9A-Za-z]{8,12})\s+([A-Za-z\s\.]{4,35}?)\s+(B\.Tech|M\.Tech|B\.E|B\.Sc|MBA|MCA)\s+([A-Za-z0-9\s\(\)&/\-_]{2,25}?)\s+(\d{4}\s*[-–]\s*\d{4})/im;
   const rowMatch = text.match(rowPattern);
   if (rowMatch) {
     if (!info.studentId || info.studentId === info.registerNumber) {
       info.studentId = rowMatch[1].toUpperCase();
+      info.studentIdSource = 'AMS';
     }
     if (!info.registerNumber) {
       info.registerNumber = rowMatch[2].toUpperCase();
       info.regConfidence = 'high';
+      info.regSource = 'AMS';
     }
     if (!info.name) {
       info.name = rowMatch[3].trim();
       info.nameConfidence = 'high';
+      info.nameSource = 'AMS';
     }
-    if (!info.degree) info.degree = rowMatch[4].trim();
+    if (!info.degree) {
+      info.degree = rowMatch[4].trim();
+      info.degreeSource = 'AMS';
+    }
     if (!info.branch) {
       info.branch = rowMatch[5].trim();
       info.department = rowMatch[5].trim();
+      info.branchSource = 'AMS';
     }
-    if (!info.batch) info.batch = rowMatch[6].replace(/\s+/g, '');
+    if (!info.batch) {
+      info.batch = rowMatch[6].replace(/\s+/g, '');
+      info.batchSource = 'AMS';
+    }
   }
 
-  // If top-right has wrapped name e.g. PALLAPU DILEEP \n KUMAR
+  // Priority 3: If top-right has wrapped name e.g. PALLAPU DILEEP \n KUMAR
   if (!info.name) {
     const wrappedNameMatch = text.match(/\b([A-Z]{3,15}\s+[A-Z]{3,15})\s*\r?\n\s*([A-Z]{3,15})\b/);
     if (wrappedNameMatch) {
@@ -224,6 +255,20 @@ export const extractStudentInfo = (text: string): AmsStudentInfo => {
       if (!/(SEMESTER|RESULT|REGULAR|EXAMINATION)/i.test(candidate)) {
         info.name = candidate;
         info.nameConfidence = 'high';
+        info.nameSource = 'AMS';
+      }
+    }
+  }
+
+  // Priority 4: Two-word wrapped student name
+  if (!info.name) {
+    const twoWordWrapped = text.match(/\b([A-Z]{3,15})\s*\r?\n\s*([A-Z]{3,15})\b/);
+    if (twoWordWrapped) {
+      const candidate = `${twoWordWrapped[1]} ${twoWordWrapped[2]}`.trim();
+      if (!/(SEMESTER|RESULT|REGULAR|EXAMINATION|COURSE|STUDENT|DEGREE|BRANCH)/i.test(candidate)) {
+        info.name = candidate;
+        info.nameConfidence = 'medium';
+        info.nameSource = 'AMS';
       }
     }
   }
@@ -241,6 +286,7 @@ export const extractStudentInfo = (text: string): AmsStudentInfo => {
   // Fallback: If studentId wasn't found separately but we have a register number:
   if (!info.studentId && info.registerNumber) {
     info.studentId = info.registerNumber;
+    info.studentIdSource = 'AMS';
   }
 
   // Semester pattern: handles "Semester: 5", "Semester: Semester 5", "Sem: V", etc.
@@ -250,6 +296,7 @@ export const extractStudentInfo = (text: string): AmsStudentInfo => {
     if (parsedSem !== null) {
       info.semester = parsedSem;
       info.semesterConfidence = 'high';
+      info.semesterSource = 'AMS';
     }
   }
 
@@ -260,6 +307,7 @@ export const extractStudentInfo = (text: string): AmsStudentInfo => {
     if (REGULATIONS[detected]) {
       info.regulation = detected;
       info.regulationConfidence = 'high';
+      info.regulationSource = 'AMS';
     }
   }
 
@@ -710,6 +758,7 @@ export const parseStructuredAmsTextTable = (
         isDuplicate: false,
         isExcluded: false,
         isManuallyEdited: false,
+        hasOriginalCredits: creditsSource === 'AMS' && foundCredits !== '' && foundCredits !== null,
         originalValues: {
           subjectCode: foundCode || null,
           subjectName: courseName,
@@ -750,6 +799,7 @@ export const parseStructuredAmsTextTable = (
         isDuplicate: false,
         isExcluded: false,
         isManuallyEdited: false,
+        hasOriginalCredits: creditsSource === 'AMS' && foundCredits !== '' && foundCredits !== null,
         originalValues: {
           subjectCode: foundCode || null,
           subjectName: '',
@@ -931,16 +981,57 @@ export const computeAmsAuditSummary = (
   if (detectedCount > 0) {
     const maxSno = Math.max(...Array.from(detectedSnoSet), subjectsDetected);
     for (let s = 1; s <= maxSno; s++) {
-      if (!detectedSnoSet.has(s)) missingRowNumbers.push(s);
+      if (!detectedSnoSet.has(s) && !subjects.some((sub) => sub.sno === s)) {
+        missingRowNumbers.push(s);
+      }
     }
   }
 
-  // 10-point Pre-calculation Audit Checklist
+  // Validation items
   const missingNames = uniqueSubjects.filter((s) => !s.subjectName || s.subjectName.trim() === '');
   const missingCredits = uniqueSubjects.filter((s) => s.credits === '' || s.credits === null || Number(s.credits) < 0);
   const invalidGrades = uniqueSubjects.filter((s) => !s.grade || !ALL_VALID_GRADES.has(s.grade.toUpperCase()));
   const missingGPs = uniqueSubjects.filter((s) => s.gradePoint === null);
 
+  // Regulation-specific grade validation
+  const invalidGradesUnderReg: { row: number; grade: string }[] = [];
+  if (studentInfo?.regulation && REGULATIONS[studentInfo.regulation]) {
+    const regGrades = new Set(REGULATIONS[studentInfo.regulation].grades.map((g) => g.grade.toUpperCase()));
+    uniqueSubjects.forEach((s, idx) => {
+      if (s.grade && !regGrades.has(s.grade.toUpperCase())) {
+        invalidGradesUnderReg.push({ row: s.sno || idx + 1, grade: s.grade });
+      }
+    });
+  }
+
+  // Calculation Issues (Blocking accuracy gates)
+  const calculationIssues: string[] = [];
+  if (subjectsDetected === 0) {
+    calculationIssues.push('No subjects found in result');
+  }
+  if (missingRowNumbers.length > 0) {
+    calculationIssues.push(`Missing result row(s): ${missingRowNumbers.join(', ')}`);
+  }
+  if (missingNames.length > 0) {
+    calculationIssues.push(`${missingNames.length} subject name(s) missing`);
+  }
+  if (invalidGrades.length > 0) {
+    calculationIssues.push(`${invalidGrades.length} unrecognized grade(s)`);
+  }
+  if (missingCredits.length > 0) {
+    calculationIssues.push(`${missingCredits.length} credit(s) missing`);
+  }
+  if (!studentInfo?.regulation) {
+    calculationIssues.push('Regulation not selected');
+  }
+  if (invalidGradesUnderReg.length > 0) {
+    calculationIssues.push(`Grade not recognized under ${studentInfo?.regulation} (${invalidGradesUnderReg.map(x => `Row ${x.row}: ${x.grade}`).join(', ')})`);
+  }
+  if (missingGPs.length > 0) {
+    calculationIssues.push('Grade points not resolved for all rows');
+  }
+
+  // 10-point Pre-calculation Audit Checklist
   const preCalculationAudit: AuditChecklistItem[] = [
     {
       id: 'ams_result',
@@ -981,10 +1072,10 @@ export const computeAmsAuditSummary = (
     {
       id: 'grades_found',
       label: 'Grades Found',
-      status: invalidGrades.length === 0 ? 'passed' : 'failed',
-      detail: invalidGrades.length === 0
+      status: invalidGrades.length === 0 && invalidGradesUnderReg.length === 0 ? 'passed' : 'failed',
+      detail: invalidGrades.length === 0 && invalidGradesUnderReg.length === 0
         ? `${subjectsDetected}/${subjectsDetected} grades verified`
-        : `${invalidGrades.length} unverified grade(s)`,
+        : `${invalidGrades.length + invalidGradesUnderReg.length} unverified grade(s)`,
     },
     {
       id: 'credits_available',
@@ -1005,10 +1096,10 @@ export const computeAmsAuditSummary = (
     {
       id: 'grade_points_validated',
       label: 'Grade Points Validated',
-      status: missingGPs.length === 0 && Boolean(studentInfo?.regulation) ? 'passed' : 'warning',
-      detail: missingGPs.length === 0 && Boolean(studentInfo?.regulation)
+      status: missingGPs.length === 0 && Boolean(studentInfo?.regulation) && invalidGradesUnderReg.length === 0 ? 'passed' : 'warning',
+      detail: missingGPs.length === 0 && Boolean(studentInfo?.regulation) && invalidGradesUnderReg.length === 0
         ? 'Derived from regulation rules'
-        : 'Awaiting regulation selection',
+        : 'Awaiting regulation selection or valid grades',
     },
     {
       id: 'duplicate_check',
@@ -1020,15 +1111,30 @@ export const computeAmsAuditSummary = (
     },
   ];
 
-  const readyToCalculate =
-    subjectsDetected > 0 &&
-    missingRowNumbers.length === 0 &&
-    subjectsDetected === detectedCount &&
-    missingNames.length === 0 &&
-    invalidGrades.length === 0 &&
-    missingCredits.length === 0 &&
-    Boolean(studentInfo?.regulation) &&
-    missingGPs.length === 0;
+  // Calculation Trace
+  const calculationTrace: CalculationTraceItem[] = uniqueSubjects.map((s, idx) => {
+    const isNonCredit = s.credits === 0;
+    const c = typeof s.credits === 'number' ? s.credits : 0;
+    const gp = s.gradePoint ?? 0;
+    const cp = isNonCredit ? 0 : c * gp;
+    const formulaStr = isNonCredit
+      ? `0 credits (Non-credit) = 0.00`
+      : `${c} × ${gp} = ${cp}`;
+    return {
+      sno: s.sno || idx + 1,
+      subjectName: s.subjectName || `Row ${s.sno || idx + 1}`,
+      subjectCode: s.subjectCode,
+      credits: c,
+      grade: s.grade,
+      gradePoint: gp,
+      creditPoints: cp,
+      isNonCredit,
+      formulaStr,
+    };
+  });
+
+  const creditsEnteredCount = uniqueSubjects.filter((s) => s.credits !== '' && s.credits !== null && Number(s.credits) >= 0).length;
+  const readyToCalculate = calculationIssues.length === 0 && uniqueSubjects.length > 0;
 
   return {
     subjectsDetected,
@@ -1052,6 +1158,10 @@ export const computeAmsAuditSummary = (
     creditsDetectedInSource: !anyUserCredits,
     preCalculationAudit,
     readyToCalculate,
+    calculationIssues,
+    creditsEnteredCount,
+    totalSubjectsCount: uniqueSubjects.length,
+    calculationTrace,
   };
 };
 
@@ -1155,12 +1265,37 @@ export const runTesseractOcr = async (
 export const processAmsDocument = async (
   file: File,
   selectedRegulation?: RegulationId | null,
-  onProgress?: (stage: string, percent: number) => void
+  onProgress?: (stage: string, percent: number) => void,
+  onStepUpdate?: (steps: ScanStepItem[]) => void
 ): Promise<AmsExtractionResult> => {
   const validation = validateAmsFile(file);
   if (!validation.valid) {
     throw new Error(validation.error || 'Invalid file');
   }
+
+  const scanSteps: ScanStepItem[] = [
+    { step: 1, title: 'Result page detected', status: 'pending' },
+    { step: 2, title: 'Student information detected', status: 'pending' },
+    { step: 3, title: 'Result table detected', status: 'pending' },
+    { step: 4, title: 'Course rows detected', status: 'pending' },
+    { step: 5, title: 'Grades detected', status: 'pending' },
+    { step: 6, title: 'Checking missing information...', status: 'pending' },
+  ];
+
+  const updateStep = (
+    stepNum: number,
+    status: 'pending' | 'in_progress' | 'completed' | 'failed',
+    detail?: string
+  ) => {
+    const s = scanSteps.find((x) => x.step === stepNum);
+    if (s) {
+      s.status = status;
+      if (detail !== undefined) s.detail = detail;
+    }
+    onStepUpdate?.([...scanSteps]);
+  };
+
+  updateStep(1, 'in_progress', 'Reading document file...');
 
   let fullRawText = '';
   const previewUrls: string[] = [];
@@ -1220,14 +1355,56 @@ export const processAmsDocument = async (
 
   onProgress?.('Reconstructing table columns, merging multi-line titles, and auditing...', 95);
 
+  // Step 1: Result page detected
+  const pageTypeCheck = detectDocumentPageType(fullRawText);
+  if (pageTypeCheck.pageType === 'AMS_RESULT_TABLE') {
+    updateStep(1, 'completed', 'Result page detected');
+  } else {
+    updateStep(1, 'failed', pageTypeCheck.unrecognizedReason || 'Could not identify an AMS result table');
+  }
+
+  // Step 2: Student information detected
+  updateStep(2, 'in_progress');
   const studentInfo = extractStudentInfo(fullRawText);
+  if (studentInfo.name || studentInfo.registerNumber || studentInfo.studentId) {
+    updateStep(2, 'completed', 'Student information detected');
+  } else {
+    updateStep(2, 'failed', 'Student details need verification');
+  }
+
+  // Step 3: Result table detected
+  updateStep(3, 'in_progress');
   const activeReg = studentInfo.regulation || selectedRegulation;
-
   const tableResult = parseStructuredAmsTextTable(fullRawText, activeReg, file.name);
-  const subjects = tableResult.subjects;
+  if (tableResult.tableDetected || tableResult.detectedColumns.length > 0) {
+    updateStep(3, 'completed', 'Result table detected');
+  } else {
+    updateStep(3, 'failed', 'Result table not detected');
+  }
 
+  // Step 4: Course rows detected
+  updateStep(4, 'in_progress');
+  const subjects = tableResult.subjects;
+  if (subjects.length > 0) {
+    updateStep(4, 'completed', 'Course rows detected');
+  } else {
+    updateStep(4, 'failed', 'Course rows not detected');
+  }
+
+  // Step 5: Grades detected
+  updateStep(5, 'in_progress');
+  const gradesDetectedCount = subjects.filter((s) => s.grade && s.grade.trim() !== '').length;
+  if (gradesDetectedCount > 0) {
+    updateStep(5, 'completed', 'Grades detected');
+  } else {
+    updateStep(5, 'failed', 'Grades not detected');
+  }
+
+  // Step 6: Checking missing information...
+  updateStep(6, 'in_progress', 'Checking missing information...');
   const duplicatesDetected = subjects.filter((s) => s.isDuplicate).length;
   const duplicatesExcluded = subjects.filter((s) => s.isExcluded).length;
+  updateStep(6, 'completed', 'Verification complete');
 
   onProgress?.('Complete!', 100);
 
@@ -1252,5 +1429,6 @@ export const processAmsDocument = async (
     extractedRowsCount: tableResult.extractedRowsCount,
     missingRowNumbers: tableResult.missingRowNumbers,
     rowAccountingVerified: tableResult.rowAccountingVerified,
+    scanSteps,
   };
 };

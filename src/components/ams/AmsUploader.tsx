@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Upload, FileText, Image as ImageIcon, AlertCircle, RefreshCw, ZoomIn, ZoomOut, RotateCw } from 'lucide-react';
 import { validateAmsFile, processAmsDocument } from '../../utils/amsExtractor';
-import type { AmsExtractionResult } from '../../types/ams';
+import type { AmsExtractionResult, ScanStepItem } from '../../types/ams';
 import type { RegulationId } from '../../config/university';
 
 interface AmsUploaderProps {
@@ -22,6 +22,15 @@ export const AmsUploader: React.FC<AmsUploaderProps> = ({
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [progressStage, setProgressStage] = useState<string>('');
   const [progressPercent, setProgressPercent] = useState<number>(0);
+
+  const [scanSteps, setScanSteps] = useState<ScanStepItem[]>([
+    { step: 1, title: 'Result page detected', status: 'pending' },
+    { step: 2, title: 'Student information detected', status: 'pending' },
+    { step: 3, title: 'Result table detected', status: 'pending' },
+    { step: 4, title: 'Course rows detected', status: 'pending' },
+    { step: 5, title: 'Grades detected', status: 'pending' },
+    { step: 6, title: 'Checking missing information...', status: 'pending' },
+  ]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -67,6 +76,15 @@ export const AmsUploader: React.FC<AmsUploaderProps> = ({
     setProgressPercent(10);
     setProgressStage('Initializing document reader...');
 
+    setScanSteps([
+      { step: 1, title: 'Result page detected', status: 'in_progress', detail: 'Reading document...' },
+      { step: 2, title: 'Student information detected', status: 'pending' },
+      { step: 3, title: 'Result table detected', status: 'pending' },
+      { step: 4, title: 'Course rows detected', status: 'pending' },
+      { step: 5, title: 'Grades detected', status: 'pending' },
+      { step: 6, title: 'Checking missing information...', status: 'pending' },
+    ]);
+
     try {
       const result = await processAmsDocument(
         selectedFile,
@@ -74,14 +92,60 @@ export const AmsUploader: React.FC<AmsUploaderProps> = ({
         (stage, pct) => {
           setProgressStage(stage);
           setProgressPercent(pct);
+        },
+        (updatedSteps) => {
+          setScanSteps(updatedSteps);
         }
       );
       onExtractionComplete(result);
     } catch (err: any) {
-      setErrorMsg(err?.message || 'Failed to process AMS result. Please try uploading a clearer image or PDF.');
+      setErrorMsg(err?.message || 'We could not reliably read all result rows. Please try uploading a clearer image or PDF.');
+      setScanSteps((prev) =>
+        prev.map((s) => (s.status === 'in_progress' ? { ...s, status: 'failed' } : s))
+      );
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const handleReviewManually = () => {
+    if (!selectedFile) return;
+    // Build an empty manual verification container for the user
+    const manualResult: AmsExtractionResult = {
+      studentInfo: {
+        name: '',
+        nameConfidence: 'none',
+        registerNumber: '',
+        regConfidence: 'none',
+        department: '',
+        program: '',
+        academicYear: '',
+        regulation: selectedRegulation || null,
+        regulationConfidence: 'none',
+        semester: null,
+        semesterConfidence: 'none',
+        college: '',
+      },
+      subjects: [],
+      duplicatesDetected: 0,
+      duplicatesExcluded: 0,
+      fileType: selectedFile.type.includes('pdf') ? 'pdf' : 'image',
+      fileName: selectedFile.name,
+      fileSize: selectedFile.size,
+      pageCount: 1,
+      previewUrls: previewUrl ? [previewUrl] : [],
+      rawText: '',
+      importedAt: Date.now(),
+      pageType: 'AMS_RESULT_TABLE',
+      tableDetected: true,
+      detectedColumns: ['Coursecode', 'Coursename', 'Grade', 'Credits'],
+      detectedRowsCount: 0,
+      extractedRowsCount: 0,
+      missingRowNumbers: [],
+      rowAccountingVerified: true,
+      scanSteps: scanSteps,
+    };
+    onExtractionComplete(manualResult);
   };
 
   const handleReset = () => {
@@ -92,6 +156,14 @@ export const AmsUploader: React.FC<AmsUploaderProps> = ({
     setZoom(1);
     setErrorMsg(null);
     setIsProcessing(false);
+    setScanSteps([
+      { step: 1, title: 'Result page detected', status: 'pending' },
+      { step: 2, title: 'Student information detected', status: 'pending' },
+      { step: 3, title: 'Result table detected', status: 'pending' },
+      { step: 4, title: 'Course rows detected', status: 'pending' },
+      { step: 5, title: 'Grades detected', status: 'pending' },
+      { step: 6, title: 'Checking missing information...', status: 'pending' },
+    ]);
   };
 
   return (
@@ -176,7 +248,7 @@ export const AmsUploader: React.FC<AmsUploaderProps> = ({
                   {selectedFile.name}
                 </span>
                 <span className="text-xs text-[var(--text-secondary)]">
-                  {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB • Ready for extraction
+                  {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB • Ready for scan
                 </span>
               </div>
             </div>
@@ -243,23 +315,68 @@ export const AmsUploader: React.FC<AmsUploaderProps> = ({
             </div>
           )}
 
-          {/* Processing Progress Bar */}
+          {/* SCAN RESULT EXPERIENCE */}
           {isProcessing ? (
-            <div className="flex flex-col gap-2.5 py-4">
-              <div className="flex items-center justify-between text-xs font-semibold text-[var(--text-primary)]">
+            <div className="flex flex-col gap-4 py-3 bg-[var(--surface-secondary)] p-4 rounded-xl border border-[var(--border-secondary)]">
+              <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-[var(--text-primary)]" />
-                  <span>{progressStage}</span>
+                  <RefreshCw className="w-4 h-4 animate-spin text-[var(--text-primary)]" />
+                  <h4 className="text-sm font-semibold text-[var(--text-primary)]">Scanning AMS Result...</h4>
                 </div>
-                <span>{progressPercent}%</span>
+                <span className="text-xs text-[var(--text-secondary)] font-mono">
+                  {progressStage ? `${progressStage} • ${progressPercent}%` : `${progressPercent}%`}
+                </span>
               </div>
-              <div className="w-full h-2 rounded-full bg-[var(--border-secondary)] overflow-hidden">
+
+              <div className="w-full h-1.5 rounded-full bg-[var(--border-secondary)] overflow-hidden">
                 <div
                   className="h-full bg-[var(--button-primary)] transition-all duration-300"
                   style={{ width: `${progressPercent}%` }}
                 />
               </div>
-              <span className="text-[11px] text-[var(--text-secondary)]">
+
+              {/* The 6 Real Scan Steps */}
+              <div className="flex flex-col gap-2 pt-1">
+                {scanSteps.map((st) => (
+                  <div key={st.step} className="flex items-center justify-between text-xs py-1 border-b border-[var(--border-secondary)]/40 last:border-0">
+                    <div className="flex items-center gap-2.5">
+                      {st.status === 'completed' ? (
+                        <span className="w-5 h-5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold text-[11px] shrink-0">
+                          ✓
+                        </span>
+                      ) : st.status === 'in_progress' ? (
+                        <span className="w-5 h-5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+                          <RefreshCw className="w-3 h-3 animate-spin" />
+                        </span>
+                      ) : st.status === 'failed' ? (
+                        <span className="w-5 h-5 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center font-bold text-[11px] shrink-0">
+                          ✕
+                        </span>
+                      ) : (
+                        <span className="w-5 h-5 rounded-full bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] text-[var(--text-tertiary)] flex items-center justify-center text-[10px] shrink-0 font-mono">
+                          {st.step}
+                        </span>
+                      )}
+                      <span className={`font-medium ${
+                        st.status === 'completed'
+                          ? 'text-[var(--text-primary)]'
+                          : st.status === 'in_progress'
+                          ? 'text-blue-600 dark:text-blue-400 font-semibold'
+                          : 'text-[var(--text-tertiary)]'
+                      }`}>
+                        Step {st.step} &bull; {st.title}
+                      </span>
+                    </div>
+                    {st.detail && (
+                      <span className="text-[11px] text-[var(--text-tertiary)] font-normal hidden sm:inline truncate max-w-xs">
+                        {st.detail}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <span className="text-[11px] text-[var(--text-secondary)] mt-1">
                 Processing locally in your browser. No files are uploaded to any external server.
               </span>
             </div>
@@ -270,20 +387,38 @@ export const AmsUploader: React.FC<AmsUploaderProps> = ({
                 onClick={startExtraction}
                 className="apple-btn-primary w-full sm:w-auto text-sm h-11 px-6 font-semibold"
               >
-                Extract Academic Result
+                Scan Result
               </button>
             </div>
           )}
         </div>
       )}
 
-      {/* Error Notice */}
+      {/* Error Notice / OCR Failure Recovery */}
       {errorMsg && (
-        <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 flex items-start gap-3 text-xs text-rose-700 dark:text-rose-300">
-          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
-          <div className="flex flex-col gap-1">
-            <span className="font-semibold">Unable to process document</span>
-            <span>{errorMsg}</span>
+        <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 flex flex-col gap-3 text-xs text-rose-700 dark:text-rose-300">
+          <div className="flex items-start gap-2.5">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
+            <div className="flex flex-col gap-1">
+              <span className="font-semibold text-sm">We could not reliably read all result rows.</span>
+              <span>{errorMsg}</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 self-end pt-1">
+            <button
+              type="button"
+              onClick={startExtraction}
+              className="apple-btn-secondary text-xs h-8 px-3"
+            >
+              Try Again
+            </button>
+            <button
+              type="button"
+              onClick={handleReviewManually}
+              className="apple-btn-primary text-xs h-8 px-3"
+            >
+              Review Manually
+            </button>
           </div>
         </div>
       )}
