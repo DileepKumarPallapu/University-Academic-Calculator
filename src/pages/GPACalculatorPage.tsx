@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Trash2, RotateCcw, Download, ChevronDown, Edit3, FileUp } from 'lucide-react';
+import { Plus, Trash2, RotateCcw, Download, ChevronDown } from 'lucide-react';
 import { calculateGPA, formatFixed } from '../utils/calculations';
 import { REGULATIONS, type RegulationId } from '../config/university';
 import type { SubjectItem } from '../types';
@@ -15,11 +15,6 @@ import { useAppToast } from '../components/layout/AppShell';
 import { DraftIndicator } from '../components/common/DraftIndicator';
 import { QuickStartPrompt } from '../components/common/QuickStartPrompt';
 import { CalculationStatus } from '../components/common/CalculationStatus';
-import { AmsUploader } from '../components/ams/AmsUploader';
-import { AmsSideBySideReview } from '../components/ams/AmsSideBySideReview';
-import { AmsResultReport } from '../components/ams/AmsResultReport';
-import { AmsPrintReport } from '../components/ams/AmsPrintReport';
-import type { AmsExtractionResult, AmsStudentInfo, AmsSubject, AmsAuditSummary } from '../types/ams';
 
 export const GPACalculatorPage: React.FC = () => {
   const { profile, studentName, setStudentName, updateProfile, nameError, setNameError } = useStudentProfile();
@@ -27,37 +22,6 @@ export const GPACalculatorPage: React.FC = () => {
   const studentNameInputRef = useRef<HTMLInputElement>(null);
   const [isGradeScaleOpen, setIsGradeScaleOpen] = useState(false);
   const [calcSuccess, setCalcSuccess] = useState(false);
-
-  // Calculation Method: 'manual' or 'ams'
-  const [calculationMethod, setCalculationMethod] = useState<'manual' | 'ams'>(() => {
-    try {
-      const urlParams = new URLSearchParams(window.location.search);
-      if (urlParams.get('method') === 'ams') return 'ams';
-    } catch {}
-    return 'manual';
-  });
-
-  // AMS Extractor Stages: 'upload' | 'review' | 'result'
-  const [amsStage, setAmsStage] = useState<'upload' | 'review' | 'result'>('upload');
-  const [amsExtractionResult, setAmsExtractionResult] = useState<AmsExtractionResult | null>(null);
-  const [amsConfirmedInfo, setAmsConfirmedInfo] = useState<AmsStudentInfo | null>(null);
-  const [amsConfirmedSubjects, setAmsConfirmedSubjects] = useState<AmsSubject[]>([]);
-  const [amsAuditSummary, setAmsAuditSummary] = useState<AmsAuditSummary | null>(null);
-  const [amsOriginalPreviewUrl, setAmsOriginalPreviewUrl] = useState<string | undefined>(undefined);
-  const [amsIncludeOriginalInPdf, setAmsIncludeOriginalInPdf] = useState<boolean>(true);
-
-  const handleAmsPrint = (includeOriginal: boolean) => {
-    setAmsIncludeOriginalInPdf(includeOriginal);
-    const prevTitle = document.title;
-    const name = amsConfirmedInfo?.name?.trim() || studentName.trim() || 'Student';
-    const safeName = name.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const dateStr = new Date().toISOString().split('T')[0];
-    document.title = `${safeName}_AMS_SGPA_${dateStr}.pdf`;
-    setTimeout(() => {
-      window.print();
-      document.title = prevTitle;
-    }, 50);
-  };
 
   // Regulation selection with localStorage persistence or draft
   const [regulation, setRegulation] = useState<RegulationId>(() => {
@@ -364,44 +328,7 @@ export const GPACalculatorPage: React.FC = () => {
           </p>
         </div>
 
-        {/* Method Switcher */}
-        <div className="flex flex-col gap-2">
-          <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
-            Choose Calculation Method
-          </span>
-          <div className="inline-flex p-1.5 rounded-2xl bg-[var(--surface-sunken)] border border-[var(--border-secondary)] max-w-md w-full">
-            <button
-              type="button"
-              onClick={() => setCalculationMethod('manual')}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
-                calculationMethod === 'manual'
-                  ? 'bg-[var(--surface)] text-[var(--text-primary)] shadow-sm'
-                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-              }`}
-            >
-              <Edit3 className="w-4 h-4" />
-              <span>Enter Manually</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setCalculationMethod('ams')}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
-                calculationMethod === 'ams'
-                  ? 'bg-[var(--surface)] text-[var(--text-primary)] shadow-sm'
-                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-              }`}
-            >
-              <FileUp className="w-4 h-4 text-[var(--accent)]" />
-              <span>Import AMS Result</span>
-              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--accent)] text-white font-bold uppercase tracking-wider">
-                Auto
-              </span>
-            </button>
-          </div>
-        </div>
 
-        {calculationMethod === 'manual' ? (
-          <>
             {/* Student Name Input */}
             <StudentNameInput
               value={studentName}
@@ -1202,77 +1129,10 @@ export const GPACalculatorPage: React.FC = () => {
           </div>
         </div>
       </div>
-    </>
-  ) : (
-    <div className="flex flex-col gap-8">
-          {amsStage === 'upload' && (
-            <AmsUploader
-              selectedRegulation={regulation}
-              onExtractionComplete={(result) => {
-                setAmsExtractionResult(result);
-                setAmsStage('review');
-                showToast('Result extracted. Please review and verify the courses.', 'success');
-              }}
-            />
-          )}
-
-          {amsStage === 'review' && amsExtractionResult && (
-            <AmsSideBySideReview
-              initialResult={amsExtractionResult}
-              onConfirmCalculation={(confirmedInfo, confirmedSubs, audit, previewUrl) => {
-                setAmsConfirmedInfo(confirmedInfo);
-                setAmsConfirmedSubjects(confirmedSubs);
-                setAmsAuditSummary(audit);
-                setAmsOriginalPreviewUrl(previewUrl);
-                setAmsStage('result');
-
-                saveRecentCalculation({
-                  type: 'gpa',
-                  title: `AMS SGPA (Semester ${confirmedInfo.semester || selectedSemester}, ${confirmedInfo.regulation || regulation})`,
-                  value: audit.sgpa !== null ? `${formatFixed(audit.sgpa, 2)} / 10` : '—',
-                  subtext: `${audit.totalCredits} Credits • ${audit.subjectsIncluded} Subjects`,
-                  route: '/gpa',
-                });
-
-                if (confirmedInfo.name && !studentName) {
-                  setStudentName(confirmedInfo.name);
-                }
-
-                showToast('SGPA calculated successfully from AMS Result.', 'success');
-              }}
-              onCancel={() => {
-                setAmsStage('upload');
-                setAmsExtractionResult(null);
-              }}
-            />
-          )}
-
-          {amsStage === 'result' && amsConfirmedInfo && amsAuditSummary && (
-            <AmsResultReport
-              studentInfo={amsConfirmedInfo}
-              subjects={amsConfirmedSubjects}
-              auditSummary={amsAuditSummary}
-              originalPreviewUrl={amsOriginalPreviewUrl}
-              onEditData={() => setAmsStage('review')}
-              onReset={() => {
-                setAmsStage('upload');
-                setAmsExtractionResult(null);
-                setAmsConfirmedInfo(null);
-                setAmsConfirmedSubjects([]);
-                setAmsAuditSummary(null);
-              }}
-              onPrint={(includeOriginal) => {
-                handleAmsPrint(includeOriginal);
-              }}
-            />
-          )}
-        </div>
-      )}
     </div>
 
     {/* Dedicated A4 Print Report */}
-    {calculationMethod === 'manual' ? (
-      <AcademicPrintReport
+    <AcademicPrintReport
         reportTitle="SGPA Report"
         calculatorName="SGPA Calculator"
         reportType="SGPA"
@@ -1353,15 +1213,6 @@ export const GPACalculatorPage: React.FC = () => {
           </tfoot>
         </table>
       </AcademicPrintReport>
-    ) : amsConfirmedInfo && amsAuditSummary ? (
-      <AmsPrintReport
-        studentInfo={amsConfirmedInfo}
-        subjects={amsConfirmedSubjects}
-        auditSummary={amsAuditSummary}
-        originalPreviewUrl={amsOriginalPreviewUrl}
-        includeOriginalInPdf={amsIncludeOriginalInPdf}
-      />
-    ) : null}
 
     {/* Grade Scale Modal */}
     <GradeScaleModal
