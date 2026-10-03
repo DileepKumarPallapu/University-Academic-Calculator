@@ -3,6 +3,62 @@ import type { RegulationId } from '../config/university';
 export type ConfidenceLevel = 'high' | 'medium' | 'low' | 'none';
 export type FieldSource = 'AMS' | 'USER' | 'PROFILE' | 'REGULATION' | 'AMS + User';
 
+export type AmsFileType = 'image' | 'pdf' | 'csv' | 'excel';
+
+export type DocumentClassification =
+  | 'AMS_RESULT'
+  | 'SEMESTER_RESULT'
+  | 'MARKS_STATEMENT'
+  | 'GRADE_SHEET'
+  | 'ACADEMIC_TRANSCRIPT'
+  | 'UNKNOWN_ACADEMIC_DOCUMENT'
+  | 'UNSUPPORTED';
+
+export interface DetectedFormatInfo {
+  formatName: string;
+  formatDescription?: string;
+  confidence: 'High' | 'Medium' | 'Review';
+  detectedColumns: string[];
+  missingColumns: string[];
+  tablePresence: boolean;
+  headerRowIndex?: number;
+  hasStudentInfoArea: boolean;
+  availableColumnsCount: number;
+  notes?: string;
+}
+
+export interface ColumnMapping {
+  sno?: string;
+  courseCode?: string;
+  subjectName?: string;
+  credits?: string;
+  grade?: string;
+  gradePoint?: string;
+  resultStatus?: string;
+  [key: string]: string | undefined;
+}
+
+export interface StudentFieldVerification {
+  field: string;
+  label: string;
+  value: string;
+  sources: string[];
+  isAgreement: boolean;
+  status: 'verified' | 'review_required';
+}
+
+export interface ProfileMatchResult {
+  isMatch: boolean;
+  hasSavedProfile: boolean;
+  status: 'match' | 'different' | 'none';
+  savedName?: string;
+  importedName?: string;
+  savedRegNo?: string;
+  importedRegNo?: string;
+  diffs: { field: string; saved: string; imported: string }[];
+  differences?: { field: string; saved?: string; profileValue?: string; imported?: string; importedValue?: string }[];
+}
+
 export interface AmsStudentInfo {
   name: string;
   nameConfidence: ConfidenceLevel;
@@ -34,6 +90,7 @@ export interface AmsStudentInfo {
   college: string;
   studentNameMismatch?: boolean;
   nameVerified?: boolean;
+  verifications?: StudentFieldVerification[];
 }
 
 export interface AmsSubject {
@@ -52,6 +109,7 @@ export interface AmsSubject {
   isExcluded: boolean;
   isManuallyEdited: boolean;
   hasOriginalCredits?: boolean;
+  semesterContext?: number; // Semester context for cross-semester duplicate protection
   originalValues?: {
     subjectCode: string | null;
     subjectName: string;
@@ -101,7 +159,7 @@ export interface AmsExtractionResult {
   subjects: AmsSubject[];
   duplicatesDetected: number;
   duplicatesExcluded: number;
-  fileType: 'image' | 'pdf';
+  fileType: AmsFileType;
   fileName: string;
   fileSize: number;
   pageCount: number;
@@ -110,6 +168,9 @@ export interface AmsExtractionResult {
   imageQualityWarning?: string;
   importedAt: number;
   pageType: AmsPageType;
+  documentClassification?: DocumentClassification;
+  formatInfo?: DetectedFormatInfo;
+  columnMapping?: ColumnMapping;
   unrecognizedReason?: string;
   tableDetected?: boolean;
   detectedColumns?: string[];
@@ -118,6 +179,7 @@ export interface AmsExtractionResult {
   missingRowNumbers?: number[];
   rowAccountingVerified?: boolean;
   scanSteps?: ScanStepItem[];
+  profileMatch?: ProfileMatchResult;
 }
 
 export interface AmsAuditSummary {
@@ -148,3 +210,50 @@ export interface AmsAuditSummary {
   calculationTrace?: CalculationTraceItem[];
 }
 
+export interface AmsSemesterResult {
+  id: string;
+  semesterNumber: number;
+  semesterLabel: string;
+  studentInfo?: AmsStudentInfo;
+  subjects?: AmsSubject[];
+  subjectsCount?: number;
+  auditSummary?: AmsAuditSummary;
+  fileName?: string;
+  previewUrl?: string;
+  sgpa: number | null;
+  totalCredits: number;
+  totalQualityPoints: number;
+  isVerified: boolean;
+  verified?: boolean;
+}
+
+export interface AmsCgpaResult {
+  semesters: AmsSemesterResult[];
+  totalCredits: number;
+  totalQualityPoints: number;
+  cgpa: number | null;
+  calculationTrace: {
+    semesterLabel: string;
+    sgpa: number;
+    credits: number;
+    weightedPoints: number;
+    formulaStr: string;
+  }[];
+}
+
+export interface RecentAmsImport {
+  id: string;
+  timestamp: number;
+  calculationType: 'SGPA' | 'CGPA';
+  studentName: string;
+  registerNumber: string;
+  semesterLabel: string;
+  score: number; // SGPA or CGPA
+  totalCredits: number;
+  totalQualityPoints: number;
+  subjectCount: number;
+  regulation: string;
+  extractionResult?: AmsExtractionResult;
+  auditSummary?: AmsAuditSummary;
+  cgpaResult?: AmsCgpaResult;
+}

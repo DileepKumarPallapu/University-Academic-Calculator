@@ -14,6 +14,8 @@ import {
   X,
   Eye,
   Maximize2,
+  SlidersHorizontal,
+  Layers,
 } from 'lucide-react';
 import type {
   AmsExtractionResult,
@@ -123,10 +125,13 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
     });
   };
 
+  const [profileDiffDismissed, setProfileDiffDismissed] = useState<boolean>(false);
+
   // Student Profile comparison check
   const profileDiffers =
-    Boolean(profile?.name && studentInfo.name && profile.name.trim().toLowerCase() !== studentInfo.name.trim().toLowerCase()) ||
-    Boolean(profile?.rollNumber && studentInfo.registerNumber && profile.rollNumber.trim().toUpperCase() !== studentInfo.registerNumber.trim().toUpperCase());
+    !profileDiffDismissed &&
+    (Boolean(profile?.name && studentInfo.name && profile.name.trim().toLowerCase() !== studentInfo.name.trim().toLowerCase()) ||
+    Boolean(profile?.rollNumber && studentInfo.registerNumber && profile.rollNumber.trim().toUpperCase() !== studentInfo.registerNumber.trim().toUpperCase()));
 
   const applySavedProfile = () => {
     if (!profile) return;
@@ -250,10 +255,10 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
     );
   };
 
-  // Bulk credit entry state
+  // Bulk credit entry and column mapping state
   const [showBulkCreditModal, setShowBulkCreditModal] = useState<boolean>(false);
+  const [showColumnMappingModal, setShowColumnMappingModal] = useState<boolean>(false);
   const [bulkCreditText, setBulkCreditText] = useState<string>('');
-  const [profileDiffDismissed, setProfileDiffDismissed] = useState<boolean>(false);
 
   const includedSubjects = subjects.filter((s) => !s.isExcluded);
   const parsedBulkTokens = bulkCreditText
@@ -336,52 +341,181 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
 
   return (
     <div className="w-full flex flex-col gap-6">
-      {/* Top Banner & Header Card */}
-      <div className="apple-card p-6 border border-[var(--border-primary)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-[var(--accent)]">
-              REVIEW IMPORTED RESULT
-            </span>
-            <span className="text-[var(--text-tertiary)]">•</span>
-            <span className="text-xs text-[var(--text-secondary)]">{initialResult.fileName}</span>
+      {/* 1. AMS IMPORT REVIEW DASHBOARD (Requirement 37) */}
+      <div className="apple-card p-5 sm:p-6 border border-[var(--border-primary)] bg-[var(--surface)]">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[var(--accent)]/10 text-[var(--accent)] flex items-center justify-center font-bold shrink-0">
+              <Layers className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--accent)]">
+                  AMS IMPORT REVIEW
+                </span>
+                <span className="text-xs text-[var(--text-tertiary)]">•</span>
+                <span className="text-xs font-mono text-[var(--text-secondary)] truncate max-w-[200px] sm:max-w-xs">{initialResult.fileName}</span>
+              </div>
+              <h2 className="text-lg sm:text-xl font-bold text-[var(--text-primary)] mt-0.5">
+                Review & Validation Dashboard
+              </h2>
+            </div>
           </div>
-          <h2 className="text-xl font-bold text-[var(--text-primary)] mt-1">
-            Verify Extracted Academic Information
-          </h2>
-          <p className="text-xs text-[var(--text-secondary)] mt-1">
-            Review the extracted student details, subject credits, and grades. Verify every row before calculating SGPA.
-          </p>
-        </div>
 
-        <div className="flex flex-wrap items-center gap-2 shrink-0">
-          {initialResult.previewUrls.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            {audit.readyToCalculate ? (
+              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 text-xs font-semibold">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                <span>Ready to Calculate</span>
+              </div>
+            ) : (
+              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20 text-xs font-semibold">
+                <AlertTriangle className="w-4 h-4 text-amber-600" />
+                <span>Action Required ({audit.fieldsRequiringInput || (audit.calculationIssues?.length || 1)} items)</span>
+              </div>
+            )}
+            {initialResult.previewUrls.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setIsViewerModalOpen(true)}
+                className="apple-btn-secondary text-xs h-9 px-3 gap-1.5 flex items-center"
+              >
+                <Eye className="w-3.5 h-3.5 text-[var(--text-primary)]" />
+                <span>Original Document</span>
+              </button>
+            )}
             <button
               type="button"
-              onClick={() => setIsViewerModalOpen(true)}
-              className="apple-btn-secondary text-xs h-9 px-3 gap-1.5 flex items-center"
+              onClick={handleResetToImported}
+              className="apple-btn-secondary text-xs h-9 px-3"
+              title="Reset any manual corrections back to original extracted text"
             >
-              <Eye className="w-3.5 h-3.5 text-[var(--text-primary)]" />
-              <span>View Original AMS Result</span>
+              Reset
             </button>
-          )}
-          <button
-            type="button"
-            onClick={handleResetToImported}
-            className="apple-btn-secondary text-xs h-9 px-3"
-            title="Reset any manual corrections back to original extracted text"
-          >
-            Reset to Imported
-          </button>
-          <button
-            type="button"
-            onClick={onCancel}
-            className="apple-btn-secondary text-xs h-9 px-3 text-[var(--text-secondary)] hover:text-rose-600"
-          >
-            Cancel
-          </button>
+            <button
+              type="button"
+              onClick={onCancel}
+              className="apple-btn-secondary text-xs h-9 px-3 text-[var(--text-secondary)] hover:text-rose-600"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+
+        {/* Status Metrics Bar */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-4 border-t border-[var(--border-secondary)]">
+          <div>
+            <span className="text-[10px] uppercase font-bold text-[var(--text-tertiary)] block">Document Type</span>
+            <span className="text-xs font-semibold text-[var(--text-primary)] truncate block mt-0.5">
+              {initialResult.formatInfo?.formatName || 'AMS Result Document'}
+            </span>
+          </div>
+          <div>
+            <span className="text-[10px] uppercase font-bold text-[var(--text-tertiary)] block">Confidence Score</span>
+            <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 capitalize block mt-0.5">
+              {initialResult.formatInfo?.confidence || 'High'} Confidence
+            </span>
+          </div>
+          <div>
+            <span className="text-[10px] uppercase font-bold text-[var(--text-tertiary)] block">Extracted Subjects</span>
+            <span className="text-xs font-semibold text-[var(--text-primary)] block mt-0.5">
+              {subjects.length} Total ({audit.creditBearingCount} Credit-bearing)
+            </span>
+          </div>
+          <div>
+            <span className="text-[10px] uppercase font-bold text-[var(--text-tertiary)] block">Missing Credits</span>
+            <span className={`text-xs font-semibold block mt-0.5 ${subjects.some(s => !s.isExcluded && (s.credits === '' || s.credits === null)) ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+              {subjects.filter(s => !s.isExcluded && (s.credits === '' || s.credits === null)).length > 0
+                ? `${subjects.filter(s => !s.isExcluded && (s.credits === '' || s.credits === null)).length} need input`
+                : 'All credits entered'}
+            </span>
+          </div>
         </div>
       </div>
+
+      {/* 2. FORMAT DETECTION & COLUMN MAPPING CARD (Requirement 4) */}
+      <div className="apple-card p-4 sm:p-5 border border-[var(--border-primary)] bg-[var(--surface-secondary)] flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--accent)]">
+              AMS RESULT FORMAT DETECTED
+            </span>
+            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 uppercase">
+              {initialResult.formatInfo?.confidence || 'High'} Confidence
+            </span>
+          </div>
+          <div className="text-sm font-bold text-[var(--text-primary)]">
+            {initialResult.formatInfo?.formatName || 'University AMS Result Format'}
+          </div>
+          
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="text-[11px] text-[var(--text-tertiary)] font-medium">Detected Columns:</span>
+            {(initialResult.formatInfo?.detectedColumns && initialResult.formatInfo.detectedColumns.length > 0
+              ? initialResult.formatInfo.detectedColumns
+              : ['Coursecode', 'Coursename', 'Grade', 'Result', 'Register No']
+            ).map((col) => (
+              <span key={col} className="px-2 py-0.5 rounded bg-[var(--surface)] text-[var(--text-primary)] border border-[var(--border-secondary)] text-[11px] font-mono">
+                {col}
+              </span>
+            ))}
+
+            {initialResult.formatInfo?.missingColumns && initialResult.formatInfo.missingColumns.length > 0 && (
+              <>
+                <span className="text-[11px] text-amber-600 dark:text-amber-400 font-medium ml-2">Missing:</span>
+                {initialResult.formatInfo.missingColumns.map((col) => (
+                  <span key={col} className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20 text-[11px]">
+                    {col}
+                  </span>
+                ))}
+              </>
+            )}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setShowColumnMappingModal(true)}
+          className="apple-btn-secondary text-xs h-9 px-3 gap-1.5 flex items-center shrink-0 self-start md:self-center"
+        >
+          <SlidersHorizontal className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
+          <span>Review Column Mapping</span>
+        </button>
+      </div>
+
+      {/* 3. STUDENT PROFILE MATCH BANNER (Requirement 9) */}
+      {profileDiffers && (
+        <div className="apple-card p-4 border border-blue-500/30 bg-blue-500/5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-fade-in">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 mt-0.5">
+              <AlertTriangle className="w-4 h-4" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <h4 className="text-xs font-bold text-[var(--text-primary)]">
+                Student Profile Discrepancy Detected
+              </h4>
+              <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+                Imported AMS result contains <strong>{studentInfo.name || 'Unknown'}</strong> ({studentInfo.registerNumber || 'No Reg No'}), but your saved profile has <strong>{profile?.name}</strong> ({profile?.rollNumber}).
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={applySavedProfile}
+              className="apple-btn-primary text-xs h-8 px-3"
+            >
+              Keep Saved Profile
+            </button>
+            <button
+              type="button"
+              onClick={() => setProfileDiffDismissed(true)}
+              className="apple-btn-secondary text-xs h-8 px-3"
+            >
+              Use Imported Data
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 2. SCAN SUMMARY CARD (Requirement 2 & 3) */}
       <div className="apple-card p-5 border border-[var(--border-primary)] flex flex-col gap-4">
@@ -1406,21 +1540,28 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
             </div>
 
             {/* Validation badge */}
-            <div className="flex items-center justify-between text-xs p-2.5 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-secondary)]">
-              <span className="text-[var(--text-secondary)]">
-                Count: <strong>{validBulkCredits.length}</strong> / {includedSubjects.length}
-              </span>
-              {bulkCreditCountMatches ? (
-                <span className="font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Ready to apply
+            <div className="flex flex-col gap-2 p-2.5 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-secondary)]">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-[var(--text-secondary)]">
+                  Count: <strong>{validBulkCredits.length}</strong> / {includedSubjects.length}
                 </span>
-              ) : (
-                <span className="font-semibold text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                  <AlertTriangle className="w-3.5 h-3.5" />
-                  {validBulkCredits.length > includedSubjects.length
-                    ? `${validBulkCredits.length - includedSubjects.length} extra`
-                    : `Needs ${includedSubjects.length - validBulkCredits.length} more`}
-                </span>
+                {bulkCreditCountMatches ? (
+                  <span className="font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Ready to apply
+                  </span>
+                ) : (
+                  <span className="font-semibold text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    {validBulkCredits.length > includedSubjects.length
+                      ? `${validBulkCredits.length - includedSubjects.length} extra`
+                      : `Needs ${includedSubjects.length - validBulkCredits.length} more`}
+                  </span>
+                )}
+              </div>
+              {parsedBulkTokens.length > 0 && !bulkCreditCountMatches && (
+                <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium pt-1 border-t border-[var(--border-secondary)]">
+                  {validBulkCredits.length} credit values provided for {includedSubjects.length} subjects.
+                </p>
               )}
             </div>
 
@@ -1439,6 +1580,71 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
                 className="apple-btn-primary text-xs h-9 px-4 disabled:opacity-40 font-semibold"
               >
                 Apply Credits
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Column Mapping Review Modal (Requirement 12) */}
+      {showColumnMappingModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-lg bg-[var(--surface)] border border-[var(--border-primary)] rounded-2xl p-6 shadow-2xl flex flex-col gap-5">
+            <div className="flex items-center justify-between border-b border-[var(--border-secondary)] pb-3">
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 rounded-lg bg-[var(--bg-tertiary)] text-[var(--accent)]">
+                  <SlidersHorizontal className="w-4 h-4" />
+                </span>
+                <div>
+                  <h3 className="font-bold text-sm text-[var(--text-primary)]">
+                    Column Mapping Review
+                  </h3>
+                  <span className="text-[11px] text-[var(--text-secondary)]">
+                    Verify how table columns were detected and mapped
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowColumnMappingModal(false)}
+                className="p-1 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+              {[
+                { field: 'courseCode', label: 'Course / Subject Code', current: initialResult.columnMapping?.courseCode || 'Coursecode' },
+                { field: 'courseName', label: 'Course / Subject Name', current: initialResult.columnMapping?.courseName || 'Coursename' },
+                { field: 'grade', label: 'Letter Grade', current: initialResult.columnMapping?.grade || 'Grade' },
+                { field: 'credits', label: 'Subject Credits', current: initialResult.columnMapping?.credits || 'Credits (Not in AMS)' },
+                { field: 'resultStatus', label: 'Result Status (Pass/RA)', current: initialResult.columnMapping?.resultStatus || 'Result' },
+                { field: 'studentName', label: 'Student Name', current: initialResult.columnMapping?.studentName || 'Name' },
+                { field: 'registerNumber', label: 'Register Number', current: initialResult.columnMapping?.registerNumber || 'Register No' },
+              ].map(({ field, label, current }) => (
+                <div key={field} className="flex items-center justify-between p-2.5 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border-secondary)] text-xs">
+                  <div className="flex flex-col">
+                    <span className="font-semibold text-[var(--text-primary)]">{label}</span>
+                    <span className="text-[11px] text-[var(--text-tertiary)]">Target property</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-1 rounded bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] font-mono text-[11px] text-[var(--text-secondary)]">
+                      {current}
+                    </span>
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border-secondary)]">
+              <button
+                type="button"
+                onClick={() => setShowColumnMappingModal(false)}
+                className="apple-btn-primary text-xs h-9 px-4 font-semibold"
+              >
+                Confirm Mapping
               </button>
             </div>
           </div>

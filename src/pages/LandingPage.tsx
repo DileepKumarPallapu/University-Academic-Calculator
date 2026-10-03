@@ -47,7 +47,7 @@ export const LandingPage: React.FC = () => {
             Calculate SGPA
           </Link>
           <Link
-            to="/gpa?method=ams"
+            to="/ams"
             className="apple-btn-secondary text-xs h-9 px-3.5 py-0 rounded-full font-medium flex items-center gap-1.5 border-[var(--accent)]/40 hover:border-[var(--accent)] text-[var(--accent)]"
           >
             <FileUp className="w-3.5 h-3.5" />

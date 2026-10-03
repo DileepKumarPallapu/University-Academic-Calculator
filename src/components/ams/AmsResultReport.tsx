@@ -4,9 +4,14 @@ import {
   Copy,
   Share2,
   Check,
+  Download,
+  FileSpreadsheet,
+  Bookmark,
 } from 'lucide-react';
 import type { AmsStudentInfo, AmsSubject, AmsAuditSummary } from '../../types/ams';
 import { formatFixed } from '../../utils/calculations';
+import { exportAmsToExcel, exportAmsToCsv } from '../../utils/amsExtractor';
+import { saveRecentAmsImport } from '../../utils/recentAmsImports';
 import { useAppToast } from '../layout/AppShell';
 
 interface AmsResultReportProps {
@@ -73,6 +78,63 @@ export const AmsResultReport: React.FC<AmsResultReportProps> = ({
       }
     } else {
       handleCopyText();
+    }
+  };
+
+  const [isSaved, setIsSaved] = useState<boolean>(false);
+
+  const handleExportExcel = async () => {
+    try {
+      await exportAmsToExcel(studentInfo, subjects, auditSummary);
+      showToast('Excel report downloaded successfully.', 'success');
+    } catch {
+      showToast('Failed to export Excel file.', 'error');
+    }
+  };
+
+  const handleExportCsv = () => {
+    try {
+      exportAmsToCsv(studentInfo, subjects, auditSummary);
+      showToast('CSV report downloaded successfully.', 'success');
+    } catch {
+      showToast('Failed to export CSV file.', 'error');
+    }
+  };
+
+  const handleSaveCalculation = () => {
+    try {
+      saveRecentAmsImport({
+        id: `ams-sgpa-${Date.now()}`,
+        timestamp: Date.now(),
+        calculationType: 'SGPA',
+        studentName: studentInfo.name || 'Verified Student',
+        registerNumber: studentInfo.registerNumber || '—',
+        semesterLabel: `Semester ${studentInfo.semester || 1}`,
+        score: auditSummary.sgpa ?? 0,
+        totalCredits: auditSummary.totalCredits,
+        totalQualityPoints: auditSummary.totalQualityPoints,
+        subjectCount: subjects.filter((s) => !s.isExcluded).length,
+        regulation: studentInfo.regulation || 'VTR21',
+        extractionResult: {
+          studentInfo,
+          subjects,
+          duplicatesDetected: auditSummary.duplicatesCount,
+          duplicatesExcluded: auditSummary.duplicatesExcluded,
+          fileType: 'image',
+          fileName: 'Imported Result',
+          fileSize: 0,
+          pageCount: 1,
+          previewUrls: originalPreviewUrl ? [originalPreviewUrl] : [],
+          rawText: '',
+          importedAt: Date.now(),
+          pageType: 'AMS_RESULT_TABLE',
+        },
+        auditSummary,
+      });
+      setIsSaved(true);
+      showToast('Calculation saved to Recent Imports.', 'success');
+    } catch {
+      showToast('Failed to save calculation.', 'error');
     }
   };
 
@@ -421,8 +483,39 @@ export const AmsResultReport: React.FC<AmsResultReportProps> = ({
               <span>Print / Save PDF Report</span>
             </button>
 
-            {/* Copy & Share Buttons */}
+            {/* Excel & CSV Export Buttons (Requirements 47 & 48) */}
             <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={handleExportExcel}
+                className="apple-btn-secondary text-xs h-10 gap-1.5"
+                title="Download formatted Excel workbook"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Export Excel</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleExportCsv}
+                className="apple-btn-secondary text-xs h-10 gap-1.5"
+                title="Download academic data as CSV"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Export CSV</span>
+              </button>
+            </div>
+
+            {/* Save, Copy & Share Buttons (Requirements 49, 50, 51) */}
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={handleSaveCalculation}
+                className="apple-btn-secondary text-xs h-10 gap-1.5"
+                title="Save calculation locally for fast retrieval"
+              >
+                <Bookmark className={`w-3.5 h-3.5 ${isSaved ? 'text-amber-500 fill-amber-500' : ''}`} />
+                <span>{isSaved ? 'Saved' : 'Save'}</span>
+              </button>
               <button
                 type="button"
                 onClick={handleCopyText}

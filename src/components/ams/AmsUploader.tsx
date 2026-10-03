@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Upload, FileText, Image as ImageIcon, AlertCircle, RefreshCw, ZoomIn, ZoomOut, RotateCw } from 'lucide-react';
+import { Upload, FileText, Image as ImageIcon, FileSpreadsheet, AlertCircle, RefreshCw, ZoomIn, ZoomOut, RotateCw } from 'lucide-react';
 import { validateAmsFile, processAmsDocument } from '../../utils/amsExtractor';
 import type { AmsExtractionResult, ScanStepItem } from '../../types/ams';
 import type { RegulationId } from '../../config/university';
@@ -184,7 +184,7 @@ export const AmsUploader: React.FC<AmsUploaderProps> = ({
           <input
             ref={fileInputRef}
             type="file"
-            accept=".png,.jpg,.jpeg,.webp,.pdf,image/png,image/jpeg,application/pdf"
+            accept=".png,.jpg,.jpeg,.webp,.pdf,.csv,.xlsx,.xls,image/png,image/jpeg,image/webp,application/pdf,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
             className="hidden"
             onChange={(e) => {
               if (e.target.files && e.target.files[0]) {
@@ -197,26 +197,41 @@ export const AmsUploader: React.FC<AmsUploaderProps> = ({
             <Upload className="w-7 h-7 text-[var(--text-primary)]" />
           </div>
 
-          <h3 className="text-lg font-semibold text-[var(--text-primary)]">
+          <span className="text-xs font-bold tracking-wider uppercase text-[var(--accent)] mb-1">
+            AMS RESULT IMPORT
+          </span>
+          <h3 className="text-lg sm:text-xl font-bold text-[var(--text-primary)]">
             Upload AMS Examination Result
           </h3>
-          <p className="text-sm text-[var(--text-secondary)] mt-1.5 max-w-md">
-            Drag and drop your result screenshot or PDF, or click to browse files.
+          <p className="text-sm font-medium text-[var(--text-secondary)] mt-1 max-w-md">
+            Import your university result and automatically prepare SGPA / CGPA data.
+          </p>
+          <p className="text-xs text-[var(--text-tertiary)] mt-1.5 max-w-md leading-relaxed">
+            Upload an AMS screenshot, PDF, or supported result file. We'll extract available academic information and ask only for information that is missing.
           </p>
 
-          <div className="flex flex-wrap items-center justify-center gap-2 mt-5 text-[11px] font-semibold text-[var(--text-tertiary)]">
-            <span className="px-2.5 py-1 rounded-md bg-[var(--bg-secondary)] border border-[var(--border-secondary)]">
-              PNG
+          {/* Supported Inputs Priority & Badges (Requirement 2) */}
+          <div className="flex flex-col items-center gap-2 mt-5">
+            <span className="text-[10px] font-semibold tracking-wider uppercase text-[var(--text-tertiary)]">
+              Input Priority: 1. PDF • 2. Image • 3. Excel / CSV
             </span>
-            <span className="px-2.5 py-1 rounded-md bg-[var(--bg-secondary)] border border-[var(--border-secondary)]">
-              JPG / JPEG
-            </span>
-            <span className="px-2.5 py-1 rounded-md bg-[var(--bg-secondary)] border border-[var(--border-secondary)]">
-              PDF (Text & Scanned)
-            </span>
-            <span className="px-2.5 py-1 rounded-md bg-[var(--bg-secondary)] border border-[var(--border-secondary)]">
-              Up to 30 MB
-            </span>
+            <div className="flex flex-wrap items-center justify-center gap-2 text-[11px] font-semibold text-[var(--text-secondary)]">
+              <span className="px-2.5 py-1 rounded-md bg-[var(--bg-secondary)] border border-[var(--border-secondary)]">
+                PDF (Text & Scanned)
+              </span>
+              <span className="px-2.5 py-1 rounded-md bg-[var(--bg-secondary)] border border-[var(--border-secondary)]">
+                PNG / JPG / WEBP
+              </span>
+              <span className="px-2.5 py-1 rounded-md bg-[var(--bg-secondary)] border border-[var(--border-secondary)]">
+                Excel (XLSX, XLS)
+              </span>
+              <span className="px-2.5 py-1 rounded-md bg-[var(--bg-secondary)] border border-[var(--border-secondary)]">
+                CSV
+              </span>
+              <span className="px-2.5 py-1 rounded-md bg-[var(--bg-secondary)] border border-[var(--border-secondary)]">
+                Up to 30 MB
+              </span>
+            </div>
           </div>
 
           <div className="mt-6">
@@ -237,7 +252,9 @@ export const AmsUploader: React.FC<AmsUploaderProps> = ({
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--border-secondary)] pb-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] flex items-center justify-center text-[var(--text-primary)] shrink-0">
-                {selectedFile.type.includes('pdf') || selectedFile.name.endsWith('.pdf') ? (
+                {selectedFile.name.endsWith('.xlsx') || selectedFile.name.endsWith('.xls') || selectedFile.name.endsWith('.csv') ? (
+                  <FileSpreadsheet className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                ) : selectedFile.type.includes('pdf') || selectedFile.name.endsWith('.pdf') ? (
                   <FileText className="w-5 h-5 text-[var(--text-primary)]" />
                 ) : (
                   <ImageIcon className="w-5 h-5 text-[var(--text-primary)]" />
@@ -248,7 +265,7 @@ export const AmsUploader: React.FC<AmsUploaderProps> = ({
                   {selectedFile.name}
                 </span>
                 <span className="text-xs text-[var(--text-secondary)]">
-                  {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB • Ready for scan
+                  {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB • {selectedFile.name.endsWith('.xlsx') || selectedFile.name.endsWith('.csv') ? 'Structured spreadsheet (No OCR required)' : 'Ready for extraction'}
                 </span>
               </div>
             </div>

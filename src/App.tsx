@@ -10,6 +10,7 @@ import { InternalCalculatorPage } from './pages/InternalCalculatorPage';
 import { GPACalculatorPage } from './pages/GPACalculatorPage';
 import { CGPACalculatorPage } from './pages/CGPACalculatorPage';
 import { AttendancePage } from './pages/AttendancePage';
+import { AmsImportPage } from './pages/AmsImportPage';
 
 export function App() {
   useEffect(() => {
@@ -30,6 +31,7 @@ export function App() {
               <Route path="/sgpa" element={<GPACalculatorPage />} />
               <Route path="/cgpa" element={<CGPACalculatorPage />} />
               <Route path="/attendance" element={<AttendancePage />} />
+              <Route path="/ams" element={<AmsImportPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
           </Routes>

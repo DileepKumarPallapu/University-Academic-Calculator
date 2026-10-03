@@ -7,6 +7,12 @@ import {
   normalizeSubjectCode,
   parseStructuredAmsTextTable,
   detectDocumentPageType,
+  validateBulkCredits,
+  calculateAmsCgpa,
+  classifyAcademicDocument,
+  detectAmsFormat,
+  compareWithSavedProfile,
+  detectAndFlagDuplicates,
 } from './amsExtractor';
 
 describe('AMS Result Extractor', () => {
@@ -620,6 +626,183 @@ describe('AMS Result Extractor', () => {
     expect(audit.calculationIssues).toBeDefined();
     expect(audit.calculationIssues!.some((issue) => issue.includes('credit(s) missing'))).toBe(true);
     expect(audit.calculationIssues!.some((issue) => issue.includes('Grade not recognized under VTR21'))).toBe(true);
+  });
+
+  describe('Master Upgrade: Bulk Credits Validation', () => {
+    it('validates matching credit tokens sequence correctly', () => {
+      const res = validateBulkCredits('3 4 1.5 0 2', 5);
+      expect(res.valid).toBe(true);
+      expect(res.credits).toEqual([3, 4, 1.5, 0, 2]);
+    });
+
+    it('rejects count mismatch with exact required error message', () => {
+      const res = validateBulkCredits('3 4 1.5', 5);
+      expect(res.valid).toBe(false);
+      expect(res.error).toBe('3 credit values provided for 5 subjects. Count must match exactly.');
+    });
+
+    it('rejects non-numeric tokens with error message specifying line/position', () => {
+      const res = validateBulkCredits('3 ABC 1.5', 3);
+      expect(res.valid).toBe(false);
+      expect(res.error).toContain('Invalid credit value "ABC"');
+    });
+  });
+
+  describe('Master Upgrade: Multi-Semester CGPA Engine', () => {
+    it('calculates weighted cumulative GPA accurately across semesters', () => {
+      const semesters = [
+        {
+          id: 'sem-1',
+          semesterNumber: 1,
+          semesterLabel: 'Semester 1',
+          sgpa: 8.5,
+          totalCredits: 20,
+          totalQualityPoints: 170,
+          subjectsCount: 6,
+          isVerified: true,
+          verified: true,
+        },
+        {
+          id: 'sem-2',
+          semesterNumber: 2,
+          semesterLabel: 'Semester 2',
+          sgpa: 9.0,
+          totalCredits: 22,
+          totalQualityPoints: 198,
+          subjectsCount: 7,
+          isVerified: true,
+          verified: true,
+        },
+      ];
+
+      const cgpaRes = calculateAmsCgpa(semesters);
+      expect(cgpaRes.totalCredits).toBe(42);
+      expect(cgpaRes.totalQualityPoints).toBe(368);
+      // 368 / 42 = 8.7619...
+      expect(cgpaRes.cgpa).toBeCloseTo(368 / 42, 4);
+      expect(cgpaRes.calculationTrace.length).toBe(2);
+      expect(cgpaRes.calculationTrace[0].formulaStr).toContain('20 credits × 8.50 SGPA = 170.00');
+    });
+  });
+
+  describe('Master Upgrade: Document Classification and Format Detection', () => {
+    it('correctly classifies AMS result tables vs other academic documents', () => {
+      const amsText = 'Register No Coursecode Coursename Grade Result B.Tech Nov.2024';
+      const classRes = classifyAcademicDocument(amsText);
+      expect(classRes).toBe('AMS_RESULT');
+
+      const otherDoc = 'Curriculum and Syllabus Unit 1 Unit 2 Reference Books';
+      const nonAmsRes = classifyAcademicDocument(otherDoc);
+      expect(nonAmsRes).toBe('UNKNOWN_ACADEMIC_DOCUMENT');
+    });
+
+    it('detects Vel Tech AMS format and identifies missing credits column', () => {
+      const text = 'SNo Stu Id Register No Name Degree Branch Batch Coursecode Coursename Result Grade';
+      const format = detectAmsFormat(text, ['Coursecode', 'Coursename', 'Result', 'Grade']);
+      expect(format.formatName).toContain('Vel Tech');
+      expect(format.missingColumns).toContain('Credits');
+      expect(format.confidence.toLowerCase()).toBe('high');
+    });
+  });
+
+  describe('Master Upgrade: Student Profile Matching', () => {
+    it('identifies exact match with saved profile', () => {
+      const savedProfile = {
+        name: 'PALLAPU DILEEP KUMAR',
+        rollNumber: '24UECS0805',
+        department: 'CSE',
+        regulation: 'VTR21',
+        college: 'Vel Tech',
+      };
+      const amsInfo: AmsStudentInfo = {
+        name: 'PALLAPU DILEEP KUMAR',
+        nameConfidence: 'high',
+        registerNumber: '24UECS0805',
+        regConfidence: 'high',
+        department: 'CSE',
+        program: 'B.Tech',
+        academicYear: '2024-2025',
+        college: 'Vel Tech',
+        regulation: 'VTR21',
+        regulationConfidence: 'high',
+        semester: 1,
+        semesterConfidence: 'high',
+      };
+
+      const matchRes = compareWithSavedProfile(amsInfo, savedProfile);
+      expect(matchRes.status).toBe('match');
+      expect(matchRes.differences?.length).toBe(0);
+    });
+
+    it('flags differences when imported document does not match saved profile', () => {
+      const savedProfile = {
+        name: 'PALLAPU DILEEP KUMAR',
+        rollNumber: '24UECS0805',
+        department: 'CSE',
+        regulation: 'VTR21',
+        college: 'Vel Tech',
+      };
+      const amsInfo: AmsStudentInfo = {
+        name: 'JOHN DOE',
+        nameConfidence: 'high',
+        registerNumber: '24UECS0999',
+        regConfidence: 'high',
+        department: 'ECE',
+        program: 'B.Tech',
+        academicYear: '2024-2025',
+        college: 'Vel Tech',
+        regulation: 'VTR21',
+        regulationConfidence: 'high',
+        semester: 1,
+        semesterConfidence: 'high',
+      };
+
+      const matchRes = compareWithSavedProfile(amsInfo, savedProfile);
+      expect(matchRes.status).toBe('different');
+      expect(matchRes.differences?.some((d) => d.field === 'Name')).toBe(true);
+      expect(matchRes.differences?.some((d) => d.field === 'Register Number')).toBe(true);
+    });
+  });
+
+  describe('Master Upgrade: Cross-Semester Duplicate Protection', () => {
+    it('does not flag identical course codes as duplicates across different semesters', () => {
+      const subs: AmsSubject[] = [
+        {
+          id: 's1',
+          subjectCode: '10210MA101',
+          subjectName: 'Mathematics',
+          credits: 4,
+          grade: 'A',
+          gradePoint: 9,
+          semesterContext: 1,
+          isDuplicate: false,
+          isExcluded: false,
+          source: 'AMS',
+          confidence: { code: 'high', name: 'high', credits: 'high', grade: 'high', gradePoint: 'high' },
+          status: 'Pass',
+          isManuallyEdited: false,
+        },
+        {
+          id: 's2',
+          subjectCode: '10210MA101',
+          subjectName: 'Mathematics',
+          credits: 4,
+          grade: 'S',
+          gradePoint: 10,
+          semesterContext: 2, // Different semester context!
+          isDuplicate: false,
+          isExcluded: false,
+          source: 'AMS',
+          confidence: { code: 'high', name: 'high', credits: 'high', grade: 'high', gradePoint: 'high' },
+          status: 'Pass',
+          isManuallyEdited: false,
+        },
+      ];
+
+      const res = detectAndFlagDuplicates(subs);
+      expect(res[0].isDuplicate).toBe(false);
+      expect(res[1].isDuplicate).toBe(false);
+    });
   });
 });
 

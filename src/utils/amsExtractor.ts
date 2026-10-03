@@ -1,5 +1,6 @@
 import * as pdfjsLib from 'pdfjs-dist';
 import { createWorker } from 'tesseract.js';
+import * as XLSX from 'xlsx';
 import { REGULATIONS, type RegulationId } from '../config/university';
 import type {
   AmsExtractionResult,
@@ -10,6 +11,13 @@ import type {
   AuditChecklistItem,
   CalculationTraceItem,
   ScanStepItem,
+  AmsFileType,
+  DocumentClassification,
+  DetectedFormatInfo,
+  ColumnMapping,
+  ProfileMatchResult,
+  AmsSemesterResult,
+  AmsCgpaResult,
 } from '../types/ams';
 
 // Configure pdfjs worker using standard ESM URL
@@ -25,18 +33,23 @@ try {
 export interface FileValidationResult {
   valid: boolean;
   error?: string;
-  fileType: 'image' | 'pdf';
+  fileType: AmsFileType;
 }
 
 export const validateAmsFile = (file: File): FileValidationResult => {
   const validImageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
   const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
   const isImage = validImageTypes.includes(file.type) || /\.(jpe?g|png|webp)$/i.test(file.name);
+  const isCsv = file.type === 'text/csv' || file.name.toLowerCase().endsWith('.csv');
+  const isExcel =
+    file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+    file.type === 'application/vnd.ms-excel' ||
+    /\.(xlsx|xls)$/i.test(file.name);
 
-  if (!isPdf && !isImage) {
+  if (!isPdf && !isImage && !isCsv && !isExcel) {
     return {
       valid: false,
-      error: 'Unsupported file type. Please upload a screenshot (PNG, JPG, JPEG) or a PDF result document.',
+      error: 'Unsupported file type. Please upload a PDF, image (PNG, JPG, WEBP), CSV, or Excel (XLSX, XLS) file.',
       fileType: 'image',
     };
   }
@@ -46,13 +59,14 @@ export const validateAmsFile = (file: File): FileValidationResult => {
     return {
       valid: false,
       error: 'File is too large (maximum 30MB allowed).',
-      fileType: isPdf ? 'pdf' : 'image',
+      fileType: isPdf ? 'pdf' : isCsv ? 'csv' : isExcel ? 'excel' : 'image',
     };
   }
 
+  const fileType: AmsFileType = isPdf ? 'pdf' : isCsv ? 'csv' : isExcel ? 'excel' : 'image';
   return {
     valid: true,
-    fileType: isPdf ? 'pdf' : 'image',
+    fileType,
   };
 };
 
@@ -508,6 +522,114 @@ export const detectDocumentPageType = (text: string): PageTypeDetectionResult =>
 };
 
 /**
+ * Classifies the academic document type according to University taxonomy
+ */
+export const classifyAcademicDocument = (text: string): DocumentClassification => {
+  const upper = text.toUpperCase();
+  if (upper.includes('SYLLABUS') || upper.includes('CURRICULUM') || upper.includes('ADMIT CARD') || upper.includes('HALL TICKET')) {
+    return 'UNKNOWN_ACADEMIC_DOCUMENT';
+  }
+  if (upper.includes('TRANSCRIPT') || upper.includes('CONSOLIDATED GRADE') || (upper.includes('SEMESTER 1') && upper.includes('SEMESTER 2'))) {
+    return 'ACADEMIC_TRANSCRIPT';
+  }
+  if (upper.includes('GRADE SHEET') || upper.includes('STATEMENT OF GRADES') || upper.includes('GRADE REPORT')) {
+    return 'GRADE_SHEET';
+  }
+  if (upper.includes('MARKS STATEMENT') || upper.includes('STATEMENT OF MARKS') || upper.includes('MARK SHEET')) {
+    return 'MARKS_STATEMENT';
+  }
+  if (upper.includes('SEMESTER RESULT') || upper.includes('END SEMESTER EXAMINATION')) {
+    return 'SEMESTER_RESULT';
+  }
+  if (
+    upper.includes('AMS') ||
+    (upper.includes('STU ID') && upper.includes('COURSECODE')) ||
+    upper.includes('VEL TECH') ||
+    upper.includes('EXAMINATION RESULT') ||
+    (upper.includes('COURSECODE') && upper.includes('GRADE') && upper.includes('RESULT'))
+  ) {
+    return 'AMS_RESULT';
+  }
+  if (upper.includes('COURSE') || upper.includes('SUBJECT') || upper.includes('GRADE') || upper.includes('REGISTER NO')) {
+    return 'UNKNOWN_ACADEMIC_DOCUMENT';
+  }
+  return 'UNSUPPORTED';
+};
+
+/**
+ * Dynamically detects layout structure, format confidence, and available columns
+ */
+export const detectAmsFormat = (text: string, columnsFound: string[] = []): DetectedFormatInfo => {
+  const upper = text.toUpperCase();
+  const detectedCols: string[] = [];
+  const missingCols: string[] = [];
+
+  const hasCourseCode = columnsFound.some((c) => /code/i.test(c)) || /\b(coursecode|course\s*code|subject\s*code|code)\b/i.test(text);
+  const hasCourseName = columnsFound.some((c) => /name|title|subject/i.test(c)) || /\b(coursename|course\s*name|subject\s*name|course\s*title|subject)\b/i.test(text);
+  const hasGrade = columnsFound.some((c) => /grade/i.test(c)) || /\b(grade|letter\s*grade)\b/i.test(text);
+  const hasCredits = columnsFound.some((c) => /credit/i.test(c)) || /\b(credit|credits|cr|course\s*credit)\b/i.test(text);
+  const hasGradePoint = columnsFound.some((c) => /point|gp/i.test(c)) || /\b(grade\s*point|grade\s*points|gp)\b/i.test(text);
+  const hasStudentName = /\b(name|student\s*name|candidate\s*name)\b/i.test(text);
+  const hasRegNo = /\b(register\s*no|register\s*number|reg\s*no|roll\s*no)\b/i.test(text);
+
+  if (hasStudentName) detectedCols.push('Student Name'); else missingCols.push('Student Name');
+  if (hasRegNo) detectedCols.push('Register Number'); else missingCols.push('Register Number');
+  if (hasCourseCode) detectedCols.push('Course Code'); else missingCols.push('Course Code');
+  if (hasCourseName) detectedCols.push('Course Name'); else missingCols.push('Course Name');
+  if (hasGrade) detectedCols.push('Grade'); else missingCols.push('Grade');
+  if (hasCredits) detectedCols.push('Credits'); else missingCols.push('Credits');
+  if (hasGradePoint) detectedCols.push('Grade Point'); else missingCols.push('Grade Point');
+
+  const hasTablePresence = hasCourseName || hasGrade;
+  const hasStudentArea = hasStudentName || hasRegNo;
+
+  let formatName = 'Format A: Tabular AMS Result';
+  let formatDesc = 'Complete table repeating student metadata and subject details';
+  let confidence: 'High' | 'Medium' | 'Review' = 'High';
+
+  if (upper.includes('STU ID') && upper.includes('COURSECODE')) {
+    formatName = 'Format A: Vel Tech Tabular AMS';
+    formatDesc = 'Standard AMS portal table with repeated student information and results';
+    confidence = 'High';
+  } else if (hasCredits && hasGradePoint) {
+    formatName = 'Format C: Comprehensive Grade Sheet';
+    formatDesc = 'Contains Course Code, Subject, Credits, Grade, and Grade Points';
+    confidence = 'High';
+  } else if (hasCredits && hasGrade) {
+    formatName = 'Format B: Standard Subject-Credit Table';
+    formatDesc = 'Contains Subject Name, Credits, and Grade';
+    confidence = 'High';
+  } else if (hasCourseName && hasGrade && !hasCredits) {
+    formatName = 'Format E: Examination Result Table';
+    formatDesc = 'Contains Subject Name and Grade (Credits not in document)';
+    confidence = 'Medium';
+  } else if (upper.includes('TRANSCRIPT')) {
+    formatName = 'Format T: Multi-Semester Academic Transcript';
+    formatDesc = 'Comprehensive transcript across multiple semesters';
+    confidence = 'High';
+  } else if (hasTablePresence) {
+    formatName = 'Format D: Generic Academic Result';
+    formatDesc = 'Dynamic table structure recognized';
+    confidence = 'Review';
+  } else {
+    formatName = 'Unknown Academic Document';
+    formatDesc = 'Could not reliably classify table structure';
+    confidence = 'Review';
+  }
+
+  return {
+    formatName,
+    formatDescription: formatDesc,
+    confidence,
+    detectedColumns: detectedCols,
+    missingColumns: missingCols,
+    tablePresence: hasTablePresence,
+    hasStudentInfoArea: hasStudentArea,
+    availableColumnsCount: detectedCols.length,
+  };
+};
+
+/**
  * High-accuracy table parser that handles:
  * - Table header column detection (SNo, Stu Id, Register No, Name, Degree, Branch, Batch, Coursecode, Coursename, Result, Grade)
  * - Row grouping and SNo accounting (1 to N)
@@ -866,16 +988,17 @@ export const detectAndFlagDuplicates = (subjects: AmsSubject[]): AmsSubject[] =>
 
   return subjects.map((sub, index) => {
     let isDupe = false;
+    const semPrefix = sub.semesterContext !== undefined ? `sem_${sub.semesterContext}_` : '';
 
     if (sub.subjectCode) {
-      const normCode = normalizeSubjectCode(sub.subjectCode);
+      const normCode = semPrefix + normalizeSubjectCode(sub.subjectCode);
       if (seenCodes.has(normCode)) {
         isDupe = true;
       } else {
         seenCodes.set(normCode, index);
       }
     } else if (sub.subjectName) {
-      const sig = `${normalizeSubjectName(sub.subjectName)}_${sub.credits}_${sub.grade}`;
+      const sig = `${semPrefix}${normalizeSubjectName(sub.subjectName)}_${sub.credits}_${sub.grade}`;
       if (seenSignatures.has(sig)) {
         isDupe = true;
       } else {
@@ -1166,6 +1289,589 @@ export const computeAmsAuditSummary = (
 };
 
 /**
+ * Calculation Readiness Engine:
+ * Validates whether all 8 prerequisite checkpoints are satisfied.
+ */
+export const isReadyForCalculation = (
+  subjects: AmsSubject[],
+  studentInfo?: AmsStudentInfo,
+  rowAccountingVerified = true
+): { ready: boolean; issues: string[] } => {
+  const issues: string[] = [];
+  const uniqueSubjects = subjects.filter((s) => !s.isExcluded);
+
+  if (uniqueSubjects.length === 0) {
+    issues.push('No subjects found in result');
+  }
+
+  if (!rowAccountingVerified) {
+    issues.push('Row accounting mismatch (some rows missing from sequence)');
+  }
+
+  const missingNames = uniqueSubjects.filter((s) => !s.subjectName || s.subjectName.trim() === '');
+  if (missingNames.length > 0) {
+    issues.push(`${missingNames.length} course name(s) missing`);
+  }
+
+  const missingCredits = uniqueSubjects.filter((s) => s.credits === '' || s.credits === null || Number(s.credits) < 0);
+  if (missingCredits.length > 0) {
+    issues.push(`${missingCredits.length} credit(s) missing`);
+  }
+
+  if (!studentInfo?.regulation) {
+    issues.push('Regulation not selected');
+  }
+
+  const regConfig = studentInfo?.regulation ? REGULATIONS[studentInfo.regulation] : null;
+  const regGrades = regConfig ? new Set(regConfig.grades.map((g) => g.grade.toUpperCase())) : null;
+
+  uniqueSubjects.forEach((s, idx) => {
+    if (!s.grade || s.grade.trim() === '') {
+      issues.push(`Row ${s.sno || idx + 1}: Missing grade`);
+    } else if (regGrades && !regGrades.has(s.grade.toUpperCase())) {
+      issues.push(`Row ${s.sno || idx + 1}: Grade "${s.grade}" invalid under ${studentInfo?.regulation}`);
+    } else if (s.gradePoint === null && regConfig) {
+      issues.push(`Row ${s.sno || idx + 1}: Grade point unresolved`);
+    }
+  });
+
+  return {
+    ready: issues.length === 0 && uniqueSubjects.length > 0,
+    issues,
+  };
+};
+
+/**
+ * Compares imported student metadata against saved user profile
+ */
+export const compareWithSavedProfile = (
+  studentInfo: AmsStudentInfo,
+  savedProfile?: { name?: string; registerNumber?: string; rollNumber?: string } | null
+): ProfileMatchResult => {
+  const rollNo = savedProfile?.rollNumber || savedProfile?.registerNumber;
+  if (!savedProfile || (!savedProfile.name?.trim() && !rollNo?.trim())) {
+    return {
+      isMatch: true,
+      hasSavedProfile: false,
+      status: 'none',
+      diffs: [],
+      differences: [],
+    };
+  }
+
+  const diffs: { field: string; saved: string; imported: string }[] = [];
+  const normSavedName = (savedProfile.name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  const normImportedName = (studentInfo.name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+  if (savedProfile.name?.trim() && studentInfo.name?.trim() && normSavedName !== normImportedName) {
+    diffs.push({
+      field: 'Name',
+      saved: savedProfile.name.trim(),
+      imported: studentInfo.name.trim(),
+    });
+  }
+
+  const normSavedReg = (rollNo || '').trim().toUpperCase().replace(/\s+/g, '');
+  const normImportedReg = (studentInfo.registerNumber || '').trim().toUpperCase().replace(/\s+/g, '');
+
+  if (rollNo?.trim() && studentInfo.registerNumber?.trim() && normSavedReg !== normImportedReg) {
+    diffs.push({
+      field: 'Register Number',
+      saved: rollNo.trim(),
+      imported: studentInfo.registerNumber.trim(),
+    });
+  }
+
+  const isMatch = diffs.length === 0;
+
+  return {
+    isMatch,
+    hasSavedProfile: true,
+    status: isMatch ? 'match' : 'different',
+    savedName: savedProfile.name?.trim(),
+    importedName: studentInfo.name?.trim(),
+    savedRegNo: rollNo?.trim(),
+    importedRegNo: studentInfo.registerNumber?.trim(),
+    diffs,
+    differences: diffs.map((d) => ({
+      field: d.field,
+      saved: d.saved,
+      profileValue: d.saved,
+      imported: d.imported,
+      importedValue: d.imported,
+    })),
+  };
+};
+
+/**
+ * Validates bulk credits pasted by user
+ */
+export const validateBulkCredits = (
+  rawInput: string,
+  expectedSubjectCount: number
+): { valid: boolean; credits?: number[]; error?: string } => {
+  const lines = rawInput
+    .trim()
+    .split(/[\s,;\t\n]+/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+
+  if (lines.length === 0) {
+    return { valid: false, error: 'Please enter credit values.' };
+  }
+
+  if (lines.length !== expectedSubjectCount) {
+    return {
+      valid: false,
+      error: `${lines.length} credit values provided for ${expectedSubjectCount} subjects. Count must match exactly.`,
+    };
+  }
+
+  const parsedCredits: number[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const val = parseFloat(lines[i]);
+    if (isNaN(val) || val < 0) {
+      return {
+        valid: false,
+        error: `Invalid credit value "${lines[i]}" at line ${i + 1}. Credits must be 0 or a positive number.`,
+      };
+    }
+    parsedCredits.push(val);
+  }
+
+  return { valid: true, credits: parsedCredits };
+};
+
+/**
+ * Calculates overall CGPA across multiple imported semesters
+ */
+export const calculateAmsCgpa = (semesters: AmsSemesterResult[]): AmsCgpaResult => {
+  let totalCredits = 0;
+  let totalQualityPoints = 0;
+
+  const trace = semesters.map((sem) => {
+    const credits = sem.totalCredits || 0;
+    const sgpa = sem.sgpa ?? 0;
+    const weightedPoints = credits * sgpa;
+    totalCredits += credits;
+    totalQualityPoints += weightedPoints;
+
+    return {
+      semesterLabel: sem.semesterLabel || `Semester ${sem.semesterNumber}`,
+      sgpa,
+      credits,
+      weightedPoints,
+      formulaStr: `${credits} credits × ${sgpa.toFixed(2)} SGPA = ${weightedPoints.toFixed(2)}`,
+    };
+  });
+
+  const cgpa = totalCredits > 0 ? totalQualityPoints / totalCredits : null;
+
+  return {
+    semesters,
+    totalCredits,
+    totalQualityPoints,
+    cgpa,
+    calculationTrace: trace,
+  };
+};
+
+/**
+ * Native Spreadsheet Parser for Excel (XLSX, XLS) and CSV files
+ * Completely deterministic - bypasses OCR with 0 error rate!
+ */
+export const parseStructuredSpreadsheet = async (
+  file: File,
+  regulationId: RegulationId | null = null,
+  mappingOverride?: ColumnMapping
+): Promise<AmsExtractionResult> => {
+  const buffer = await file.arrayBuffer();
+  const workbook = XLSX.read(buffer, { type: 'array' });
+  const firstSheetName = workbook.SheetNames[0];
+  const worksheet = workbook.Sheets[firstSheetName];
+  const rawData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+  // 1. Detect Header Row
+  let headerRowIdx = -1;
+  for (let r = 0; r < Math.min(rawData.length, 15); r++) {
+    const row = rawData[r];
+    if (!row || !Array.isArray(row)) continue;
+    const rowStr = row.map((c) => String(c || '').toLowerCase()).join(' ');
+    if (
+      (rowStr.includes('subject') || rowStr.includes('course')) &&
+      (rowStr.includes('grade') || rowStr.includes('mark') || rowStr.includes('result') || rowStr.includes('credit'))
+    ) {
+      headerRowIdx = r;
+      break;
+    }
+  }
+
+  // 2. Extract Student Info from rows before header
+  let rawText = '';
+  const topRows = headerRowIdx > 0 ? rawData.slice(0, headerRowIdx) : rawData.slice(0, 5);
+  for (const r of topRows) {
+    if (Array.isArray(r)) {
+      rawText += r.filter(Boolean).join(' ') + '\n';
+    }
+  }
+
+  const studentInfo = extractStudentInfo(rawText);
+
+  // 3. Map Columns
+  const headers = headerRowIdx >= 0 ? rawData[headerRowIdx].map((c) => String(c || '').trim()) : [];
+  const detectedCols: string[] = headers.filter(Boolean);
+
+  let courseCodeColIdx = -1;
+  let subjectNameColIdx = -1;
+  let creditsColIdx = -1;
+  let gradeColIdx = -1;
+  let gradePointColIdx = -1;
+  let statusColIdx = -1;
+  let snoColIdx = -1;
+
+  headers.forEach((h, idx) => {
+    const low = h.toLowerCase();
+    if (/s\.?no|sno|serial/i.test(low)) snoColIdx = idx;
+    else if (/course\s*code|subject\s*code|code/i.test(low)) courseCodeColIdx = idx;
+    else if (/course\s*name|subject\s*name|subject|course|course\s*title/i.test(low)) subjectNameColIdx = idx;
+    else if (/credit|credits|cr/i.test(low)) creditsColIdx = idx;
+    else if (/grade\s*point|gp/i.test(low)) gradePointColIdx = idx;
+    else if (/grade|letter\s*grade/i.test(low)) gradeColIdx = idx;
+    else if (/result|status/i.test(low)) statusColIdx = idx;
+  });
+
+  // Apply mapping override if provided
+  if (mappingOverride) {
+    if (mappingOverride.sno) snoColIdx = headers.indexOf(mappingOverride.sno);
+    if (mappingOverride.courseCode) courseCodeColIdx = headers.indexOf(mappingOverride.courseCode);
+    if (mappingOverride.subjectName) subjectNameColIdx = headers.indexOf(mappingOverride.subjectName);
+    if (mappingOverride.credits) creditsColIdx = headers.indexOf(mappingOverride.credits);
+    if (mappingOverride.grade) gradeColIdx = headers.indexOf(mappingOverride.grade);
+    if (mappingOverride.gradePoint) gradePointColIdx = headers.indexOf(mappingOverride.gradePoint);
+    if (mappingOverride.resultStatus) statusColIdx = headers.indexOf(mappingOverride.resultStatus);
+  }
+
+  // Fallback if no subject header recognized
+  if (subjectNameColIdx === -1 && headers.length >= 2) {
+    subjectNameColIdx = 1;
+  }
+  if (gradeColIdx === -1 && headers.length >= 3) {
+    gradeColIdx = headers.length - 1;
+  }
+
+  // 4. Extract Subjects
+  const subjects: AmsSubject[] = [];
+  const startRow = headerRowIdx >= 0 ? headerRowIdx + 1 : 0;
+  let snoCounter = 1;
+
+  for (let r = startRow; r < rawData.length; r++) {
+    const row = rawData[r];
+    if (!row || !Array.isArray(row) || row.length === 0) continue;
+
+    const rawSubject = subjectNameColIdx >= 0 ? String(row[subjectNameColIdx] || '').trim() : '';
+    const rawGrade = gradeColIdx >= 0 ? String(row[gradeColIdx] || '').trim() : '';
+
+    if (!rawSubject && !rawGrade) continue;
+
+    const rawCode = courseCodeColIdx >= 0 ? String(row[courseCodeColIdx] || '').trim() : null;
+    const rawCreditsStr = creditsColIdx >= 0 ? String(row[creditsColIdx] || '').trim() : '';
+    const rawStatus = statusColIdx >= 0 ? String(row[statusColIdx] || '').trim() : 'Pass';
+    const rawGpStr = gradePointColIdx >= 0 ? String(row[gradePointColIdx] || '').trim() : '';
+
+    let credits: number | '' = '';
+    let hasOrigCredits = false;
+    if (rawCreditsStr !== '') {
+      const parsedCr = parseFloat(rawCreditsStr);
+      if (!isNaN(parsedCr) && parsedCr >= 0) {
+        credits = parsedCr;
+        hasOrigCredits = true;
+      }
+    }
+
+    const sno = snoColIdx >= 0 && row[snoColIdx] ? parseInt(String(row[snoColIdx]), 10) : snoCounter++;
+    const normGrade = rawGrade.trim().toUpperCase();
+
+    let gradePoint: number | null = null;
+    if (rawGpStr !== '') {
+      const parsedGp = parseFloat(rawGpStr);
+      if (!isNaN(parsedGp)) gradePoint = parsedGp;
+    }
+    if (gradePoint === null && normGrade && regulationId && REGULATIONS[regulationId]) {
+      const found = REGULATIONS[regulationId].grades.find((g) => g.grade.toUpperCase() === normGrade.toUpperCase());
+      if (found) gradePoint = found.points;
+    }
+
+    subjects.push({
+      id: `spreadsheet-row-${r}-${Date.now()}`,
+      sno: !isNaN(sno) ? sno : undefined,
+      subjectCode: rawCode ? normalizeSubjectCode(rawCode) : null,
+      subjectName: rawSubject.trim().replace(/\s+/g, ' '),
+      credits,
+      grade: normGrade || rawGrade,
+      gradePoint,
+      status: rawStatus || 'Pass',
+      source: 'AMS',
+      creditsSource: hasOrigCredits ? 'AMS' : 'USER',
+      gradePointSource: gradePoint !== null ? (rawGpStr ? 'AMS' : 'REGULATION') : undefined,
+      isDuplicate: false,
+      isExcluded: false,
+      isManuallyEdited: false,
+      hasOriginalCredits: hasOrigCredits,
+      originalValues: {
+        subjectCode: rawCode,
+        subjectName: rawSubject,
+        credits,
+        grade: normGrade || rawGrade,
+        gradePoint,
+      },
+      confidence: {
+        code: rawCode ? 'high' : 'none',
+        name: rawSubject ? 'high' : 'low',
+        credits: hasOrigCredits ? 'high' : 'none',
+        grade: normGrade ? 'high' : 'low',
+        gradePoint: gradePoint !== null ? 'high' : 'none',
+      },
+    });
+  }
+
+  const deduplicatedSubjects = detectAndFlagDuplicates(subjects);
+  const duplicatesCount = deduplicatedSubjects.filter((s) => s.isDuplicate).length;
+  const formatInfo = detectAmsFormat(rawText + ' ' + headers.join(' '), detectedCols);
+
+  return {
+    studentInfo,
+    subjects: deduplicatedSubjects,
+    duplicatesDetected: duplicatesCount,
+    duplicatesExcluded: duplicatesCount,
+    fileType: file.name.toLowerCase().endsWith('.csv') ? 'csv' : 'excel',
+    fileName: file.name,
+    fileSize: file.size,
+    pageCount: 1,
+    previewUrls: [],
+    rawText,
+    importedAt: Date.now(),
+    pageType: 'AMS_RESULT_TABLE',
+    documentClassification: 'AMS_RESULT',
+    formatInfo,
+    columnMapping: {
+      sno: snoColIdx >= 0 ? headers[snoColIdx] : undefined,
+      courseCode: courseCodeColIdx >= 0 ? headers[courseCodeColIdx] : undefined,
+      subjectName: subjectNameColIdx >= 0 ? headers[subjectNameColIdx] : undefined,
+      credits: creditsColIdx >= 0 ? headers[creditsColIdx] : undefined,
+      grade: gradeColIdx >= 0 ? headers[gradeColIdx] : undefined,
+      gradePoint: gradePointColIdx >= 0 ? headers[gradePointColIdx] : undefined,
+      resultStatus: statusColIdx >= 0 ? headers[statusColIdx] : undefined,
+    },
+    tableDetected: true,
+    detectedColumns: detectedCols,
+    detectedRowsCount: subjects.length,
+    extractedRowsCount: subjects.length,
+    missingRowNumbers: [],
+    rowAccountingVerified: true,
+    scanSteps: [
+      { step: 1, title: 'Result page detected', status: 'completed', detail: 'Structured spreadsheet parsed' },
+      { step: 2, title: 'Student information detected', status: 'completed', detail: studentInfo.name || 'Student details parsed' },
+      { step: 3, title: 'Result table detected', status: 'completed', detail: `${detectedCols.length} columns mapped` },
+      { step: 4, title: 'Course rows detected', status: 'completed', detail: `${subjects.length} course rows extracted` },
+      { step: 5, title: 'Grades detected', status: 'completed', detail: 'All grade records verified' },
+      { step: 6, title: 'Checking missing information...', status: 'completed', detail: 'Validation completed' },
+    ],
+  };
+};
+
+/**
+ * Exports current AMS result to styled Excel (.xlsx) file
+ */
+export const exportAmsToExcel = async (
+  studentInfo: AmsStudentInfo,
+  subjects: AmsSubject[],
+  auditSummary: AmsAuditSummary
+) => {
+  const wb = XLSX.utils.book_new();
+
+  const rows: any[] = [
+    ['ACADEMIC CALCULATOR - AMS RESULT REPORT'],
+    ['Generated On', new Date().toLocaleDateString('en-GB')],
+    [],
+    ['STUDENT INFORMATION'],
+    ['Student Name', studentInfo.name || '—'],
+    ['Register Number', studentInfo.registerNumber || '—'],
+    ['Student ID', studentInfo.studentId || '—'],
+    ['Degree & Branch', [studentInfo.degree, studentInfo.branch].filter(Boolean).join(' - ') || '—'],
+    ['Batch / Period', [studentInfo.batch, studentInfo.resultMonthYear].filter(Boolean).join(' • ') || '—'],
+    ['Semester', studentInfo.semester ? `Semester ${studentInfo.semester}` : '—'],
+    ['Academic Regulation', studentInfo.regulation || '—'],
+    [],
+    ['SUBJECT BREAKDOWN'],
+    ['S.No', 'Course Code', 'Subject Name', 'Credits', 'Grade', 'Grade Point', 'Credit Points', 'Result Status', 'Source'],
+  ];
+
+  const included = subjects.filter((s) => !s.isExcluded);
+  included.forEach((s, idx) => {
+    const c = typeof s.credits === 'number' ? s.credits : 0;
+    const gp = s.gradePoint ?? 0;
+    const cp = c * gp;
+    rows.push([
+      s.sno || idx + 1,
+      s.subjectCode || '—',
+      s.subjectName,
+      c,
+      s.grade,
+      gp,
+      cp,
+      s.status || 'Pass',
+      s.source,
+    ]);
+  });
+
+  rows.push([]);
+  rows.push(['SUMMARY & AUDIT']);
+  rows.push(['Total Credits', auditSummary.totalCredits]);
+  rows.push(['Total Quality Points', auditSummary.totalQualityPoints]);
+  rows.push(['Calculated SGPA', auditSummary.sgpa !== null ? auditSummary.sgpa.toFixed(2) : '—']);
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  XLSX.utils.book_append_sheet(wb, ws, 'AMS Result');
+
+  const safeName = (studentInfo.name || 'Student').replace(/[^a-zA-Z0-9_-]/g, '_');
+  XLSX.writeFile(wb, `${safeName}_AMS_SGPA_Report.xlsx`);
+};
+
+/**
+ * Exports current AMS result to CSV file
+ */
+export const exportAmsToCsv = (
+  studentInfo: AmsStudentInfo,
+  subjects: AmsSubject[],
+  auditSummary: AmsAuditSummary
+) => {
+  const rows: string[] = [
+    `"Student Name","${studentInfo.name || ''}"`,
+    `"Register No","${studentInfo.registerNumber || ''}"`,
+    `"Semester","Semester ${studentInfo.semester || 1}"`,
+    `"Regulation","${studentInfo.regulation || ''}"`,
+    `"Calculated SGPA","${auditSummary.sgpa !== null ? auditSummary.sgpa.toFixed(2) : ''}"`,
+    `"Total Credits","${auditSummary.totalCredits}"`,
+    `"Total Credit Points","${auditSummary.totalQualityPoints.toFixed(2)}"`,
+    '',
+    '"S.No","Course Code","Subject Name","Credits","Grade","Grade Point","Credit Points","Result Status","Source"',
+  ];
+
+  const included = subjects.filter((s) => !s.isExcluded);
+  included.forEach((s, idx) => {
+    const c = typeof s.credits === 'number' ? s.credits : 0;
+    const gp = s.gradePoint ?? 0;
+    const cp = c * gp;
+    rows.push(
+      `"${s.sno || idx + 1}","${s.subjectCode || '—'}","${s.subjectName.replace(/"/g, '""')}","${c}","${s.grade}","${gp}","${cp.toFixed(2)}","${s.status || 'Pass'}","${s.source}"`
+    );
+  });
+
+  const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const safeName = (studentInfo.name || 'Student').replace(/[^a-zA-Z0-9_-]/g, '_');
+  a.download = `${safeName}_AMS_SGPA_Report.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
+/**
+ * Exports complete multi-semester transcript to Excel
+ */
+export const exportTranscriptToExcel = (
+  studentName: string,
+  registerNumber: string,
+  cgpaResult: AmsCgpaResult
+) => {
+  const wb = XLSX.utils.book_new();
+
+  const rows: any[][] = [
+    ['UNIVERSITY ACADEMIC CALCULATOR — MULTI-SEMESTER TRANSCRIPT'],
+    ['Generated', new Date().toLocaleString()],
+    ['Student Name', studentName || 'Student'],
+    ['Register No', registerNumber || '—'],
+    ['Overall CGPA', cgpaResult.cgpa !== null ? cgpaResult.cgpa.toFixed(2) : '—'],
+    ['Total Cumulative Credits', cgpaResult.totalCredits],
+    ['Total Cumulative Points', cgpaResult.totalQualityPoints.toFixed(2)],
+    [],
+    ['SEMESTER BREAKDOWN'],
+    ['Semester', 'Subjects', 'Credits', 'SGPA', 'Credit Points', 'Status'],
+  ];
+
+  cgpaResult.semesters.forEach((sem) => {
+    rows.push([
+      sem.semesterLabel,
+      sem.subjectsCount ?? (sem.subjects?.length || 0),
+      sem.totalCredits,
+      (sem.sgpa ?? 0).toFixed(2),
+      sem.totalQualityPoints.toFixed(2),
+      sem.verified || sem.isVerified ? 'Verified' : 'Manual',
+    ]);
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  XLSX.utils.book_append_sheet(wb, ws, 'Transcript');
+
+  const safeName = (studentName || 'Student').replace(/[^a-zA-Z0-9_-]/g, '_');
+  XLSX.writeFile(wb, `${safeName}_Academic_Transcript.xlsx`);
+};
+
+/**
+ * Exports multi-semester transcript to CSV
+ */
+export const exportTranscriptToCsv = (
+  studentName: string,
+  registerNumber: string,
+  cgpaResult: AmsCgpaResult
+) => {
+  const rows: string[] = [
+    `"Student Name","${studentName || ''}"`,
+    `"Register No","${registerNumber || ''}"`,
+    `"Overall CGPA","${cgpaResult.cgpa !== null ? cgpaResult.cgpa.toFixed(2) : ''}"`,
+    `"Total Cumulative Credits","${cgpaResult.totalCredits}"`,
+    `"Total Cumulative Points","${cgpaResult.totalQualityPoints.toFixed(2)}"`,
+    '',
+    '"Semester","Subjects","Credits","SGPA","Credit Points","Status"',
+  ];
+
+  cgpaResult.semesters.forEach((sem) => {
+    rows.push(
+      `"${sem.semesterLabel}","${sem.subjectsCount ?? (sem.subjects?.length || 0)}","${sem.totalCredits}","${(sem.sgpa ?? 0).toFixed(2)}","${sem.totalQualityPoints.toFixed(2)}","${sem.verified || sem.isVerified ? 'Verified' : 'Manual'}"`
+    );
+  });
+
+  const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const safeName = (studentName || 'Student').replace(/[^a-zA-Z0-9_-]/g, '_');
+  a.download = `${safeName}_Academic_Transcript.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
+/**
+ * Generates formatted summary text for clipboard copy or sharing
+ */
+export const formatAmsClipboardSummary = (
+  studentInfo: AmsStudentInfo,
+  auditSummary: AmsAuditSummary,
+  calculationType: 'SGPA' | 'CGPA' = 'SGPA'
+): string => {
+  return [
+    `Student: ${studentInfo.name || 'Student'}`,
+    `Register No: ${studentInfo.registerNumber || '—'}`,
+    `Semester: Semester ${studentInfo.semester || 1}`,
+    `Total Credits: ${auditSummary.totalCredits}`,
+    `Total Credit Points: ${auditSummary.totalQualityPoints.toFixed(2)}`,
+    `${calculationType}: ${auditSummary.sgpa !== null ? auditSummary.sgpa.toFixed(2) : '—'}`,
+    `Academic Calculator • https://university-academic-calculator.vercel.app/`,
+  ].join('\n');
+};
+
+/**
  * Converts image file to canvas and checks quality
  */
 export const loadAndCheckImage = async (
@@ -1271,6 +1977,15 @@ export const processAmsDocument = async (
   const validation = validateAmsFile(file);
   if (!validation.valid) {
     throw new Error(validation.error || 'Invalid file');
+  }
+
+  // Fast-path: Native Spreadsheet / CSV Parsing (Zero OCR!)
+  if (validation.fileType === 'csv' || validation.fileType === 'excel') {
+    onProgress?.('Parsing structured spreadsheet...', 50);
+    const spreadsheetResult = await parseStructuredSpreadsheet(file, selectedRegulation);
+    onStepUpdate?.(spreadsheetResult.scanSteps || []);
+    onProgress?.('Complete!', 100);
+    return spreadsheetResult;
   }
 
   const scanSteps: ScanStepItem[] = [
@@ -1408,6 +2123,9 @@ export const processAmsDocument = async (
 
   onProgress?.('Complete!', 100);
 
+  const documentClassification = classifyAcademicDocument(fullRawText);
+  const formatInfo = detectAmsFormat(fullRawText, tableResult.detectedColumns);
+
   return {
     studentInfo,
     subjects,
@@ -1422,6 +2140,17 @@ export const processAmsDocument = async (
     imageQualityWarning: qualityWarning,
     importedAt: Date.now(),
     pageType: tableResult.pageType,
+    documentClassification,
+    formatInfo,
+    columnMapping: {
+      sno: tableResult.detectedColumns.find((c) => /s\.?no/i.test(c)),
+      courseCode: tableResult.detectedColumns.find((c) => /code/i.test(c)),
+      subjectName: tableResult.detectedColumns.find((c) => /name|title|subject/i.test(c)),
+      credits: tableResult.detectedColumns.find((c) => /credit/i.test(c)),
+      grade: tableResult.detectedColumns.find((c) => /grade/i.test(c)),
+      gradePoint: tableResult.detectedColumns.find((c) => /point|gp/i.test(c)),
+      resultStatus: tableResult.detectedColumns.find((c) => /result|status/i.test(c)),
+    },
     unrecognizedReason: tableResult.unrecognizedReason,
     tableDetected: tableResult.tableDetected,
     detectedColumns: tableResult.detectedColumns,

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Trash2, RotateCcw } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Plus, Trash2, RotateCcw, FileUp } from 'lucide-react';
 import { calculateCGPA, formatFixed } from '../utils/calculations';
 import { REGULATIONS, type RegulationId } from '../config/university';
 import type { SemesterItem } from '../types';
@@ -182,14 +183,22 @@ export const CGPACalculatorPage: React.FC = () => {
   return (
     <>
       <div className="apple-page-enter flex flex-col gap-8 max-w-[1200px] mx-auto print:hidden">
-        {/* Header */}
-      <div className="flex flex-col gap-2">
-        <h1 className="text-[32px] sm:text-[40px] font-semibold tracking-tight text-[var(--text-primary)]">
-          CGPA Calculator
-        </h1>
-        <p className="text-[17px] text-[var(--text-secondary)]">
-          Calculate your Cumulative Grade Point Average across all completed semesters with exact credit weighting.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex flex-col gap-2">
+          <h1 className="text-[32px] sm:text-[40px] font-semibold tracking-tight text-[var(--text-primary)]">
+            CGPA Calculator
+          </h1>
+          <p className="text-[17px] text-[var(--text-secondary)]">
+            Calculate your Cumulative Grade Point Average across all completed semesters with exact credit weighting.
+          </p>
+        </div>
+        <Link
+          to="/ams"
+          className="apple-btn-secondary text-xs h-9 px-3.5 gap-1.5 flex items-center font-medium self-start sm:self-auto shrink-0 border-[var(--accent)]/30 text-[var(--accent)]"
+        >
+          <FileUp className="w-3.5 h-3.5" />
+          <span>Import AMS Transcripts</span>
+        </Link>
       </div>
 
       {/* Student Name Input */}
