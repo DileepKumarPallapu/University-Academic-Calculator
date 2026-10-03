@@ -1,86 +1,107 @@
 # University Academic Calculator
 
-A production-quality, Apple-inspired academic calculator built for university students. Provides exact conversions and weighted mathematical calculations for **Theory Internals**, **Integrated Subject Internals**, **GPA**, **CGPA**, and **Multi-Subject Tracking**.
+A production-quality, Apple-inspired academic utility for university students. Engineered with clean typography, high contrast in Light and Dark modes, exact mathematical rigor, and client-side privacy.
 
 ---
 
-## 🌟 Key Features
+## 🌐 Live Deployments
 
-1. **Theory Internal Calculator (Max 40 Marks)**
-   - 3 Tests of 30 raw marks each $\rightarrow$ converted via $\frac{\text{raw}}{30} \times 10$ to 10 marks each.
-   - Attendance (max 5 marks) + Assignment (max 5 marks).
-   - Real-time conversion display and instant results.
-
-2. **Integrated Subject Internal Calculator (Max 40 Marks)**
-   - 2 Mid-term tests of 20 raw marks each $\rightarrow$ converted via $\frac{\text{raw}}{20} \times 5$ to 5 marks each.
-   - Model / Integrated Practical Lab (direct 20 marks).
-   - Attendance (max 5 marks) + Assignment (max 5 marks).
-
-3. **Semester GPA Calculator**
-   - Weighted credit calculation: $\text{GPA} = \frac{\sum (\text{Credits} \times \text{Grade Points})}{\sum \text{Credits}}$.
-   - Configurable university grade-point mapping ($S=10, A+=9, A=8, B+=7, B=6, C=5, D=4, F=0$) with in-app customization modal.
-
-4. **Cumulative CGPA Calculator**
-   - Weighted semester formula: $\text{CGPA} = \frac{\sum (\text{GPA} \times \text{Semester Credits})}{\sum \text{Semester Credits}}$.
-   - Avoids improper unweighted arithmetic averaging.
-
-5. **Multi-Subject Academic Manager**
-   - Manage multiple courses simultaneously (supporting both Theory and Integrated courses).
-   - Live course mark breakdown, standing, percentage, and cohort overview.
-
-6. **Apple-Style Visual System**
-   - Minimalist monochrome palette (`#FFFFFF`, `#000000`, `#0B0B0D`, `#1D1D1F`, `#F5F5F7`, `#E8E8ED`).
-   - Native Apple font hierarchy, soft rounded cards ($16–28\text{px}$ radius), subtle shadows, and glassmorphic navigation.
-   - Smooth animated count-up numbers and sliding pill segmented controls.
-
-7. **Result Sharing & Export**
-   - One-click copy formatted academic summary.
-   - Native Web Share API integration with automatic clipboard fallback.
-   - Text document summary download.
-
-8. **Calculation History**
-   - Persisted locally in `localStorage` with zero cloud tracking.
-   - Filter by calculator type, inspect full calculation parameters, delete records, or clear history with a safety confirmation modal.
-
-9. **Dark, Light & System Appearance**
-   - Seamlessly synchronizes with system `prefers-color-scheme` or manually toggled.
+- **Vercel Production**: [https://university-academic-calculator.vercel.app/](https://university-academic-calculator.vercel.app/)
+- **GitHub Pages**: [https://dileepkumarpallapu.github.io/University-Academic-Calculator/](https://dileepkumarpallapu.github.io/University-Academic-Calculator/)
+- **GitHub Repository**: [https://github.com/DileepKumarPallapu/University-Academic-Calculator](https://github.com/DileepKumarPallapu/University-Academic-Calculator)
 
 ---
 
-## 📐 Formulas & Validation Rules
+## 👨‍💻 Developer & Author
 
-| Calculator | Assessment Component | Raw Scale | Conversion Formula | Converted Scale |
-| :--- | :--- | :--- | :--- | :--- |
-| **Theory** | Test 1 | 0 – 30 | $(\text{raw} / 30) \times 10$ | 0 – 10 |
-| **Theory** | Test 2 | 0 – 30 | $(\text{raw} / 30) \times 10$ | 0 – 10 |
-| **Theory** | Test 3 | 0 – 30 | $(\text{raw} / 30) \times 10$ | 0 – 10 |
-| **Theory** | Attendance | 0 – 5 | Direct | 0 – 5 |
-| **Theory** | Assignment | 0 – 5 | Direct | 0 – 5 |
-| **Theory Total** | **Maximum 40 Marks** | | Sum of converted marks | **40 Marks** |
-| **Integrated** | Mid 1 | 0 – 20 | $(\text{raw} / 20) \times 5$ | 0 – 5 |
-| **Integrated** | Mid 2 | 0 – 20 | $(\text{raw} / 20) \times 5$ | 0 – 5 |
-| **Integrated** | Model / Lab | 0 – 20 | Direct | 0 – 20 |
-| **Integrated** | Attendance | 0 – 5 | Direct | 0 – 5 |
-| **Integrated** | Assignment | 0 – 5 | Direct | 0 – 5 |
-| **Integrated Total** | **Maximum 40 Marks** | | Sum of converted marks | **40 Marks** |
+- **Author**: **Pallapu Dileep Kumar**
+- **Role**: CSE Student • Developer
+- **GitHub**: [https://github.com/DileepKumarPallapu](https://github.com/DileepKumarPallapu)
+- **LinkedIn**: [https://www.linkedin.com/in/dileep-kumar-pallapu](https://www.linkedin.com/in/dileep-kumar-pallapu)
+- **Copyright**: © 2026 Pallapu Dileep Kumar. All rights reserved.
 
 ---
 
-## 🚀 Running the Project
+## 🌟 Core Calculators
+
+1. **Internal Marks Calculator (Max 40 Marks)**
+   - **Theory Mode**: 3 Tests of 30 raw marks each $\rightarrow$ converted via $(\text{raw} / 30) \times 10$ to 10 marks each + Attendance (5) + Assignment (5) = Max 40.
+   - **Integrated Mode**: 2 Mid-term tests of 20 raw marks each $\rightarrow$ converted via $(\text{raw} / 20) \times 5$ to 5 marks each + Model Practical Lab (20) + Attendance (5) + Assignment (5) = Max 40.
+
+2. **SGPA Calculator**
+   - Semester Grade Point Average with strict credit weighting:
+     $$\text{SGPA} = \frac{\sum (\text{Credits} \times \text{Grade Point})}{\sum \text{Credits}}$$
+   - Full support for institutional regulations: **VTR15**, **VTR18**, **VTR21**, and **VTR25**.
+   - Built-in **View Grade Scale** modal displaying grade points and letter grade classifications.
+
+3. **CGPA Calculator**
+   - Cumulative Grade Point Average weighted across all completed semesters:
+     $$\text{CGPA} = \frac{\sum (\text{Semester SGPA} \times \text{Semester Credits})}{\sum \text{Semester Credits}}$$
+   - Prevents unweighted arithmetic averaging.
+
+4. **Attendance Calculator**
+   - Exact percentage calculation based on faculty sessions conducted:
+     $$\text{Attendance \%} = \left(\frac{\text{Sessions Attended}}{\text{Faculty Sessions}}\right) \times 100$$
+   - Target attendance threshold planner (e.g. required sessions to achieve 75% or 85%).
+   - Future planned absences and projected attendance simulator.
+
+---
+
+## 📄 Print / Save as PDF Reports
+
+- Clean, single-page A4 printable academic report via `window.print()`.
+- Strips all screen UI, navigation bars, buttons, and theme toggles.
+- Displays:
+  - Student Profile (Name, Register/Roll Number, Department, Year, Semester).
+  - Assessment tables and credit breakdown.
+  - Calculation formula and substitution summary.
+  - Native offline SVG QR code pointing to the live application.
+  - Dedicated **Print Footer**:
+    ```text
+    Academic Calculator
+    Developed by Pallapu Dileep Kumar
+    CSE Student • Developer
+
+    GitHub • LinkedIn
+    https://github.com/DileepKumarPallapu • https://www.linkedin.com/in/dileep-kumar-pallapu
+    © 2026 Pallapu Dileep Kumar
+    ```
+
+---
+
+## 📱 PWA & Offline Support
+
+- **PWA Manifest**: `manifest.webmanifest` configured for standalone installation.
+- **Service Worker**: `sw.js` caches core application assets for complete offline functionality.
+- **Client-Side Privacy**: All calculations are executed locally in the browser with zero cloud tracking.
+
+---
+
+## 🛠 Tech Stack
+
+- **Framework**: React 19 + TypeScript + Vite
+- **Styling**: Tailwind CSS (Apple monochrome design system)
+- **Icons**: Lucide React
+- **QR Code**: Native vector SVG via `qrcode`
+- **Testing**: Vitest (15 unit tests)
+
+---
+
+## 🚀 Development & Build
 
 ```bash
-# Navigate to project directory
-cd C:\Users\dilee\.gemini\antigravity\scratch\academic-calculator
-
-# Install dependencies (already installed)
+# Install dependencies
 npm install
 
 # Run Vitest test suite
-npx vitest run
+npm test
 
-# Run Development Server
+# Start local development server
 npm run dev
 
-# Build for Production
+# Build for production
 npm run build
+
+# Preview production build
+npm run preview
 ```

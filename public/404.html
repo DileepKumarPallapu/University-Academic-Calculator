@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Academic Calculator</title>
+    <script>
+      (function() {
+        var path = window.location.pathname;
+        var repoName = '/University-Academic-Calculator';
+        if (path.startsWith(repoName)) {
+          path = path.slice(repoName.length);
+        }
+        if (!path || path === '/') {
+          window.location.replace(window.location.origin + repoName + '/');
+        } else {
+          window.location.replace(window.location.origin + (window.location.pathname.startsWith(repoName) ? repoName : '') + '/#' + path + window.location.search);
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <p>Redirecting to Academic Calculator...</p>
+  </body>
+</html>

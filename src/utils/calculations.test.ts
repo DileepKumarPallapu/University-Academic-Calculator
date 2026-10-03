@@ -160,23 +160,23 @@ describe('University Calculation Engine Unit Tests', () => {
     });
   });
 
-  describe('GPA & CGPA Calculations', () => {
-    it('calculates weighted GPA correctly', () => {
+    it('calculates weighted GPA correctly for prompt QA scenario (11 credits, 100 quality points => 9.09)', () => {
       const gpaRes = calculateGPA([
-        { id: '1', name: 'Subject 1', credits: 4, grade: 'S', gradePoint: 10 },
-        { id: '2', name: 'Subject 2', credits: 4, grade: 'A', gradePoint: 8 },
+        { id: '1', name: 'Subject A', credits: 4, grade: 'A', gradePoint: 9 },
+        { id: '2', name: 'Subject B', credits: 3, grade: 'B', gradePoint: 8 },
+        { id: '3', name: 'Subject C', credits: 4, grade: 'S', gradePoint: 10 },
       ]);
-      expect(gpaRes.totalCredits).toBe(8);
-      expect(gpaRes.gpa).toBe(9.0);
+      expect(gpaRes.totalCredits).toBe(11);
+      expect(gpaRes.gpa).toBe(9.09);
     });
 
-    it('calculates credit-weighted CGPA correctly', () => {
+    it('calculates credit-weighted CGPA correctly for prompt QA scenario (Sem 1: 8 GPA/20 cr, Sem 2: 9 GPA/25 cr => 8.56)', () => {
       const cgpaRes = calculateCGPA([
         { id: '1', semesterNumber: 1, gpa: 8.0, credits: 20 },
-        { id: '2', semesterNumber: 2, gpa: 9.0, credits: 20 },
+        { id: '2', semesterNumber: 2, gpa: 9.0, credits: 25 },
       ]);
-      expect(cgpaRes.totalCredits).toBe(40);
-      expect(cgpaRes.cgpa).toBe(8.5);
+      expect(cgpaRes.totalCredits).toBe(45);
+      // (8 * 20 + 9 * 25) / 45 = (160 + 225) / 45 = 385 / 45 = 8.5555... => 8.56
+      expect(cgpaRes.cgpa).toBe(8.56);
     });
-  });
 });
