@@ -7,6 +7,9 @@ import {
   formatFixed,
 } from '../utils/calculations';
 import type { TheoryInputs, IntegratedInputs } from '../types';
+import { PrintButton } from '../components/common/PrintButton';
+import { AcademicPrintReport } from '../components/common/AcademicPrintReport';
+
 
 export const InternalCalculatorPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'theory' | 'integrated'>('theory');
@@ -102,8 +105,9 @@ export const InternalCalculatorPage: React.FC = () => {
   const m2Raw = typeof integrated.mid2 === 'number' ? integrated.mid2 : (parseFloat(integrated.mid2 as string) || 0);
 
   return (
-    <div className="apple-page-enter flex flex-col gap-8 max-w-[1200px] mx-auto">
-      {/* Header */}
+    <>
+      <div className="apple-page-enter flex flex-col gap-8 max-w-[1200px] mx-auto print:hidden">
+        {/* Header */}
       <div className="flex flex-col gap-2">
         <h1 className="text-[32px] sm:text-[40px] font-semibold tracking-tight text-[var(--text-primary)]">
           Internal Marks
@@ -593,9 +597,124 @@ export const InternalCalculatorPage: React.FC = () => {
                 </div>
               )}
             </div>
+
+            {/* Print / Save PDF Action Button */}
+            <div className="pt-2">
+              <PrintButton />
+            </div>
           </div>
         </div>
       </div>
     </div>
+
+    {/* Dedicated A4 Print Report */}
+    <AcademicPrintReport
+      reportTitle="Internal Marks Report"
+      calculatorName="Internal Marks Calculator"
+      calculationType={activeTab === 'theory' ? 'Theory Internal' : 'Integrated Internal'}
+      resultLabel="TOTAL INTERNAL MARKS"
+      resultValue={`${formatFixed(
+        activeTab === 'theory' ? theoryResult.totalInternal : integratedResult.totalInternal,
+        2
+      )} / 40`}
+      resultSubtext={`${formatFixed(
+        activeTab === 'theory' ? theoryResult.percentage : integratedResult.percentage,
+        2
+      )}% Assessment Percentage`}
+      formulaTitle={activeTab === 'theory' ? 'Theory Internal Formula' : 'Integrated Internal Formula'}
+      formulaRule={
+        activeTab === 'theory'
+          ? 'T1 (/30 × 10) + T2 (/30 × 10) + T3 (/30 × 10) + Attendance (5) + Assignment (5) = Max 40'
+          : 'Mid 1 (/20 × 5) + Mid 2 (/20 × 5) + Model Lab (20) + Attendance (5) + Assignment (5) = Max 40'
+      }
+      formulaCalculation={
+        activeTab === 'theory'
+          ? `${formatFixed(theoryResult.t1Converted, 2)} + ${formatFixed(theoryResult.t2Converted, 2)} + ${formatFixed(theoryResult.t3Converted, 2)} + ${theoryResult.attendance} + ${theoryResult.assignment} = ${formatFixed(theoryResult.totalInternal, 2)} / 40`
+          : `${formatFixed(integratedResult.mid1Converted, 2)} + ${formatFixed(integratedResult.mid2Converted, 2)} + ${integratedResult.lab} + ${integratedResult.attendance} + ${integratedResult.assignment} = ${formatFixed(integratedResult.totalInternal, 2)} / 40`
+      }
+    >
+      <table className="w-full text-left border-collapse border border-[#D2D2D7]">
+        <thead>
+          <tr className="bg-[#F5F5F7] border-b-2 border-[#D2D2D7]">
+            <th className="py-2.5 px-3 text-[12px] font-bold text-[#1D1D1F] uppercase">Assessment Component</th>
+            <th className="py-2.5 px-3 text-[12px] font-bold text-[#1D1D1F] uppercase text-center">Raw / Input Marks</th>
+            <th className="py-2.5 px-3 text-[12px] font-bold text-[#1D1D1F] uppercase text-right">Scaled / Awarded Marks</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-[#E5E5EA] text-[13px]">
+          {activeTab === 'theory' ? (
+            <>
+              <tr>
+                <td className="py-2.5 px-3 font-medium text-[#1D1D1F]">Test 1 (Internal Exam 1)</td>
+                <td className="py-2.5 px-3 text-center text-[#6E6E73] tabular-nums font-mono">{t1Raw} / 30</td>
+                <td className="py-2.5 px-3 text-right font-semibold text-[#1D1D1F] tabular-nums font-mono">{formatFixed(theoryResult.t1Converted, 2)} / 10</td>
+              </tr>
+              <tr>
+                <td className="py-2.5 px-3 font-medium text-[#1D1D1F]">Test 2 (Internal Exam 2)</td>
+                <td className="py-2.5 px-3 text-center text-[#6E6E73] tabular-nums font-mono">{t2Raw} / 30</td>
+                <td className="py-2.5 px-3 text-right font-semibold text-[#1D1D1F] tabular-nums font-mono">{formatFixed(theoryResult.t2Converted, 2)} / 10</td>
+              </tr>
+              <tr>
+                <td className="py-2.5 px-3 font-medium text-[#1D1D1F]">Test 3 (Internal Exam 3)</td>
+                <td className="py-2.5 px-3 text-center text-[#6E6E73] tabular-nums font-mono">{t3Raw} / 30</td>
+                <td className="py-2.5 px-3 text-right font-semibold text-[#1D1D1F] tabular-nums font-mono">{formatFixed(theoryResult.t3Converted, 2)} / 10</td>
+              </tr>
+              <tr>
+                <td className="py-2.5 px-3 font-medium text-[#1D1D1F]">Attendance</td>
+                <td className="py-2.5 px-3 text-center text-[#6E6E73] tabular-nums font-mono">{theoryResult.attendance} / 5</td>
+                <td className="py-2.5 px-3 text-right font-semibold text-[#1D1D1F] tabular-nums font-mono">{theoryResult.attendance} / 5</td>
+              </tr>
+              <tr>
+                <td className="py-2.5 px-3 font-medium text-[#1D1D1F]">Assignment / Continuous Evaluation</td>
+                <td className="py-2.5 px-3 text-center text-[#6E6E73] tabular-nums font-mono">{theoryResult.assignment} / 5</td>
+                <td className="py-2.5 px-3 text-right font-semibold text-[#1D1D1F] tabular-nums font-mono">{theoryResult.assignment} / 5</td>
+              </tr>
+            </>
+          ) : (
+            <>
+              <tr>
+                <td className="py-2.5 px-3 font-medium text-[#1D1D1F]">Mid Term Exam 1</td>
+                <td className="py-2.5 px-3 text-center text-[#6E6E73] tabular-nums font-mono">{m1Raw} / 20</td>
+                <td className="py-2.5 px-3 text-right font-semibold text-[#1D1D1F] tabular-nums font-mono">{formatFixed(integratedResult.mid1Converted, 2)} / 5</td>
+              </tr>
+              <tr>
+                <td className="py-2.5 px-3 font-medium text-[#1D1D1F]">Mid Term Exam 2</td>
+                <td className="py-2.5 px-3 text-center text-[#6E6E73] tabular-nums font-mono">{m2Raw} / 20</td>
+                <td className="py-2.5 px-3 text-right font-semibold text-[#1D1D1F] tabular-nums font-mono">{formatFixed(integratedResult.mid2Converted, 2)} / 5</td>
+              </tr>
+              <tr>
+                <td className="py-2.5 px-3 font-medium text-[#1D1D1F]">Model Lab / Integrated Practical</td>
+                <td className="py-2.5 px-3 text-center text-[#6E6E73] tabular-nums font-mono">{integratedResult.lab} / 20</td>
+                <td className="py-2.5 px-3 text-right font-semibold text-[#1D1D1F] tabular-nums font-mono">{integratedResult.lab} / 20</td>
+              </tr>
+              <tr>
+                <td className="py-2.5 px-3 font-medium text-[#1D1D1F]">Attendance</td>
+                <td className="py-2.5 px-3 text-center text-[#6E6E73] tabular-nums font-mono">{integratedResult.attendance} / 5</td>
+                <td className="py-2.5 px-3 text-right font-semibold text-[#1D1D1F] tabular-nums font-mono">{integratedResult.attendance} / 5</td>
+              </tr>
+              <tr>
+                <td className="py-2.5 px-3 font-medium text-[#1D1D1F]">Assignment / Continuous Evaluation</td>
+                <td className="py-2.5 px-3 text-center text-[#6E6E73] tabular-nums font-mono">{integratedResult.assignment} / 5</td>
+                <td className="py-2.5 px-3 text-right font-semibold text-[#1D1D1F] tabular-nums font-mono">{integratedResult.assignment} / 5</td>
+              </tr>
+            </>
+          )}
+        </tbody>
+        <tfoot>
+          <tr className="bg-[#FAFAFA] font-bold border-t-2 border-[#D2D2D7]">
+            <td className="py-3 px-3 text-[#1D1D1F]">TOTAL CALCULATED INTERNAL</td>
+            <td className="py-3 px-3 text-center text-[#6E6E73]">—</td>
+            <td className="py-3 px-3 text-right text-[15px] text-[#1D1D1F] tabular-nums font-mono">
+              {formatFixed(
+                activeTab === 'theory' ? theoryResult.totalInternal : integratedResult.totalInternal,
+                2
+              )} / 40
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+    </AcademicPrintReport>
+    </>
   );
 };
+

@@ -3,6 +3,9 @@ import { Plus, Trash2 } from 'lucide-react';
 import { calculateGPA, formatFixed } from '../utils/calculations';
 import { REGULATIONS, type RegulationId } from '../config/university';
 import type { SubjectItem } from '../types';
+import { PrintButton } from '../components/common/PrintButton';
+import { AcademicPrintReport } from '../components/common/AcademicPrintReport';
+
 
 export const GPACalculatorPage: React.FC = () => {
   // Regulation selection with localStorage persistence
@@ -119,8 +122,9 @@ export const GPACalculatorPage: React.FC = () => {
   );
 
   return (
-    <div className="apple-page-enter flex flex-col gap-8 max-w-[1200px] mx-auto">
-      {/* Header */}
+    <>
+      <div className="apple-page-enter flex flex-col gap-8 max-w-[1200px] mx-auto print:hidden">
+        {/* Header */}
       <div className="flex flex-col gap-2">
         <h1 className="text-[32px] sm:text-[40px] font-semibold tracking-tight text-[var(--text-primary)]">
           SGPA Calculator
@@ -457,9 +461,82 @@ export const GPACalculatorPage: React.FC = () => {
                 {formatFixed(totalQualityPoints, 2)} ÷ {gpaResult.totalCredits || 0} = {formatFixed(gpaResult.gpa, 2)}
               </div>
             </div>
+
+            {/* Print / Save PDF Action Button */}
+            <div className="pt-2">
+              <PrintButton />
+            </div>
           </div>
         </div>
       </div>
     </div>
+
+    {/* Dedicated A4 Print Report */}
+    <AcademicPrintReport
+      reportTitle="SGPA Report"
+      calculatorName="SGPA Calculator"
+      regulation={regulation}
+      semester={selectedSemester}
+      resultLabel="SEMESTER GRADE POINT AVERAGE (SGPA)"
+      resultValue={`${formatFixed(gpaResult.gpa, 2)} / 10`}
+      resultSubtext={`Total Credits: ${gpaResult.totalCredits} • Total Credit Points: ${formatFixed(totalQualityPoints, 2)}`}
+      formulaTitle="SGPA Calculation Summary"
+      formulaRule="SGPA Formula: Σ(Credit × Grade Point) ÷ Σ(Credits)"
+      formulaCalculation={`${formatFixed(totalQualityPoints, 2)} ÷ ${gpaResult.totalCredits || 0} = ${formatFixed(gpaResult.gpa, 2)}`}
+      isEmpty={gpaResult.totalCredits === 0}
+      emptyNotice="Please enter course credits and calculate your SGPA before printing."
+    >
+      <table className="w-full text-left border-collapse border border-[#D2D2D7]">
+        <thead>
+          <tr className="bg-[#F5F5F7] border-b-2 border-[#D2D2D7]">
+            <th className="py-2.5 px-3 text-[12px] font-bold text-[#1D1D1F] uppercase">Subject</th>
+            <th className="py-2.5 px-3 text-[12px] font-bold text-[#1D1D1F] uppercase text-center w-[110px]">Credits</th>
+            <th className="py-2.5 px-3 text-[12px] font-bold text-[#1D1D1F] uppercase text-center w-[100px]">Grade</th>
+            <th className="py-2.5 px-3 text-[12px] font-bold text-[#1D1D1F] uppercase text-center w-[110px]">Grade Point</th>
+            <th className="py-2.5 px-3 text-[12px] font-bold text-[#1D1D1F] uppercase text-right w-[140px]">Credit × GP</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-[#E5E5EA] text-[13px]">
+          {subjects.map((sub, idx) => {
+            const cred = Number(sub.credits) || 0;
+            const pts = sub.gradePoint ?? 0;
+            const qualityPts = cred * pts;
+            return (
+              <tr key={sub.id}>
+                <td className="py-2.5 px-3 font-medium text-[#1D1D1F]">
+                  {sub.name.trim() || `Subject ${idx + 1}`}
+                </td>
+                <td className="py-2.5 px-3 text-center font-semibold text-[#1D1D1F] tabular-nums font-mono">
+                  {cred}
+                </td>
+                <td className="py-2.5 px-3 text-center font-semibold text-[#1D1D1F]">
+                  {sub.grade}
+                </td>
+                <td className="py-2.5 px-3 text-center text-[#6E6E73] tabular-nums font-mono">
+                  {pts}
+                </td>
+                <td className="py-2.5 px-3 text-right font-semibold text-[#1D1D1F] tabular-nums font-mono">
+                  {qualityPts.toFixed(2)}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+        <tfoot>
+          <tr className="bg-[#FAFAFA] font-bold border-t-2 border-[#D2D2D7]">
+            <td className="py-3 px-3 text-[#1D1D1F]">TOTALS</td>
+            <td className="py-3 px-3 text-center text-[14px] text-[#1D1D1F] tabular-nums font-mono">
+              {gpaResult.totalCredits}
+            </td>
+            <td className="py-3 px-3 text-center text-[#6E6E73]">—</td>
+            <td className="py-3 px-3 text-center text-[#6E6E73]">—</td>
+            <td className="py-3 px-3 text-right text-[14px] text-[#1D1D1F] tabular-nums font-mono">
+              {formatFixed(totalQualityPoints, 2)}
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+    </AcademicPrintReport>
+    </>
   );
 };

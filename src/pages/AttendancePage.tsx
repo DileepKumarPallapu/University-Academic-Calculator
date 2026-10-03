@@ -6,6 +6,9 @@ import {
   calculateProjectedAttendance,
   formatFixed,
 } from '../utils/calculations';
+import { PrintButton } from '../components/common/PrintButton';
+import { AcademicPrintReport } from '../components/common/AcademicPrintReport';
+
 
 interface AttendanceRecord {
   id: string;
@@ -145,8 +148,9 @@ export const AttendancePage: React.FC = () => {
   };
 
   return (
-    <div className="apple-page-enter flex flex-col gap-8 max-w-[1200px] mx-auto">
-      {/* Header */}
+    <>
+      <div className="apple-page-enter flex flex-col gap-8 max-w-[1200px] mx-auto print:hidden">
+        {/* Header */}
       <div className="flex flex-col gap-2">
         <h1 className="text-[32px] sm:text-[40px] font-semibold tracking-tight text-[var(--text-primary)]">
           Attendance
@@ -497,9 +501,64 @@ export const AttendancePage: React.FC = () => {
                 {attended} ÷ {facultySessions || 0} × 100 = {formatFixed(attendanceResult.percentage, 2)}%
               </div>
             </div>
+
+            {/* Print / Save PDF Action Button */}
+            <div className="pt-2">
+              <PrintButton disabled={facultySessions === 0} />
+            </div>
           </div>
         </div>
       </div>
     </div>
+
+    {/* Dedicated A4 Print Report */}
+    <AcademicPrintReport
+      reportTitle="Attendance Report"
+      calculatorName="Attendance Calculator"
+      resultLabel="ATTENDANCE PERCENTAGE"
+      resultValue={`${formatFixed(attendanceResult.percentage, 2)}%`}
+      resultSubtext={`${attended} / ${facultySessions} sessions attended • ${status.label}`}
+      formulaTitle="Attendance Calculation Summary"
+      formulaRule="Formula: (Sessions Attended ÷ Faculty Sessions) × 100"
+      formulaCalculation={`${attended} ÷ ${facultySessions || 0} × 100 = ${formatFixed(attendanceResult.percentage, 2)}%`}
+      isEmpty={facultySessions === 0}
+      emptyNotice="Please enter total faculty sessions and attended sessions before printing."
+    >
+      <table className="w-full text-left border-collapse border border-[#D2D2D7]">
+        <thead>
+          <tr className="bg-[#F5F5F7] border-b-2 border-[#D2D2D7]">
+            <th className="py-2.5 px-3 text-[12px] font-bold text-[#1D1D1F] uppercase">Session Category</th>
+            <th className="py-2.5 px-3 text-[12px] font-bold text-[#1D1D1F] uppercase text-right w-[180px]">Sessions Count</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-[#E5E5EA] text-[13px]">
+          <tr>
+            <td className="py-2.5 px-3 font-medium text-[#1D1D1F]">Total Sessions (Course Syllabus Schedule)</td>
+            <td className="py-2.5 px-3 text-right font-semibold text-[#1D1D1F] tabular-nums font-mono">{totalSessions}</td>
+          </tr>
+          <tr>
+            <td className="py-2.5 px-3 font-medium text-[#1D1D1F]">Faculty Sessions (Conducted by Faculty)</td>
+            <td className="py-2.5 px-3 text-right font-semibold text-[#1D1D1F] tabular-nums font-mono">{facultySessions}</td>
+          </tr>
+          <tr>
+            <td className="py-2.5 px-3 font-medium text-[#1D1D1F]">Sessions Attended</td>
+            <td className="py-2.5 px-3 text-right font-semibold text-[#1D1D1F] tabular-nums font-mono">{attended}</td>
+          </tr>
+          <tr>
+            <td className="py-2.5 px-3 font-medium text-[#1D1D1F]">Sessions Absent</td>
+            <td className="py-2.5 px-3 text-right font-semibold text-[#1D1D1F] tabular-nums font-mono">{attendanceResult.absent}</td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr className="bg-[#FAFAFA] font-bold border-t-2 border-[#D2D2D7]">
+            <td className="py-3 px-3 text-[#1D1D1F]">ATTENDANCE STATUS</td>
+            <td className="py-3 px-3 text-right text-[14px] text-[#1D1D1F]">
+              {status.label}
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+    </AcademicPrintReport>
+    </>
   );
 };

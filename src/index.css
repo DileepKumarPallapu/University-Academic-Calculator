@@ -357,19 +357,84 @@
 
 /* Print Styles */
 @media print {
+  @page {
+    size: A4 portrait;
+    margin: 16mm 20mm;
+  }
+
+  html,
+  body,
+  #root {
+    background: #FFFFFF !important;
+    background-color: #FFFFFF !important;
+    color: #1D1D1F !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    min-height: auto !important;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Hide screen-only interactive and layout chrome */
   header,
+  nav,
   footer,
   button,
-  .no-print {
+  .no-print,
+  .apple-navbar,
+  [role="dialog"],
+  .toast-container {
     display: none !important;
   }
 
-  body,
-  main,
-  #root {
-    background: #ffffff !important;
-    color: #000000 !important;
+  /* Unconstrain main container */
+  main {
+    max-width: 100% !important;
+    width: 100% !important;
     padding: 0 !important;
     margin: 0 !important;
   }
+
+  /* Table rules for print */
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+
+  thead {
+    display: table-header-group !important;
+  }
+
+  tr {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  th,
+  td {
+    border-color: #D2D2D7 !important;
+    color: #1D1D1F !important;
+  }
+
+  /* Typography and elements */
+  a {
+    color: inherit !important;
+    text-decoration: none !important;
+  }
+
+  .break-inside-avoid {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* Ensure print report is displayed cleanly */
+  .print-report-container {
+    display: block !important;
+    width: 100% !important;
+    background: #FFFFFF !important;
+    color: #1D1D1F !important;
+  }
 }
+

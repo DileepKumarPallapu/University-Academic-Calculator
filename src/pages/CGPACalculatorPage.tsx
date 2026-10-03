@@ -3,6 +3,9 @@ import { Plus, Trash2 } from 'lucide-react';
 import { calculateCGPA, formatFixed } from '../utils/calculations';
 import { REGULATIONS, type RegulationId } from '../config/university';
 import type { SemesterItem } from '../types';
+import { PrintButton } from '../components/common/PrintButton';
+import { AcademicPrintReport } from '../components/common/AcademicPrintReport';
+
 
 export const CGPACalculatorPage: React.FC = () => {
   // Regulation selection with localStorage persistence
@@ -89,8 +92,9 @@ export const CGPACalculatorPage: React.FC = () => {
   );
 
   return (
-    <div className="apple-page-enter flex flex-col gap-8 max-w-[1200px] mx-auto">
-      {/* Header */}
+    <>
+      <div className="apple-page-enter flex flex-col gap-8 max-w-[1200px] mx-auto print:hidden">
+        {/* Header */}
       <div className="flex flex-col gap-2">
         <h1 className="text-[32px] sm:text-[40px] font-semibold tracking-tight text-[var(--text-primary)]">
           CGPA Calculator
@@ -377,9 +381,76 @@ export const CGPACalculatorPage: React.FC = () => {
                 {formatFixed(totalQualityPoints, 2)} ÷ {cgpaResult.totalCredits || 0} = {formatFixed(cgpaResult.cgpa, 2)}
               </div>
             </div>
+
+            {/* Print / Save PDF Action Button */}
+            <div className="pt-2">
+              <PrintButton />
+            </div>
           </div>
         </div>
       </div>
     </div>
+
+    {/* Dedicated A4 Print Report */}
+    <AcademicPrintReport
+      reportTitle="CGPA Report"
+      calculatorName="CGPA Calculator"
+      regulation={regulation}
+      resultLabel="CUMULATIVE GRADE POINT AVERAGE (CGPA)"
+      resultValue={`${formatFixed(cgpaResult.cgpa, 2)} / 10`}
+      resultSubtext={`Total Credits: ${cgpaResult.totalCredits} • Total Weighted Quality Points: ${formatFixed(totalQualityPoints, 2)}`}
+      formulaTitle="CGPA Calculation Summary"
+      formulaRule="CGPA Formula: Σ (SGPA × Semester Credits) ÷ Σ (Semester Credits)"
+      formulaCalculation={`${formatFixed(totalQualityPoints, 2)} ÷ ${cgpaResult.totalCredits || 0} = ${formatFixed(cgpaResult.cgpa, 2)}`}
+      isEmpty={cgpaResult.totalCredits === 0}
+      emptyNotice="Please enter semester SGPA and credits to calculate your CGPA before printing."
+    >
+      <table className="w-full text-left border-collapse border border-[#D2D2D7]">
+        <thead>
+          <tr className="bg-[#F5F5F7] border-b-2 border-[#D2D2D7]">
+            <th className="py-2.5 px-3 text-[12px] font-bold text-[#1D1D1F] uppercase">Semester</th>
+            <th className="py-2.5 px-3 text-[12px] font-bold text-[#1D1D1F] uppercase text-center w-[120px]">SGPA</th>
+            <th className="py-2.5 px-3 text-[12px] font-bold text-[#1D1D1F] uppercase text-center w-[120px]">Credits</th>
+            <th className="py-2.5 px-3 text-[12px] font-bold text-[#1D1D1F] uppercase text-right w-[160px]">Weighted Points</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-[#E5E5EA] text-[13px]">
+          {semesters.map((s) => {
+            const g = Number(s.gpa) || 0;
+            const c = Number(s.credits) || 0;
+            const weighted = g * c;
+            return (
+              <tr key={s.id}>
+                <td className="py-2.5 px-3 font-medium text-[#1D1D1F]">
+                  Semester {s.semesterNumber}
+                </td>
+                <td className="py-2.5 px-3 text-center font-semibold text-[#1D1D1F] tabular-nums font-mono">
+                  {formatFixed(g, 2)}
+                </td>
+                <td className="py-2.5 px-3 text-center font-semibold text-[#1D1D1F] tabular-nums font-mono">
+                  {c}
+                </td>
+                <td className="py-2.5 px-3 text-right font-semibold text-[#1D1D1F] tabular-nums font-mono">
+                  {weighted.toFixed(2)}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+        <tfoot>
+          <tr className="bg-[#FAFAFA] font-bold border-t-2 border-[#D2D2D7]">
+            <td className="py-3 px-3 text-[#1D1D1F]">TOTALS</td>
+            <td className="py-3 px-3 text-center text-[#6E6E73]">—</td>
+            <td className="py-3 px-3 text-center text-[14px] text-[#1D1D1F] tabular-nums font-mono">
+              {cgpaResult.totalCredits}
+            </td>
+            <td className="py-3 px-3 text-right text-[14px] text-[#1D1D1F] tabular-nums font-mono">
+              {formatFixed(totalQualityPoints, 2)}
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+    </AcademicPrintReport>
+    </>
   );
 };
