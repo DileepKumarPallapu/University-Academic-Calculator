@@ -460,15 +460,15 @@ export const GPACalculatorPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Content Layout: Grid of Subjects LEFT (7 cols), Result RIGHT (5 cols) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      {/* Main Content Layout: Grid of Subjects LEFT (1.5fr), Result RIGHT (0.85fr) */}
+      <div className="main-calculator-layout w-full max-w-full">
         {/* Left: Subjects Section */}
-        <div className="lg:col-span-7 flex flex-col gap-4">
+        <div className="min-w-0 w-full max-w-full flex flex-col gap-4">
           <DraftIndicator hasDraft={hasDraft} onClear={handleClearDraft} />
           {subjects.every((s) => Number(s.credits) === 0) && (
             <QuickStartPrompt message="Add your subjects, credits and grades." />
           )}
-          <div className="apple-main-container p-6 sm:p-8 flex flex-col gap-6">
+          <div className="apple-main-container p-5 sm:p-7 flex flex-col gap-6 w-full max-w-full">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--border-primary)] pb-5">
               <div className="flex items-center gap-3">
                 <label htmlFor="semester-select" className="text-sm font-semibold text-[var(--text-primary)]">
@@ -521,49 +521,78 @@ export const GPACalculatorPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Desktop & Tablet Subject Table with Stable, Centered Credits Column */}
-            <div className="hidden md:block overflow-x-auto rounded-xl border border-[var(--border-primary)]">
-              <table className="w-full text-left text-sm border-collapse">
+            {/* Desktop & Tablet Subject Table */}
+            <div className="hidden md:block sgpa-table-container">
+              <table className="sgpa-table">
                 <thead>
-                  <tr className="bg-[var(--bg-primary)] border-b border-[var(--border-primary)]">
-                    <th className="py-3.5 px-4 font-semibold text-[14px] text-[var(--text-primary)]">
+                  <tr className="bg-[#F5F5F7] dark:bg-[#000000] border-b border-[#D2D2D7] dark:border-[#38383A]">
+                    <th className="py-3.5 px-3 font-semibold text-[13px] text-[#1D1D1F] dark:text-[#F5F5F7] text-left" style={{ width: '33%' }}>
                       Subject
                     </th>
-                    <th className="py-3.5 px-3 font-semibold text-[14px] text-[var(--text-primary)] text-center w-[110px] min-w-[100px]">
+                    <th className="py-3.5 px-2 font-semibold text-[13px] text-[#1D1D1F] dark:text-[#F5F5F7] text-center" style={{ width: '15%' }}>
                       Credits
                     </th>
-                    <th className="py-3.5 px-3 font-semibold text-[14px] text-[var(--text-primary)] text-center w-[110px] min-w-[100px]">
+                    <th className="py-3.5 px-2 font-semibold text-[13px] text-[#1D1D1F] dark:text-[#F5F5F7] text-center" style={{ width: '15%' }}>
                       Grade
                     </th>
-                    <th className="py-3.5 px-3 font-semibold text-[14px] text-[var(--text-primary)] text-center w-[130px] min-w-[110px]">
-                      Grade Point
+                    <th className="py-3.5 px-2 font-semibold text-[13px] text-[#1D1D1F] dark:text-[#F5F5F7] text-center leading-tight" style={{ width: '17%' }}>
+                      <span>Grade</span>
+                      <span className="block text-[11px] font-normal text-[#6E6E73] dark:text-[#A1A1A6]">Point</span>
                     </th>
-                    <th className="py-3.5 px-4 font-semibold text-[14px] text-[var(--text-primary)] text-right w-[150px] min-w-[130px]">
-                      Credits × GP
+                    <th className="py-3.5 px-2 font-semibold text-[13px] text-[#1D1D1F] dark:text-[#F5F5F7] text-center leading-tight" style={{ width: '16%' }}>
+                      <span>Credits</span>
+                      <span className="block text-[11px] font-normal text-[#6E6E73] dark:text-[#A1A1A6]">× GP</span>
                     </th>
-                    <th className="py-3.5 px-3 text-center w-[80px]"></th>
+                    <th className="py-3.5 px-1 text-center" style={{ width: '46px' }}>
+                      <span className="sr-only">Delete</span>
+                    </th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-[#E5E5EA] dark:divide-[#38383A]">
                   {subjects.map((s, idx) => {
                     const cred = Number(s.credits) || 0;
                     const pts = s.gradePoint ?? 0;
                     return (
-                      <tr key={s.id} className="bg-[var(--surface)] border-b border-[var(--border-secondary)] hover:bg-[var(--bg-tertiary)] transition-colors">
+                      <tr
+                        key={s.id}
+                        className="bg-[#FFFFFF] dark:bg-[#1C1C1E] hover:bg-[#F5F5F7] dark:hover:bg-[#2C2C2E] transition-colors"
+                      >
                         {/* Subject Title */}
-                        <td className="py-3.5 px-4">
-                          <input
-                            type="text"
-                            value={s.name}
-                            placeholder={`Subject ${idx + 1}`}
-                            onChange={(e) => handleSubjectChange(s.id, 'name', e.target.value)}
-                            className="w-full bg-transparent border-b border-transparent focus:border-[var(--text-primary)] outline-none text-[var(--text-primary)] font-medium placeholder:text-[var(--text-tertiary)] text-[15px]"
-                          />
+                        <td className="py-2.5 px-3 align-middle" style={{ width: '33%' }}>
+                          <div className="flex flex-col w-full">
+                            <textarea
+                              rows={1}
+                              value={s.name}
+                              placeholder={`Subject ${idx + 1}`}
+                              onChange={(e) => {
+                                handleSubjectChange(s.id, 'name', e.target.value);
+                                e.target.style.height = 'auto';
+                                e.target.style.height = `${e.target.scrollHeight}px`;
+                              }}
+                              onFocus={(e) => {
+                                e.target.style.height = 'auto';
+                                e.target.style.height = `${e.target.scrollHeight}px`;
+                              }}
+                              className="w-full bg-transparent border-b border-transparent focus:border-[#1D1D1F] dark:focus:border-[#F5F5F7] outline-none text-[#1D1D1F] dark:text-[#F5F5F7] font-medium placeholder:text-[#86868B] dark:placeholder:text-[#8E8E93] text-[13.5px] resize-none leading-snug py-1 px-0.5 transition-colors sgpa-subject-name"
+                              style={{
+                                whiteSpace: 'normal',
+                                overflowWrap: 'anywhere',
+                                wordBreak: 'normal',
+                                minHeight: '38px',
+                                height: 'auto',
+                              }}
+                            />
+                            {cred === 0 && (
+                              <span className="self-start mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-black/5 dark:bg-white/10 text-[#6E6E73] dark:text-[#A1A1A6] leading-none">
+                                Non-credit
+                              </span>
+                            )}
+                          </div>
                         </td>
 
-                        {/* Credits Input Cell: 48px, High-contrast, Centered */}
-                        <td className="py-3 px-3 text-center w-[120px] min-w-[110px]">
-                          <div className="flex flex-col items-center">
+                        {/* Credits Input Cell */}
+                        <td className="py-2.5 px-2 text-center align-middle" style={{ width: '15%' }}>
+                          <div className="flex flex-col items-center justify-center w-full">
                             <input
                               type="number"
                               inputMode="decimal"
@@ -573,58 +602,62 @@ export const GPACalculatorPage: React.FC = () => {
                               placeholder="0"
                               value={s.credits}
                               onChange={(e) => handleSubjectChange(s.id, 'credits', e.target.value)}
-                              className={`h-[48px] w-full max-w-[84px] mx-auto rounded-[10px] bg-[var(--surface)] text-[var(--text-primary)] border ${
+                              className={`h-11 w-full max-w-[88px] min-w-[76px] rounded-xl bg-[#FFFFFF] dark:bg-[#1C1C1E] text-[#1D1D1F] dark:text-[#F5F5F7] border ${
                                 typeof s.credits === 'number' && s.credits < 0
-                                  ? 'border-[var(--danger)] focus:border-[var(--danger)] ring-1 ring-[var(--danger)]'
-                                  : 'border-[var(--input-border)] focus:border-[var(--text-primary)]'
-                              } text-center text-[16px] font-medium placeholder:text-[var(--text-tertiary)] outline-none focus:border-2 focus:ring-2 focus:ring-black/10 dark:focus:ring-white/10 transition-all shadow-sm`}
+                                  ? 'border-[var(--danger)] ring-1 ring-[var(--danger)]'
+                                  : 'border-[#C7C7CC] dark:border-[#48484A]'
+                              } text-center text-sm font-semibold placeholder:text-[#86868B] dark:placeholder:text-[#8E8E93] outline-none focus:border-[#1D1D1F] dark:focus:border-[#F5F5F7] focus:ring-1 focus:ring-black dark:focus:ring-white transition-all shadow-xs`}
                             />
                             {typeof s.credits === 'number' && s.credits < 0 ? (
-                              <span className="text-[10px] text-[var(--danger)] font-medium mt-1">
+                              <span className="text-[10px] text-[var(--danger)] font-medium mt-1 leading-none">
                                 ≥ 0 only
                               </span>
                             ) : (
                               (s.credits as any) === 0 && (
-                                <span className="text-[10px] text-[var(--text-tertiary)] font-medium mt-1">
-                                  Non-credit
+                                <span className="text-[10px] text-[#6E6E73] dark:text-[#A1A1A6] font-medium mt-1 leading-none">
+                                  0 pts
                                 </span>
                               )
                             )}
                           </div>
                         </td>
 
-                        {/* Grade Select */}
-                        <td className="py-3 px-3 text-center w-[110px] min-w-[100px]">
+                        {/* Grade Select Cell */}
+                        <td className="py-2.5 px-2 text-center align-middle" style={{ width: '15%' }}>
                           <select
                             value={s.grade}
                             onChange={(e) => handleSubjectChange(s.id, 'grade', e.target.value)}
-                            className="h-[48px] w-full rounded-[10px] bg-[var(--surface)] text-[var(--text-primary)] border border-[var(--input-border)] text-center text-[15px] font-semibold cursor-pointer outline-none focus:border-2 focus:border-[var(--text-primary)] shadow-sm"
+                            className="h-11 w-full max-w-[88px] min-w-[76px] rounded-xl bg-[#FFFFFF] dark:bg-[#1C1C1E] text-[#1D1D1F] dark:text-[#F5F5F7] border border-[#C7C7CC] dark:border-[#48484A] text-center text-sm font-semibold cursor-pointer outline-none focus:border-[#1D1D1F] dark:focus:border-[#F5F5F7] focus:ring-1 focus:ring-black dark:focus:ring-white transition-all shadow-xs px-1"
                           >
                             {gradeOptions.map((opt) => (
-                              <option key={opt.grade} value={opt.grade}>
+                              <option
+                                key={opt.grade}
+                                value={opt.grade}
+                                className="bg-[#FFFFFF] dark:bg-[#1C1C1E] text-[#1D1D1F] dark:text-[#F5F5F7]"
+                              >
                                 {opt.grade}
                               </option>
                             ))}
                           </select>
                         </td>
 
-                        {/* Grade Point */}
-                        <td className="py-3.5 px-3 text-center font-medium text-[16px] text-[var(--text-primary)] tabular-nums w-[130px] min-w-[110px]">
-                          {pts}
+                        {/* Grade Point Cell */}
+                        <td className="py-2.5 px-2 text-center align-middle font-semibold text-sm text-[#1D1D1F] dark:text-[#F5F5F7] tabular-nums" style={{ width: '17%' }}>
+                          <span>{pts}</span>
                         </td>
 
-                        {/* Credits × GP */}
-                        <td className="py-3.5 px-4 text-right font-semibold text-[16px] text-[var(--text-primary)] tabular-nums w-[150px] min-w-[130px]">
-                          {(cred * pts).toFixed(1)}
+                        {/* Credits × GP Cell */}
+                        <td className="py-2.5 px-2 text-center align-middle font-bold text-sm text-[#1D1D1F] dark:text-[#F5F5F7] tabular-nums" style={{ width: '16%' }}>
+                          <span>{(cred * pts).toFixed(1)}</span>
                         </td>
 
-                        {/* Remove Action */}
-                        <td className="py-3.5 px-3 text-center w-[80px]">
+                        {/* Remove Action Cell */}
+                        <td className="py-2.5 px-1 text-center align-middle" style={{ width: '46px' }}>
                           {subjects.length > 1 && (
                             <button
                               type="button"
                               onClick={() => handleRemoveSubject(s.id)}
-                              className="text-[var(--text-tertiary)] hover:text-[var(--danger)] transition-colors p-2 rounded-lg hover:bg-[var(--bg-primary)]"
+                              className="w-8 h-8 rounded-lg text-[#86868B] hover:text-[var(--danger)] dark:text-[#8E8E93] dark:hover:text-[var(--danger)] hover:bg-black/5 dark:hover:bg-white/5 transition-colors inline-flex items-center justify-center cursor-pointer mx-auto"
                               aria-label={`Remove subject ${idx + 1}`}
                             >
                               <Trash2 className="w-4 h-4" />
@@ -639,54 +672,56 @@ export const GPACalculatorPage: React.FC = () => {
             </div>
 
             {/* Mobile Stacked Subject Cards */}
-            <div className="md:hidden flex flex-col gap-3">
+            <div className="md:hidden flex flex-col gap-3.5 w-full">
               {subjects.map((s, idx) => {
                 const cred = Number(s.credits) || 0;
                 const pts = s.gradePoint ?? 0;
                 return (
                   <div
                     key={s.id}
-                    className="p-5 rounded-xl bg-[var(--surface)] border border-[var(--border-primary)] flex flex-col gap-4 shadow-sm"
+                    className="p-4 sm:p-5 rounded-2xl bg-[#FFFFFF] dark:bg-[#1C1C1E] border border-[#D2D2D7] dark:border-[#38383A] flex flex-col gap-3.5 shadow-xs"
                   >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-[#6E6E73] dark:text-[#A1A1A6]">
                         Subject {idx + 1}
                       </span>
                       {subjects.length > 1 && (
                         <button
                           type="button"
                           onClick={() => handleRemoveSubject(s.id)}
-                          className="text-[var(--text-tertiary)] hover:text-[var(--danger)] p-1.5"
+                          className="text-[#86868B] hover:text-[var(--danger)] dark:text-[#8E8E93] dark:hover:text-[var(--danger)] p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer"
+                          aria-label={`Remove subject ${idx + 1}`}
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
                       )}
                     </div>
 
-                    <input
-                      type="text"
-                      value={s.name}
-                      placeholder={`Subject ${idx + 1}`}
-                      onChange={(e) => handleSubjectChange(s.id, 'name', e.target.value)}
-                      className="apple-input h-11 text-base font-medium"
-                    />
+                    {/* Subject Title */}
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs font-semibold text-[#1D1D1F] dark:text-[#F5F5F7]">
+                        Subject Title
+                      </label>
+                      <input
+                        type="text"
+                        value={s.name}
+                        placeholder={`Subject ${idx + 1}`}
+                        onChange={(e) => handleSubjectChange(s.id, 'name', e.target.value)}
+                        className="h-11 px-3.5 rounded-xl bg-[#FFFFFF] dark:bg-[#1C1C1E] text-[#1D1D1F] dark:text-[#F5F5F7] border border-[#C7C7CC] dark:border-[#48484A] text-sm font-medium outline-none focus:border-[#1D1D1F] dark:focus:border-[#F5F5F7] focus:ring-1 focus:ring-black dark:focus:ring-white transition-all shadow-xs"
+                      />
+                    </div>
 
-                    <div className="grid grid-cols-2 gap-3 items-center">
-                      <div className="flex flex-col gap-1.5">
+                    {/* Credits & Grade Grid */}
+                    <div className="grid grid-cols-2 gap-3 items-start">
+                      <div className="flex flex-col gap-1">
                         <div className="flex items-center justify-between">
-                          <label className="text-xs font-semibold text-[var(--text-primary)]">
+                          <label className="text-xs font-semibold text-[#1D1D1F] dark:text-[#F5F5F7]">
                             Credits
                           </label>
-                          {typeof s.credits === 'number' && s.credits < 0 ? (
-                            <span className="text-[10px] text-[var(--danger)] font-medium">
-                              Cannot be negative
+                          {(s.credits as any) === 0 && (
+                            <span className="text-[10px] text-[#6E6E73] dark:text-[#A1A1A6] font-medium">
+                              Non-credit
                             </span>
-                          ) : (
-                            (s.credits as any) === 0 && (
-                              <span className="text-[10px] text-[var(--text-tertiary)] font-medium">
-                                Non-credit
-                              </span>
-                            )
                           )}
                         </div>
                         <input
@@ -698,25 +733,34 @@ export const GPACalculatorPage: React.FC = () => {
                           placeholder="0"
                           value={s.credits}
                           onChange={(e) => handleSubjectChange(s.id, 'credits', e.target.value)}
-                          className={`h-[48px] rounded-[10px] bg-[var(--surface)] text-[var(--text-primary)] border ${
+                          className={`h-11 rounded-xl bg-[#FFFFFF] dark:bg-[#1C1C1E] text-[#1D1D1F] dark:text-[#F5F5F7] border ${
                             typeof s.credits === 'number' && s.credits < 0
                               ? 'border-[var(--danger)] ring-1 ring-[var(--danger)]'
-                              : 'border-[var(--input-border)]'
-                          } text-center text-[16px] font-medium outline-none focus:border-2 focus:border-[var(--text-primary)] shadow-sm`}
+                              : 'border-[#C7C7CC] dark:border-[#48484A]'
+                          } text-center text-sm font-semibold outline-none focus:border-[#1D1D1F] dark:focus:border-[#F5F5F7] focus:ring-1 focus:ring-black dark:focus:ring-white transition-all shadow-xs`}
                         />
+                        {typeof s.credits === 'number' && s.credits < 0 && (
+                          <span className="text-[10px] text-[var(--danger)] font-medium">
+                            ≥ 0 only
+                          </span>
+                        )}
                       </div>
 
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-xs font-semibold text-[var(--text-primary)]">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-xs font-semibold text-[#1D1D1F] dark:text-[#F5F5F7]">
                           Grade
                         </label>
                         <select
                           value={s.grade}
                           onChange={(e) => handleSubjectChange(s.id, 'grade', e.target.value)}
-                          className="h-[48px] rounded-[10px] bg-[var(--surface)] text-[var(--text-primary)] border border-[var(--input-border)] text-center text-[15px] font-semibold cursor-pointer outline-none focus:border-2 focus:border-[var(--text-primary)] shadow-sm"
+                          className="h-11 rounded-xl bg-[#FFFFFF] dark:bg-[#1C1C1E] text-[#1D1D1F] dark:text-[#F5F5F7] border border-[#C7C7CC] dark:border-[#48484A] text-center text-sm font-semibold cursor-pointer outline-none focus:border-[#1D1D1F] dark:focus:border-[#F5F5F7] focus:ring-1 focus:ring-black dark:focus:ring-white transition-all shadow-xs px-2"
                         >
                           {gradeOptions.map((opt) => (
-                            <option key={opt.grade} value={opt.grade}>
+                            <option
+                              key={opt.grade}
+                              value={opt.grade}
+                              className="bg-[#FFFFFF] dark:bg-[#1C1C1E] text-[#1D1D1F] dark:text-[#F5F5F7]"
+                            >
                               {opt.grade} ({opt.points} pts)
                             </option>
                           ))}
@@ -724,11 +768,12 @@ export const GPACalculatorPage: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="pt-3 border-t border-[var(--border-secondary)] flex justify-between items-center text-sm">
-                      <span className="text-[var(--text-secondary)] font-medium">
-                        Grade Point: <strong className="text-[var(--text-primary)]">{pts}</strong>
+                    {/* Card Summary Row */}
+                    <div className="pt-2.5 border-t border-[#E5E5EA] dark:border-[#38383A] flex justify-between items-center text-xs">
+                      <span className="text-[#6E6E73] dark:text-[#A1A1A6] font-medium">
+                        Grade Point: <strong className="text-[#1D1D1F] dark:text-[#F5F5F7]">{pts}</strong>
                       </span>
-                      <span className="text-[var(--text-primary)] font-semibold">
+                      <span className="text-[#1D1D1F] dark:text-[#F5F5F7] font-semibold text-sm">
                         Credits × GP = {(cred * pts).toFixed(1)}
                       </span>
                     </div>
@@ -1054,7 +1099,7 @@ export const GPACalculatorPage: React.FC = () => {
         </div>
 
         {/* Right Result Card (Sticky on desktop) */}
-        <div id="sgpa-result-section" className="lg:col-span-5 lg:sticky lg:top-24">
+        <div id="sgpa-result-section" className="min-w-0 w-full max-w-full lg:sticky lg:top-24">
           <div className="apple-result-card flex flex-col gap-6">
             <div>
               <div className="flex items-center justify-between gap-2">
