@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Trash2, RotateCcw, Download, ChevronDown } from 'lucide-react';
+import { Plus, Trash2, RotateCcw, Download, ChevronDown, Edit3, FileUp } from 'lucide-react';
 import { calculateGPA, formatFixed } from '../utils/calculations';
 import { REGULATIONS, type RegulationId } from '../config/university';
 import type { SubjectItem } from '../types';
@@ -15,6 +15,11 @@ import { useAppToast } from '../components/layout/AppShell';
 import { DraftIndicator } from '../components/common/DraftIndicator';
 import { QuickStartPrompt } from '../components/common/QuickStartPrompt';
 import { CalculationStatus } from '../components/common/CalculationStatus';
+import { AmsUploader } from '../components/ams/AmsUploader';
+import { AmsSideBySideReview } from '../components/ams/AmsSideBySideReview';
+import { AmsResultReport } from '../components/ams/AmsResultReport';
+import { AmsPrintReport } from '../components/ams/AmsPrintReport';
+import type { AmsExtractionResult, AmsStudentInfo, AmsSubject, AmsAuditSummary } from '../types/ams';
 
 export const GPACalculatorPage: React.FC = () => {
   const { profile, studentName, setStudentName, updateProfile, nameError, setNameError } = useStudentProfile();
@@ -22,6 +27,37 @@ export const GPACalculatorPage: React.FC = () => {
   const studentNameInputRef = useRef<HTMLInputElement>(null);
   const [isGradeScaleOpen, setIsGradeScaleOpen] = useState(false);
   const [calcSuccess, setCalcSuccess] = useState(false);
+
+  // Calculation Method: 'manual' or 'ams'
+  const [calculationMethod, setCalculationMethod] = useState<'manual' | 'ams'>(() => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('method') === 'ams') return 'ams';
+    } catch {}
+    return 'manual';
+  });
+
+  // AMS Extractor Stages: 'upload' | 'review' | 'result'
+  const [amsStage, setAmsStage] = useState<'upload' | 'review' | 'result'>('upload');
+  const [amsExtractionResult, setAmsExtractionResult] = useState<AmsExtractionResult | null>(null);
+  const [amsConfirmedInfo, setAmsConfirmedInfo] = useState<AmsStudentInfo | null>(null);
+  const [amsConfirmedSubjects, setAmsConfirmedSubjects] = useState<AmsSubject[]>([]);
+  const [amsAuditSummary, setAmsAuditSummary] = useState<AmsAuditSummary | null>(null);
+  const [amsOriginalPreviewUrl, setAmsOriginalPreviewUrl] = useState<string | undefined>(undefined);
+  const [amsIncludeOriginalInPdf, setAmsIncludeOriginalInPdf] = useState<boolean>(true);
+
+  const handleAmsPrint = (includeOriginal: boolean) => {
+    setAmsIncludeOriginalInPdf(includeOriginal);
+    const prevTitle = document.title;
+    const name = amsConfirmedInfo?.name?.trim() || studentName.trim() || 'Student';
+    const safeName = name.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const dateStr = new Date().toISOString().split('T')[0];
+    document.title = `${safeName}_AMS_SGPA_${dateStr}.pdf`;
+    setTimeout(() => {
+      window.print();
+      document.title = prevTitle;
+    }, 50);
+  };
 
   // Regulation selection with localStorage persistence or draft
   const [regulation, setRegulation] = useState<RegulationId>(() => {
@@ -319,24 +355,62 @@ export const GPACalculatorPage: React.FC = () => {
     <>
       <div className="apple-page-enter flex flex-col gap-8 max-w-[1200px] mx-auto print:hidden">
         {/* Header */}
-      <div className="flex flex-col gap-2">
-        <h1 className="text-[32px] sm:text-[40px] font-semibold tracking-tight text-[var(--text-primary)]">
-          SGPA Calculator
-        </h1>
-        <p className="text-[17px] text-[var(--text-secondary)]">
-          Calculate your semester Grade Point Average based on course credits and regulation grades.
-        </p>
-      </div>
+        <div className="flex flex-col gap-2">
+          <h1 className="text-[32px] sm:text-[40px] font-semibold tracking-tight text-[var(--text-primary)]">
+            SGPA Calculator
+          </h1>
+          <p className="text-[17px] text-[var(--text-secondary)]">
+            Calculate your semester Grade Point Average based on course credits and regulation grades.
+          </p>
+        </div>
 
-      {/* Student Name Input */}
-      <StudentNameInput
-        value={studentName}
-        onChange={setStudentName}
-        errorMessage={nameError}
-        inputRef={studentNameInputRef}
-        profile={profile}
-        onProfileChange={updateProfile}
-      />
+        {/* Method Switcher */}
+        <div className="flex flex-col gap-2">
+          <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-tertiary)]">
+            Choose Calculation Method
+          </span>
+          <div className="inline-flex p-1.5 rounded-2xl bg-[var(--surface-sunken)] border border-[var(--border-secondary)] max-w-md w-full">
+            <button
+              type="button"
+              onClick={() => setCalculationMethod('manual')}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+                calculationMethod === 'manual'
+                  ? 'bg-[var(--surface)] text-[var(--text-primary)] shadow-sm'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+              }`}
+            >
+              <Edit3 className="w-4 h-4" />
+              <span>Enter Manually</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setCalculationMethod('ams')}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+                calculationMethod === 'ams'
+                  ? 'bg-[var(--surface)] text-[var(--text-primary)] shadow-sm'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+              }`}
+            >
+              <FileUp className="w-4 h-4 text-[var(--accent)]" />
+              <span>Import AMS Result</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--accent)] text-white font-bold uppercase tracking-wider">
+                Auto
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {calculationMethod === 'manual' ? (
+          <>
+            {/* Student Name Input */}
+            <StudentNameInput
+              value={studentName}
+              onChange={setStudentName}
+              errorMessage={nameError}
+              inputRef={studentNameInputRef}
+              profile={profile}
+              onProfileChange={updateProfile}
+            />
 
       {/* Regulation Selection Card */}
       <div className="apple-main-container p-6 sm:p-7 flex flex-col gap-4">
@@ -1083,90 +1157,166 @@ export const GPACalculatorPage: React.FC = () => {
           </div>
         </div>
       </div>
+    </>
+  ) : (
+    <div className="flex flex-col gap-8">
+          {amsStage === 'upload' && (
+            <AmsUploader
+              selectedRegulation={regulation}
+              onExtractionComplete={(result) => {
+                setAmsExtractionResult(result);
+                setAmsStage('review');
+                showToast('Result extracted. Please review and verify the courses.', 'success');
+              }}
+            />
+          )}
+
+          {amsStage === 'review' && amsExtractionResult && (
+            <AmsSideBySideReview
+              initialResult={amsExtractionResult}
+              onConfirmCalculation={(confirmedInfo, confirmedSubs, audit, previewUrl) => {
+                setAmsConfirmedInfo(confirmedInfo);
+                setAmsConfirmedSubjects(confirmedSubs);
+                setAmsAuditSummary(audit);
+                setAmsOriginalPreviewUrl(previewUrl);
+                setAmsStage('result');
+
+                saveRecentCalculation({
+                  type: 'gpa',
+                  title: `AMS SGPA (Semester ${confirmedInfo.semester || selectedSemester}, ${confirmedInfo.regulation || regulation})`,
+                  value: audit.sgpa !== null ? `${formatFixed(audit.sgpa, 2)} / 10` : '—',
+                  subtext: `${audit.totalCredits} Credits • ${audit.subjectsIncluded} Subjects`,
+                  route: '/gpa',
+                });
+
+                if (confirmedInfo.name && !studentName) {
+                  setStudentName(confirmedInfo.name);
+                }
+
+                showToast('SGPA calculated successfully from AMS Result.', 'success');
+              }}
+              onCancel={() => {
+                setAmsStage('upload');
+                setAmsExtractionResult(null);
+              }}
+            />
+          )}
+
+          {amsStage === 'result' && amsConfirmedInfo && amsAuditSummary && (
+            <AmsResultReport
+              studentInfo={amsConfirmedInfo}
+              subjects={amsConfirmedSubjects}
+              auditSummary={amsAuditSummary}
+              originalPreviewUrl={amsOriginalPreviewUrl}
+              onEditData={() => setAmsStage('review')}
+              onReset={() => {
+                setAmsStage('upload');
+                setAmsExtractionResult(null);
+                setAmsConfirmedInfo(null);
+                setAmsConfirmedSubjects([]);
+                setAmsAuditSummary(null);
+              }}
+              onPrint={(includeOriginal) => {
+                handleAmsPrint(includeOriginal);
+              }}
+            />
+          )}
+        </div>
+      )}
     </div>
 
     {/* Dedicated A4 Print Report */}
-    <AcademicPrintReport
-      reportTitle="SGPA Report"
-      calculatorName="SGPA Calculator"
-      reportType="SGPA"
-      studentName={studentName}
-      profile={profile}
-      regulation={regulation}
-      semester={selectedSemester}
-      resultLabel="SEMESTER GRADE POINT AVERAGE (SGPA)"
-      resultValue={gpaResult.totalCredits > 0 ? `${formatFixed(gpaResult.gpa, 2)} / 10` : 'N/A'}
-      resultSubtext={
-        gpaResult.totalCredits > 0
-          ? `Total Credits: ${gpaResult.totalCredits} • Total Credit Points: ${formatFixed(totalQualityPoints, 2)}`
-          : 'No credit-bearing subjects available'
-      }
-      formulaTitle="SGPA Calculation Summary"
-      formulaRule="SGPA Formula: Σ(Credit × Grade Point) ÷ Σ(Credits)"
-      formulaCalculation={
-        gpaResult.totalCredits > 0
-          ? `${formatFixed(totalQualityPoints, 2)} ÷ ${gpaResult.totalCredits} = ${formatFixed(gpaResult.gpa, 2)}`
-          : 'No credit-bearing subjects'
-      }
-      isEmpty={gpaResult.totalCredits === 0}
-      emptyNotice="Add at least one subject with credits greater than 0 to calculate SGPA before printing."
-    >
-      <table className="w-full text-left border-collapse border border-[#D2D2D7]">
-        <thead>
-          <tr className="bg-[#F5F5F7] border-b-2 border-[#D2D2D7]">
-            <th className="py-2.5 px-3 text-[12px] font-bold text-[#1D1D1F] uppercase">Subject</th>
-            <th className="py-2.5 px-3 text-[12px] font-bold text-[#1D1D1F] uppercase text-center w-[110px]">Credits</th>
-            <th className="py-2.5 px-3 text-[12px] font-bold text-[#1D1D1F] uppercase text-center w-[100px]">Grade</th>
-            <th className="py-2.5 px-3 text-[12px] font-bold text-[#1D1D1F] uppercase text-center w-[110px]">Grade Point</th>
-            <th className="py-2.5 px-3 text-[12px] font-bold text-[#1D1D1F] uppercase text-right w-[140px]">Credit × GP</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-[#E5E5EA] text-[13px]">
-          {subjects.map((sub, idx) => {
-            const cred = Number(sub.credits) || 0;
-            const pts = sub.gradePoint ?? 0;
-            const qualityPts = cred * pts;
-            return (
-              <tr key={sub.id}>
-                <td className="py-2.5 px-3 font-medium text-[#1D1D1F]">
-                  {sub.name.trim() || `Subject ${idx + 1}`}
-                  {cred === 0 && (
-                    <span className="ml-2 text-[10px] font-normal text-[#86868B]">
-                      (Non-credit)
-                    </span>
-                  )}
-                </td>
-                <td className="py-2.5 px-3 text-center font-semibold text-[#1D1D1F] tabular-nums font-mono">
-                  {cred}
-                </td>
-                <td className="py-2.5 px-3 text-center font-semibold text-[#1D1D1F]">
-                  {sub.grade}
-                </td>
-                <td className="py-2.5 px-3 text-center text-[#6E6E73] tabular-nums font-mono">
-                  {pts}
-                </td>
-                <td className="py-2.5 px-3 text-right font-semibold text-[#1D1D1F] tabular-nums font-mono">
-                  {qualityPts.toFixed(1)}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-        <tfoot>
-          <tr className="bg-[#FAFAFA] font-bold border-t-2 border-[#D2D2D7]">
-            <td className="py-3 px-3 text-[#1D1D1F]">TOTALS</td>
-            <td className="py-3 px-3 text-center text-[14px] text-[#1D1D1F] tabular-nums font-mono">
-              {gpaResult.totalCredits}
-            </td>
-            <td className="py-3 px-3 text-center text-[#6E6E73]">—</td>
-            <td className="py-3 px-3 text-center text-[#6E6E73]">—</td>
-            <td className="py-3 px-3 text-right text-[14px] text-[#1D1D1F] tabular-nums font-mono">
-              {formatFixed(totalQualityPoints, 2)}
-            </td>
-          </tr>
-        </tfoot>
-      </table>
-    </AcademicPrintReport>
+    {calculationMethod === 'manual' ? (
+      <AcademicPrintReport
+        reportTitle="SGPA Report"
+        calculatorName="SGPA Calculator"
+        reportType="SGPA"
+        studentName={studentName}
+        profile={profile}
+        regulation={regulation}
+        semester={selectedSemester}
+        resultLabel="SEMESTER GRADE POINT AVERAGE (SGPA)"
+        resultValue={gpaResult.totalCredits > 0 ? `${formatFixed(gpaResult.gpa, 2)} / 10` : 'N/A'}
+        resultSubtext={
+          gpaResult.totalCredits > 0
+            ? `Total Credits: ${gpaResult.totalCredits} • Total Credit Points: ${formatFixed(totalQualityPoints, 2)}`
+            : 'No credit-bearing subjects available'
+        }
+        formulaTitle="SGPA Calculation Summary"
+        formulaRule="SGPA Formula: Σ(Credit × Grade Point) ÷ Σ(Credits)"
+        formulaCalculation={
+          gpaResult.totalCredits > 0
+            ? `${formatFixed(totalQualityPoints, 2)} ÷ ${gpaResult.totalCredits} = ${formatFixed(gpaResult.gpa, 2)}`
+            : 'No credit-bearing subjects'
+        }
+        isEmpty={gpaResult.totalCredits === 0}
+        emptyNotice="Add at least one subject with credits greater than 0 to calculate SGPA before printing."
+      >
+        <table className="w-full text-left border-collapse border border-[#D2D2D7]">
+          <thead>
+            <tr className="bg-[#F5F5F7] border-b-2 border-[#D2D2D7]">
+              <th className="py-2.5 px-3 text-[12px] font-bold text-[#1D1D1F] uppercase">Subject</th>
+              <th className="py-2.5 px-3 text-[12px] font-bold text-[#1D1D1F] uppercase text-center w-[110px]">Credits</th>
+              <th className="py-2.5 px-3 text-[12px] font-bold text-[#1D1D1F] uppercase text-center w-[100px]">Grade</th>
+              <th className="py-2.5 px-3 text-[12px] font-bold text-[#1D1D1F] uppercase text-center w-[110px]">Grade Point</th>
+              <th className="py-2.5 px-3 text-[12px] font-bold text-[#1D1D1F] uppercase text-right w-[140px]">Credit × GP</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[#E5E5EA] text-[13px]">
+            {subjects.map((sub, idx) => {
+              const cred = Number(sub.credits) || 0;
+              const pts = sub.gradePoint ?? 0;
+              const qualityPts = cred * pts;
+              return (
+                <tr key={sub.id}>
+                  <td className="py-2.5 px-3 font-medium text-[#1D1D1F]">
+                    {sub.name.trim() || `Subject ${idx + 1}`}
+                    {cred === 0 && (
+                      <span className="ml-2 text-[10px] font-normal text-[#86868B]">
+                        (Non-credit)
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-2.5 px-3 text-center font-semibold text-[#1D1D1F] tabular-nums font-mono">
+                    {cred}
+                  </td>
+                  <td className="py-2.5 px-3 text-center font-semibold text-[#1D1D1F]">
+                    {sub.grade}
+                  </td>
+                  <td className="py-2.5 px-3 text-center text-[#6E6E73] tabular-nums font-mono">
+                    {pts}
+                  </td>
+                  <td className="py-2.5 px-3 text-right font-semibold text-[#1D1D1F] tabular-nums font-mono">
+                    {qualityPts.toFixed(1)}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot>
+            <tr className="bg-[#FAFAFA] font-bold border-t-2 border-[#D2D2D7]">
+              <td className="py-3 px-3 text-[#1D1D1F]">TOTALS</td>
+              <td className="py-3 px-3 text-center text-[14px] text-[#1D1D1F] tabular-nums font-mono">
+                {gpaResult.totalCredits}
+              </td>
+              <td className="py-3 px-3 text-center text-[#6E6E73]">—</td>
+              <td className="py-3 px-3 text-center text-[#6E6E73]">—</td>
+              <td className="py-3 px-3 text-right text-[14px] text-[#1D1D1F] tabular-nums font-mono">
+                {formatFixed(totalQualityPoints, 2)}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </AcademicPrintReport>
+    ) : amsConfirmedInfo && amsAuditSummary ? (
+      <AmsPrintReport
+        studentInfo={amsConfirmedInfo}
+        subjects={amsConfirmedSubjects}
+        auditSummary={amsAuditSummary}
+        originalPreviewUrl={amsOriginalPreviewUrl}
+        includeOriginalInPdf={amsIncludeOriginalInPdf}
+      />
+    ) : null}
 
     {/* Grade Scale Modal */}
     <GradeScaleModal
