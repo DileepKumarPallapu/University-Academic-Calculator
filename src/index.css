@@ -355,7 +355,12 @@
   border-bottom: 1px solid var(--nav-border);
 }
 
-/* Print Styles */
+/* Print Styles & Print-Only Elements */
+.print-footer,
+.print-report-container {
+  display: none;
+}
+
 @media print {
   @page {
     size: A4 portrait;
@@ -377,10 +382,12 @@
     print-color-adjust: exact;
   }
 
-  /* Hide screen-only interactive and layout chrome */
-  header,
+  /* Hide screen-only interactive and layout chrome, never hide print header or print footer */
+  header.no-print,
+  header:not(.print-header),
   nav,
-  footer,
+  footer.no-print,
+  footer:not(.print-footer),
   button,
   .no-print,
   .apple-navbar,
@@ -429,12 +436,42 @@
     page-break-inside: avoid !important;
   }
 
-  /* Ensure print report is displayed cleanly */
+  /* Ensure print report layout pushes footer towards bottom */
   .print-report-container {
-    display: block !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
+    min-height: 250mm !important;
     width: 100% !important;
     background: #FFFFFF !important;
     color: #1D1D1F !important;
   }
+
+  /* Dedicated Print Footer */
+  .print-footer {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    color: #6E6E73 !important;
+    border-top: 1px solid #D2D2D7 !important;
+    padding-top: 12px !important;
+    margin-top: 24px !important;
+    text-align: center !important;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  .print-footer * {
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+
+  .print-footer a {
+    color: #1D1D1F !important;
+    font-weight: 500 !important;
+    text-decoration: none !important;
+  }
 }
+
 
