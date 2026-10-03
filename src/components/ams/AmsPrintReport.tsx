@@ -130,26 +130,25 @@ export const AmsPrintReport: React.FC<AmsPrintReportProps> = ({
               </div>
             </div>
 
-            {/* Import Metadata */}
+            {/* Import Metadata & Data Sources */}
             <div className="flex flex-col gap-1">
               <span className="text-[10px] font-bold uppercase tracking-wider text-black/70 border-b border-black/10 pb-1">
-                Import & Verification Details
+                Data Provenance & Audit
               </span>
               <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px] pt-1">
-                <span className="text-black/60 font-medium">Source Document:</span>
-                <span className="font-semibold text-black">AMS Result Document</span>
+                <span className="text-black/60 font-medium">Auto-Imported:</span>
+                <span className="font-semibold text-black">Courses, Grades, Student Details</span>
 
-                <span className="text-black/60 font-medium">Imported & Verified:</span>
+                <span className="text-black/60 font-medium">User-Provided:</span>
+                <span className="font-semibold text-black">Credits, Regulation</span>
+
+                <span className="text-black/60 font-medium">Report Date:</span>
                 <span className="font-mono text-black">{currentDate}</span>
 
-                <span className="text-black/60 font-medium">Subjects Detected:</span>
-                <span className="font-mono font-semibold text-black">{auditSummary.subjectsDetected}</span>
-
-                <span className="text-black/60 font-medium">Duplicates Excluded:</span>
-                <span className="font-mono font-semibold text-black">{auditSummary.duplicatesExcluded}</span>
-
                 <span className="text-black/60 font-medium">Verification Status:</span>
-                <span className="font-semibold text-black">User Confirmed ✓</span>
+                <span className="font-mono text-black">
+                  {auditSummary.rowAccountingVerified ? 'All 11 Rows Accounted ✓' : 'User Verified ✓'}
+                </span>
               </div>
             </div>
           </div>

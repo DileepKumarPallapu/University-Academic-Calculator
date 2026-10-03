@@ -6,6 +6,8 @@ import type {
   AmsStudentInfo,
   AmsSubject,
   AmsAuditSummary,
+  AmsPageType,
+  AuditChecklistItem,
 } from '../types/ams';
 
 // Configure pdfjs worker using standard ESM URL
@@ -380,7 +382,82 @@ export interface TableExtractionResult {
   rowAccountingVerified: boolean;
   tableDetected: boolean;
   detectedColumns: string[];
+  pageType: AmsPageType;
+  unrecognizedReason?: string;
 }
+
+export interface PageTypeDetectionResult {
+  pageType: AmsPageType;
+  unrecognizedReason?: string;
+  detectedHeaders: string[];
+  tableDetected: boolean;
+}
+
+/**
+ * Determines whether the document contains a recognizable AMS result table,
+ * another academic record, or unsupported content.
+ */
+export const detectDocumentPageType = (text: string): PageTypeDetectionResult => {
+  const norm = text.toUpperCase();
+
+  const HEADER_CHECKS: { name: string; regex: RegExp }[] = [
+    { name: 'SNo', regex: /\b(SNO|S\.NO|SL\.NO|SERIAL\s*NO)\b/i },
+    { name: 'Stu Id', regex: /\b(STU\s*ID|STUDENT\s*ID|STUDENTID)\b/i },
+    { name: 'Register No', regex: /\b(REGISTER\s*NO|REGISTER\s*NUMBER|REG\s*NO|REG\.\s*NO|REGD\s*NO)\b/i },
+    { name: 'Name', regex: /\b(STUDENT\s*NAME|CANDIDATE\s*NAME|NAME)\b/i },
+    { name: 'Degree', regex: /\b(DEGREE|PROGRAMME|PROGRAM)\b/i },
+    { name: 'Branch', regex: /\b(BRANCH|DEPARTMENT|DEPT)\b/i },
+    { name: 'Batch', regex: /\b(BATCH|ACADEMIC\s*YEAR)\b/i },
+    { name: 'Coursecode', regex: /\b(COURSE\s*CODE|COURSECODE|SUB\s*CODE|SUBJECT\s*CODE)\b/i },
+    { name: 'Coursename', regex: /\b(COURSE\s*NAME|COURSENAME|COURSE\s*TITLE|SUBJECT\s*NAME|SUBJECT)\b/i },
+    { name: 'Result', regex: /\b(RESULT|STATUS)\b/i },
+    { name: 'Grade', regex: /\b(GRADE|LETTER\s*GRADE)\b/i },
+    { name: 'Credits', regex: /\b(CREDITS|CREDIT|CR|COURSE\s*CREDITS)\b/i },
+    { name: 'Grade Point', regex: /\b(GRADE\s*POINT|GP|GRADE\s*POINTS)\b/i },
+  ];
+
+  const detectedHeaders: string[] = [];
+  for (const check of HEADER_CHECKS) {
+    if (check.regex.test(norm)) {
+      detectedHeaders.push(check.name);
+    }
+  }
+
+  const hasAmsSignature = /\b(VEL\s*TECH|VTU\d+|24UECS\d+|SEMESTER\s*RESULT|END\s*SEMESTER|EXAMINATION\s*RESULT)\b/i.test(norm);
+  const hasValidGrades = (norm.match(/\b(PASS|FAIL|RA|AB)\s+[SABCDP]\b/g) || []).length >= 1;
+  const hasSubjectRowsWithCodes = (norm.match(/\b(102\d{2}[A-Za-z]{2}\d{3}|[A-Za-z]{2,5}\d{2,5})\b/g) || []).length >= 1;
+  const hasSubjectLineWithGrade = /\b(102\d{2}[A-Za-z]{2}\d{3}|[A-Za-z]{2,5}\d{2,5}|\b[1-9]\d?\b)\s+.*?\s+([SABCDPFEOW]|A\+|B\+|PASS|FAIL)\b/i.test(norm);
+
+  if (
+    detectedHeaders.length >= 3 ||
+    (detectedHeaders.length >= 2 && (hasAmsSignature || hasValidGrades || hasSubjectRowsWithCodes)) ||
+    hasSubjectLineWithGrade ||
+    hasValidGrades
+  ) {
+    return {
+      pageType: 'AMS_RESULT_TABLE',
+      detectedHeaders,
+      tableDetected: true,
+    };
+  }
+
+  const isOtherAcademic = /\b(SYLLABUS|ADMIT\s*CARD|HALL\s*TICKET|FEE\s*RECEIPT|CURRICULUM|TIMETABLE|BONAFIDE|IDENTITY\s*CARD)\b/i.test(norm);
+  if (isOtherAcademic) {
+    return {
+      pageType: 'OTHER_ACADEMIC_DOCUMENT',
+      unrecognizedReason: 'Could not identify an AMS result table. This document appears to be another academic record (e.g. syllabus or admit card).',
+      detectedHeaders,
+      tableDetected: false,
+    };
+  }
+
+  return {
+    pageType: 'UNSUPPORTED',
+    unrecognizedReason: 'Could not identify an AMS result table in the uploaded file.',
+    detectedHeaders,
+    tableDetected: false,
+  };
+};
 
 /**
  * High-accuracy table parser that handles:
@@ -396,6 +473,21 @@ export const parseStructuredAmsTextTable = (
   selectedRegulation?: RegulationId | null,
   _sourceLabel = 'AMS Result'
 ): TableExtractionResult => {
+  const pageTypeCheck = detectDocumentPageType(text);
+  if (pageTypeCheck.pageType !== 'AMS_RESULT_TABLE') {
+    return {
+      subjects: [],
+      detectedRowsCount: 0,
+      extractedRowsCount: 0,
+      missingRowNumbers: [],
+      rowAccountingVerified: false,
+      tableDetected: false,
+      detectedColumns: pageTypeCheck.detectedHeaders,
+      pageType: pageTypeCheck.pageType,
+      unrecognizedReason: pageTypeCheck.unrecognizedReason,
+    };
+  }
+
   const rawLines = text.split('\n').map((l) => l.trim()).filter((l) => l.length > 0);
   const cleanLines = rawLines.filter((l) => !isNoiseLine(l));
 
@@ -618,9 +710,56 @@ export const parseStructuredAmsTextTable = (
         isDuplicate: false,
         isExcluded: false,
         isManuallyEdited: false,
+        originalValues: {
+          subjectCode: foundCode || null,
+          subjectName: courseName,
+          credits: foundCredits,
+          grade: foundGrade,
+          gradePoint: foundGP,
+        },
         confidence: {
           code: foundCode ? 'high' : 'none',
           name: courseName.length > 3 ? 'high' : 'medium',
+          credits: foundCredits !== '' && foundCredits !== null ? 'high' : 'none',
+          grade: foundGrade && ALL_VALID_GRADES.has(foundGrade) ? 'high' : 'low',
+          gradePoint: foundGP !== null ? 'high' : 'none',
+        },
+      });
+    } else if (!courseName && (foundGrade || foundCode)) {
+      // Row detected but course name was missing: preserve SNo and flag missing name
+      let foundGP: number | null = null;
+      if (foundGrade && regConfig) {
+        const matchingGrade = regConfig.grades.find((g) => g.grade.toUpperCase() === foundGrade);
+        if (matchingGrade) {
+          foundGP = matchingGrade.points;
+        }
+      }
+
+      subjects.push({
+        id: `ams-sub-${Date.now()}-${Math.random().toString(36).substring(2, 7)}-${idx}`,
+        sno: block.sno || idx + 1,
+        subjectCode: foundCode || null,
+        subjectName: '',
+        credits: foundCredits,
+        grade: foundGrade,
+        gradePoint: foundGP,
+        status: foundResult,
+        source: 'AMS',
+        creditsSource,
+        gradePointSource: 'REGULATION',
+        isDuplicate: false,
+        isExcluded: false,
+        isManuallyEdited: false,
+        originalValues: {
+          subjectCode: foundCode || null,
+          subjectName: '',
+          credits: foundCredits,
+          grade: foundGrade,
+          gradePoint: foundGP,
+        },
+        confidence: {
+          code: foundCode ? 'high' : 'none',
+          name: 'none',
           credits: foundCredits !== '' && foundCredits !== null ? 'high' : 'none',
           grade: foundGrade && ALL_VALID_GRADES.has(foundGrade) ? 'high' : 'low',
           gradePoint: foundGP !== null ? 'high' : 'none',
@@ -651,6 +790,7 @@ export const parseStructuredAmsTextTable = (
     rowAccountingVerified,
     tableDetected,
     detectedColumns: headerColMatches,
+    pageType: 'AMS_RESULT_TABLE',
   };
 };
 
@@ -795,6 +935,101 @@ export const computeAmsAuditSummary = (
     }
   }
 
+  // 10-point Pre-calculation Audit Checklist
+  const missingNames = uniqueSubjects.filter((s) => !s.subjectName || s.subjectName.trim() === '');
+  const missingCredits = uniqueSubjects.filter((s) => s.credits === '' || s.credits === null || Number(s.credits) < 0);
+  const invalidGrades = uniqueSubjects.filter((s) => !s.grade || !ALL_VALID_GRADES.has(s.grade.toUpperCase()));
+  const missingGPs = uniqueSubjects.filter((s) => s.gradePoint === null);
+
+  const preCalculationAudit: AuditChecklistItem[] = [
+    {
+      id: 'ams_result',
+      label: 'AMS Result Recognized',
+      status: subjectsDetected > 0 ? 'passed' : 'failed',
+      detail: subjectsDetected > 0 ? 'Result table recognized ✓' : 'Unable to recognize result table',
+    },
+    {
+      id: 'student',
+      label: 'Student Identified',
+      status: studentInfo?.name && studentInfo?.registerNumber ? 'passed' : studentInfo?.name ? 'warning' : 'failed',
+      detail: studentInfo?.name
+        ? `${studentInfo.name} (${studentInfo.registerNumber || 'No Register No'})`
+        : 'Student details need verification',
+    },
+    {
+      id: 'rows_detected',
+      label: 'Result Rows Detected',
+      status: missingRowNumbers.length === 0 ? 'passed' : 'failed',
+      detail: missingRowNumbers.length === 0
+        ? `${detectedCount} rows detected`
+        : `Missing row(s): ${missingRowNumbers.join(', ')}`,
+    },
+    {
+      id: 'subjects_extracted',
+      label: 'Subjects Extracted',
+      status: subjectsDetected > 0 && subjectsDetected === detectedCount ? 'passed' : 'failed',
+      detail: `${subjectsDetected} of ${detectedCount} subjects extracted`,
+    },
+    {
+      id: 'course_names',
+      label: 'Course Names Validated',
+      status: missingNames.length === 0 ? 'passed' : 'failed',
+      detail: missingNames.length === 0
+        ? `${subjectsDetected}/${subjectsDetected} course names valid`
+        : `${missingNames.length} missing course name(s)`,
+    },
+    {
+      id: 'grades_found',
+      label: 'Grades Found',
+      status: invalidGrades.length === 0 ? 'passed' : 'failed',
+      detail: invalidGrades.length === 0
+        ? `${subjectsDetected}/${subjectsDetected} grades verified`
+        : `${invalidGrades.length} unverified grade(s)`,
+    },
+    {
+      id: 'credits_available',
+      label: 'Credits Available',
+      status: missingCredits.length === 0 ? 'passed' : 'warning',
+      detail: missingCredits.length === 0
+        ? 'All course credits available ✓'
+        : 'Credits not present in document — input required',
+    },
+    {
+      id: 'regulation_selected',
+      label: 'Regulation Selected',
+      status: studentInfo?.regulation ? 'passed' : 'warning',
+      detail: studentInfo?.regulation
+        ? `${studentInfo.regulation} active`
+        : 'Regulation selection required to derive Grade Points',
+    },
+    {
+      id: 'grade_points_validated',
+      label: 'Grade Points Validated',
+      status: missingGPs.length === 0 && Boolean(studentInfo?.regulation) ? 'passed' : 'warning',
+      detail: missingGPs.length === 0 && Boolean(studentInfo?.regulation)
+        ? 'Derived from regulation rules'
+        : 'Awaiting regulation selection',
+    },
+    {
+      id: 'duplicate_check',
+      label: 'Duplicate Check',
+      status: 'passed',
+      detail: duplicatesCount > 0
+        ? `${duplicatesCount} duplicate record(s) excluded`
+        : 'No duplicates detected',
+    },
+  ];
+
+  const readyToCalculate =
+    subjectsDetected > 0 &&
+    missingRowNumbers.length === 0 &&
+    subjectsDetected === detectedCount &&
+    missingNames.length === 0 &&
+    invalidGrades.length === 0 &&
+    missingCredits.length === 0 &&
+    Boolean(studentInfo?.regulation) &&
+    missingGPs.length === 0;
+
   return {
     subjectsDetected,
     subjectsIncluded,
@@ -815,6 +1050,8 @@ export const computeAmsAuditSummary = (
     rowAccountingVerified: missingRowNumbers.length === 0,
     studentNameVerified: studentInfo?.nameVerified ?? false,
     creditsDetectedInSource: !anyUserCredits,
+    preCalculationAudit,
+    readyToCalculate,
   };
 };
 
@@ -1007,6 +1244,8 @@ export const processAmsDocument = async (
     rawText: fullRawText,
     imageQualityWarning: qualityWarning,
     importedAt: Date.now(),
+    pageType: tableResult.pageType,
+    unrecognizedReason: tableResult.unrecognizedReason,
     tableDetected: tableResult.tableDetected,
     detectedColumns: tableResult.detectedColumns,
     detectedRowsCount: tableResult.detectedRowsCount,

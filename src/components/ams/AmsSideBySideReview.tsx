@@ -136,6 +136,24 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
     );
   };
 
+  // Restore imported original values for a subject
+  const handleRestoreOriginalValues = (id: string) => {
+    setSubjects((prev) =>
+      prev.map((s) => {
+        if (s.id !== id || !s.originalValues) return s;
+        return {
+          ...s,
+          subjectName: s.originalValues.subjectName,
+          subjectCode: s.originalValues.subjectCode,
+          credits: s.originalValues.credits,
+          grade: s.originalValues.grade,
+          gradePoint: s.originalValues.gradePoint,
+          isManuallyEdited: false,
+        };
+      })
+    );
+  };
+
   // Add new manual row
   const handleAddSubjectRow = () => {
     const defaultGrade = regConfig ? regConfig.grades[0].grade : 'A';
@@ -245,6 +263,34 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
       initialResult.previewUrls[activePageIdx] || initialResult.previewUrls[0]
     );
   };
+
+  if (initialResult.pageType && initialResult.pageType !== 'AMS_RESULT_TABLE') {
+    return (
+      <div className="w-full max-w-xl mx-auto my-12 p-8 apple-card border border-[var(--border-primary)] flex flex-col items-center text-center gap-5">
+        <div className="w-16 h-16 rounded-2xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 flex items-center justify-center">
+          <AlertTriangle className="w-8 h-8" />
+        </div>
+        <div className="flex flex-col gap-2">
+          <h2 className="text-lg font-bold text-[var(--text-primary)]">
+            Could not identify an AMS result table
+          </h2>
+          <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+            {initialResult.unrecognizedReason ||
+              'The uploaded document does not contain recognizable semester examination result columns (such as Course Code, Subject, Grade, or Register Number).'}
+          </p>
+        </div>
+        <div className="flex items-center gap-3 mt-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="apple-btn-primary px-6 py-2.5 text-xs font-semibold"
+          >
+            Upload Another Result
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full flex flex-col gap-6">
@@ -855,9 +901,23 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
                             type="text"
                             value={s.subjectName}
                             onChange={(e) => handleSubjectFieldChange(s.id, 'subjectName', e.target.value)}
-                            placeholder="Subject Title"
-                            className="w-full bg-transparent border-b border-transparent focus:border-[var(--text-primary)] outline-none text-xs"
+                            placeholder="Enter Course Name"
+                            className={`w-full bg-transparent border-b outline-none text-xs ${
+                              !s.subjectName || s.subjectName.trim() === ''
+                                ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 placeholder:text-amber-600'
+                                : 'border-transparent focus:border-[var(--text-primary)]'
+                            }`}
                           />
+                          {(!s.subjectName || s.subjectName.trim() === '') && (
+                            <span className="text-[10px] text-amber-600 font-semibold block mt-0.5 flex items-center gap-1">
+                              <AlertTriangle className="w-3 h-3" /> Course name not detected for Row {s.sno || idx + 1}
+                            </span>
+                          )}
+                          {s.isManuallyEdited && (
+                            <span className="text-[9px] text-blue-600 dark:text-blue-400 font-semibold inline-block mr-1">
+                              Edited
+                            </span>
+                          )}
                           {s.isDuplicate && (
                             <span className="text-[10px] text-amber-600 block mt-0.5">
                               Duplicate record ({s.isExcluded ? 'Excluded' : 'Included'})
@@ -918,6 +978,16 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
                         {/* Actions */}
                         <td className="py-2.5 px-2 text-center">
                           <div className="flex items-center justify-center gap-1">
+                            {s.isManuallyEdited && (
+                              <button
+                                type="button"
+                                onClick={() => handleRestoreOriginalValues(s.id)}
+                                className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-800 hover:bg-amber-200 transition-colors"
+                                title="Restore original extracted value"
+                              >
+                                Restore
+                              </button>
+                            )}
                             {s.isDuplicate ? (
                               <button
                                 type="button"
@@ -983,9 +1053,18 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
                       type="text"
                       value={s.subjectName}
                       onChange={(e) => handleSubjectFieldChange(s.id, 'subjectName', e.target.value)}
-                      placeholder="Subject Name"
-                      className="apple-input text-xs h-9"
+                      placeholder="Enter Course Name"
+                      className={`apple-input text-xs h-9 ${
+                        !s.subjectName || s.subjectName.trim() === ''
+                          ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200'
+                          : ''
+                      }`}
                     />
+                    {(!s.subjectName || s.subjectName.trim() === '') && (
+                      <span className="text-[10px] text-amber-600 font-semibold flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3" /> Course name not detected for Row {s.sno || idx + 1}
+                      </span>
+                    )}
 
                     <div className="grid grid-cols-2 gap-2">
                       <div className="flex flex-col gap-1">
@@ -1017,24 +1096,69 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
                         </select>
                       </div>
                     </div>
+
+                    {s.isManuallyEdited && (
+                      <div className="flex items-center justify-between text-[11px] pt-1 border-t border-[var(--border-secondary)]">
+                        <span className="text-blue-600 dark:text-blue-400 font-semibold">Edited</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRestoreOriginalValues(s.id)}
+                          className="text-[10px] font-semibold text-amber-700 dark:text-amber-300 underline"
+                        >
+                          Restore Imported Value
+                        </button>
+                      </div>
+                    )}
                   </div>
                 );
               })}
             </div>
 
-            {/* Validation Notice if missing fields exist */}
-            {!canCalculate && (
-              <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 text-xs text-rose-700 dark:text-rose-300 flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 shrink-0" />
-                <span>
-                  {!studentInfo.regulation
-                    ? 'Please choose your regulation above to derive grade points.'
-                    : hasMissingCredits
-                    ? 'Certain subjects are missing credits. Please enter credits (0 is valid) before calculating.'
-                    : 'Please select a valid grade for all included subjects.'}
-                </span>
+            {/* PRE-CALCULATION AUDIT CARD (Requirements 23 & 24) */}
+            <div className="p-4 rounded-xl bg-[var(--surface)] border border-[var(--border-secondary)] flex flex-col gap-3">
+              <div className="flex items-center justify-between border-b border-[var(--border-secondary)] pb-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-[var(--accent)]">
+                    IMPORT AUDIT
+                  </span>
+                  <span className="text-[11px] text-[var(--text-tertiary)]">
+                    Pre-Calculation Verification
+                  </span>
+                </div>
+                {audit.readyToCalculate ? (
+                  <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                    <Check className="w-3.5 h-3.5" /> Ready to calculate
+                  </span>
+                ) : (
+                  <span className="text-xs font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                    <AlertTriangle className="w-3.5 h-3.5" /> Action required
+                  </span>
+                )}
               </div>
-            )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                {audit.preCalculationAudit?.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex items-center justify-between p-2 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-secondary)]"
+                  >
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      {item.status === 'passed' ? (
+                        <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      ) : item.status === 'warning' ? (
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                      ) : (
+                        <X className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                      )}
+                      <span className="font-semibold text-[var(--text-primary)] truncate">{item.label}</span>
+                    </div>
+                    <span className="text-[11px] text-[var(--text-secondary)] shrink-0 ml-2">
+                      {item.detail}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
 
             {/* Primary Action Button */}
             <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-[var(--border-secondary)]">
@@ -1044,10 +1168,10 @@ export const AmsSideBySideReview: React.FC<AmsSideBySideReviewProps> = ({
               <button
                 type="button"
                 onClick={handleConfirm}
-                disabled={!canCalculate}
+                disabled={!audit.readyToCalculate}
                 className="apple-btn-primary w-full sm:w-auto text-sm h-11 px-6 font-semibold disabled:opacity-40"
               >
-                Confirm & Calculate SGPA
+                Calculate SGPA from AMS Result
               </button>
             </div>
           </div>

@@ -56,6 +56,15 @@ export interface AmsSubject {
   };
 }
 
+export type AmsPageType = 'AMS_RESULT_TABLE' | 'OTHER_ACADEMIC_DOCUMENT' | 'UNSUPPORTED';
+
+export interface AuditChecklistItem {
+  id: string;
+  label: string;
+  status: 'passed' | 'failed' | 'warning' | 'pending';
+  detail?: string;
+}
+
 export interface AmsExtractionResult {
   studentInfo: AmsStudentInfo;
   subjects: AmsSubject[];
@@ -69,6 +78,8 @@ export interface AmsExtractionResult {
   rawText: string;
   imageQualityWarning?: string;
   importedAt: number;
+  pageType: AmsPageType;
+  unrecognizedReason?: string;
   tableDetected?: boolean;
   detectedColumns?: string[];
   detectedRowsCount?: number;
@@ -97,4 +108,6 @@ export interface AmsAuditSummary {
   rowAccountingVerified?: boolean;
   studentNameVerified?: boolean;
   creditsDetectedInSource?: boolean;
+  preCalculationAudit?: AuditChecklistItem[];
+  readyToCalculate?: boolean;
 }

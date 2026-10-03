@@ -5,6 +5,7 @@ import {
   computeAmsAuditSummary,
   normalizeSubjectCode,
   parseStructuredAmsTextTable,
+  detectDocumentPageType,
 } from './amsExtractor';
 
 describe('AMS Result Extractor', () => {
@@ -380,6 +381,94 @@ describe('AMS Result Extractor', () => {
     expect(audit.totalCredits).toBe(7);
     expect(audit.totalQualityPoints).toBe(3 * 7 + 4 * 10); // 21 + 40 = 61
     expect(audit.sgpa).toBeCloseTo(61 / 7, 3);
+  });
+
+  it('classifies document page type correctly (AMS result vs other academic vs unsupported)', () => {
+    const amsTableText = `
+      SNo Stu Id Register No Name Degree Branch Batch Coursecode Coursename Result Grade
+      1 VTU29962 24UECS0805 PALLAPU DILEEP KUMAR B.Tech CSE (AIML) 2024-2025 10210BM101 Biology for Engineers Pass C
+    `;
+    const amsResult = detectDocumentPageType(amsTableText);
+    expect(amsResult.pageType).toBe('AMS_RESULT_TABLE');
+    expect(amsResult.tableDetected).toBe(true);
+
+    const syllabusText = `
+      DEPARTMENT OF COMPUTER SCIENCE AND ENGINEERING
+      SYLLABUS FOR B.TECH CSE (AIML) - 2024-2025
+      COURSE CURRICULUM AND CREDITS DISTRIBUTION
+    `;
+    const syllabusResult = detectDocumentPageType(syllabusText);
+    expect(syllabusResult.pageType).toBe('OTHER_ACADEMIC_DOCUMENT');
+    expect(syllabusResult.tableDetected).toBe(false);
+
+    const randomText = `
+      Shopping list:
+      1. Apples
+      2. Bananas
+      3. Milk
+    `;
+    const randomResult = detectDocumentPageType(randomText);
+    expect(randomResult.pageType).toBe('UNSUPPORTED');
+    expect(randomResult.tableDetected).toBe(false);
+  });
+
+  it('generates a 10-point Pre-Calculation Audit Checklist and controls readyToCalculate flag', () => {
+    const raw = `
+      1 10210CS101 Data Structures Pass A
+      2 10210CS102 Algorithms Pass S
+    `;
+    const studentInfo = {
+      name: 'PALLAPU DILEEP KUMAR',
+      nameConfidence: 'high' as const,
+      registerNumber: '24UECS0805',
+      regConfidence: 'high' as const,
+      department: 'CSE',
+      program: 'B.Tech',
+      semester: null,
+      semesterConfidence: 'none' as const,
+      academicYear: '2024-2025',
+      regulation: null, // Regulation NOT selected yet
+      regulationConfidence: 'none' as const,
+      college: 'Vel Tech',
+    };
+
+    const subjects = extractSubjectsFromText(raw, null);
+    // Initial state: missing credits and regulation
+    const initialAudit = computeAmsAuditSummary(subjects, studentInfo);
+
+    expect(initialAudit.preCalculationAudit).toBeDefined();
+    expect(initialAudit.preCalculationAudit!.length).toBe(10);
+    expect(initialAudit.readyToCalculate).toBe(false);
+
+    // Provide credits and select regulation
+    subjects[0].credits = 4;
+    subjects[1].credits = 3;
+    subjects[0].gradePoint = 9; // A -> 9
+    subjects[1].gradePoint = 10; // S -> 10
+
+    const completedAudit = computeAmsAuditSummary(subjects, {
+      ...studentInfo,
+      regulation: 'VTR21',
+    });
+
+    expect(completedAudit.readyToCalculate).toBe(true);
+    const creditsCheck = completedAudit.preCalculationAudit!.find((i) => i.id === 'credits_available');
+    expect(creditsCheck?.status).toBe('passed');
+    const regCheck = completedAudit.preCalculationAudit!.find((i) => i.id === 'regulation_selected');
+    expect(regCheck?.status).toBe('passed');
+  });
+
+  it('stores originalValues on extracted subjects for user restoration', () => {
+    const raw = `
+      1 10210CS101 Data Structures Pass A
+    `;
+    const subjects = extractSubjectsFromText(raw, 'VTR21');
+    expect(subjects.length).toBe(1);
+    expect(subjects[0].originalValues).toBeDefined();
+    expect(subjects[0].originalValues?.subjectCode).toBe('10210CS101');
+    expect(subjects[0].originalValues?.subjectName).toBe('Data Structures');
+    expect(subjects[0].originalValues?.grade).toBe('A');
+    expect(subjects[0].originalValues?.gradePoint).toBe(9);
   });
 });
 
