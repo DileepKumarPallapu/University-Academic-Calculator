@@ -36,6 +36,7 @@ export function App() {
                 <Route path="/cgpa" element={<CGPACalculatorPage />} />
                 <Route path="/attendance" element={<AttendancePage />} />
                 <Route path="/credits" element={<CreditsPlannerPage />} />
+                <Route path="/catalogue" element={<Navigate to="/credits?tab=catalogue" replace />} />
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/ams" element={<AmsImportPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />

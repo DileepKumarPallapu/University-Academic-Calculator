@@ -21,6 +21,7 @@ import {
   BookOpen,
   ExternalLink,
   Settings,
+  Info,
 } from 'lucide-react';
 import { useProfile } from '../context/ProfileContext';
 import { useAppToast } from '../components/layout/AppShell';
@@ -38,6 +39,12 @@ import type {
   NptelDashboardStats,
   CategoryProgressItem,
 } from '../types/credits';
+import { CourseCatalogueHub } from '../components/credits/CourseCatalogueHub';
+import type { CatalogueCourse } from '../types/catalogue';
+import {
+  getCatalogueForRegulation,
+  isRegulationSupportingCourseCode,
+} from '../services/catalogueStorage';
 import {
   COLLEGE_CHART_TEMPLATE,
   DEFAULT_PATHWAY_TARGETS,
@@ -144,13 +151,27 @@ export const CreditsPlannerPage: React.FC = () => {
   const [activeSection, setActiveSection] = useState<
     | 'dashboard'
     | 'subjects'
+    | 'catalogue'
     | 'nptel'
     | 'categories'
     | 'semesters'
     | 'calculator'
     | 'pathways'
     | 'eligibility'
-  >('dashboard');
+  >(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam === 'catalogue') return 'catalogue';
+    if (tabParam === 'nptel') return 'nptel';
+    if (tabParam === 'subjects') return 'subjects';
+    return 'dashboard';
+  });
+
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam === 'catalogue') setActiveSection('catalogue');
+    else if (tabParam === 'nptel') setActiveSection('nptel');
+    else if (tabParam === 'subjects') setActiveSection('subjects');
+  }, [searchParams]);
 
   // Modals state
   const [subjectModalOpen, setSubjectModalOpen] = useState(false);
@@ -339,7 +360,7 @@ export const CreditsPlannerPage: React.FC = () => {
       }
     }
 
-    if (editingSubject) {
+    if (editingSubject && editingSubject.id) {
       setSubjects((prev) =>
         prev.map((s) =>
           s.id === editingSubject.id
@@ -349,9 +370,13 @@ export const CreditsPlannerPage: React.FC = () => {
                 name: courseTitle,
                 category: cat,
                 credits: cr,
+                registeredCredits: data.registeredCredits !== undefined ? data.registeredCredits : cr,
+                earnedCredits: data.earnedCredits !== undefined ? data.earnedCredits : (status === 'Passed' ? cr : 0),
                 semester: sem,
                 status,
                 isVerified,
+                regulation: data.regulation || s.regulation,
+                catalogueCourseId: data.catalogueCourseId || s.catalogueCourseId,
                 courseType: data.courseType || 'regular',
                 nptelDetails: data.nptelDetails,
               }
@@ -363,14 +388,19 @@ export const CreditsPlannerPage: React.FC = () => {
       const newSubject: CreditSubjectItem = {
         id: `sub-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
         name: courseTitle,
-        code: (data.code || data.nptelDetails?.courseIdOrUrl || '').trim().toUpperCase(),
+        code: data.code ? data.code.trim().toUpperCase() : (isNptel ? (data.nptelDetails?.courseIdOrUrl || 'NPTEL').toUpperCase() : undefined),
         category: cat,
         semester: sem,
         credits: cr,
+        registeredCredits: data.registeredCredits !== undefined ? data.registeredCredits : cr,
+        earnedCredits: data.earnedCredits !== undefined ? data.earnedCredits : (status === 'Passed' ? cr : 0),
         grade: data.grade || (isNptel ? 'Elite' : 'A'),
         status,
         isVerified,
-        source: 'Manual',
+        source: data.source || 'Manual',
+        regulation: data.regulation,
+        catalogueCourseId: data.catalogueCourseId,
+        isRetake: data.isRetake,
         notes: data.notes?.trim() || data.nptelDetails?.notes?.trim(),
         courseType: data.courseType || 'regular',
         nptelDetails: data.nptelDetails,
@@ -381,6 +411,29 @@ export const CreditsPlannerPage: React.FC = () => {
 
     setSubjectModalOpen(false);
     setEditingSubject(null);
+  };
+
+  // Add course directly from Catalogue Hub
+  const handleAddCourseFromCatalogue = (course: CatalogueCourse) => {
+    setEditingSubject({
+      id: '',
+      name: course.name,
+      code: course.code,
+      category: course.category,
+      semester: course.defaultSemester || 1,
+      credits: course.verifiedCredits !== undefined ? course.verifiedCredits : 0,
+      registeredCredits: course.verifiedCredits !== undefined ? course.verifiedCredits : 0,
+      earnedCredits: course.verifiedCredits !== undefined ? course.verifiedCredits : 0,
+      grade: 'A',
+      status: 'Passed',
+      isVerified: course.isVerified,
+      source: 'Catalogue',
+      regulation: course.regulation,
+      catalogueCourseId: course.id,
+      notes: course.notes || course.discrepancyNote || '',
+    });
+    setSubjectModalInitialCourseType('regular');
+    setSubjectModalOpen(true);
   };
 
   // Delete Subject Handler
@@ -643,12 +696,13 @@ export const CreditsPlannerPage: React.FC = () => {
           [
             { id: 'dashboard', label: '1. Credit Dashboard' },
             { id: 'subjects', label: `2. Subject Manager (${subjects.length})` },
-            { id: 'nptel', label: `3. NPTEL Courses (${nptelCount})` },
-            { id: 'categories', label: '4. Category Progress' },
-            { id: 'semesters', label: '5. Semester Planner' },
-            { id: 'calculator', label: '6. Credits Required Calculator' },
-            { id: 'pathways', label: '7. Honours & Minor' },
-            { id: 'eligibility', label: '8. Graduation Eligibility' },
+            { id: 'catalogue', label: '3. Course Catalogue' },
+            { id: 'nptel', label: `4. NPTEL Courses (${nptelCount})` },
+            { id: 'categories', label: '5. Category Progress' },
+            { id: 'semesters', label: '6. Semester Planner' },
+            { id: 'calculator', label: '7. Credits Required Calculator' },
+            { id: 'pathways', label: '8. Honours & Minor' },
+            { id: 'eligibility', label: '9. Graduation Eligibility' },
           ] as const
         ).map((tab) => (
           <button
@@ -883,6 +937,16 @@ export const CreditsPlannerPage: React.FC = () => {
 
             {/* Action Buttons */}
             <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setActiveSection('catalogue')}
+                className="apple-btn-secondary text-xs h-10 px-3.5 gap-1.5 font-semibold text-indigo-600 dark:text-indigo-400 border-indigo-500/30 bg-indigo-50/50 dark:bg-indigo-950/20 cursor-pointer"
+                title="Browse Regulation-Wise Course Catalogue"
+              >
+                <BookOpen className="w-3.5 h-3.5" />
+                <span>Course Catalogue</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => {
@@ -1182,7 +1246,19 @@ export const CreditsPlannerPage: React.FC = () => {
       )}
 
       {/* ======================================================== */}
-      {/* 3. NPTEL COURSES & CREDIT TRANSFER                       */}
+      {/* 3. COURSE CATALOGUE HUB                                  */}
+      {/* ======================================================== */}
+      {activeSection === 'catalogue' && (
+        <CourseCatalogueHub
+          activeProfileRegulation={activeProfile.regulation || 'VTR21'}
+          studentSubjects={subjects}
+          onAddCourseToRecords={handleAddCourseFromCatalogue}
+          showToast={showToast}
+        />
+      )}
+
+      {/* ======================================================== */}
+      {/* 4. NPTEL COURSES & CREDIT TRANSFER                       */}
       {/* ======================================================== */}
       {activeSection === 'nptel' && (
         <NptelDashboardSection
@@ -1460,6 +1536,8 @@ export const CreditsPlannerPage: React.FC = () => {
           initialCourseType={subjectModalInitialCourseType}
           categories={categories}
           nptelRules={nptelRules}
+          existingSubjects={subjects}
+          profileRegulation={activeProfile.regulation || 'VTR21'}
           onClose={() => {
             setSubjectModalOpen(false);
             setEditingSubject(null);
@@ -2598,6 +2676,8 @@ const SubjectFormModal: React.FC<{
   initialCourseType?: CourseType;
   categories: CreditCategoryConfig[];
   nptelRules: NptelCollegeRulesConfig;
+  existingSubjects?: CreditSubjectItem[];
+  profileRegulation?: string;
   onClose: () => void;
   onSave: (data: Partial<CreditSubjectItem>) => void;
 }> = ({
@@ -2606,11 +2686,18 @@ const SubjectFormModal: React.FC<{
   initialCourseType = 'regular',
   categories,
   nptelRules,
+  existingSubjects = [],
+  profileRegulation = 'VTR21',
   onClose,
   onSave,
 }) => {
   const [courseType, setCourseType] = useState<CourseType>(
     initialData?.courseType || initialCourseType
+  );
+
+  // Regulation selection
+  const [regulation, setRegulation] = useState<string>(
+    initialData?.regulation || profileRegulation || 'VTR21'
   );
 
   // Regular Course Fields
@@ -2620,13 +2707,98 @@ const SubjectFormModal: React.FC<{
     initialData?.category || categories[0]?.id || 'foundation'
   );
   const [semester, setSemester] = useState(initialData?.semester || 1);
-  const [credits, setCredits] = useState(
+  const [credits, setCredits] = useState<number | string>(
     initialData?.credits !== undefined ? initialData.credits : 3
+  );
+  const [registeredCredits, setRegisteredCredits] = useState<number | string>(
+    initialData?.registeredCredits !== undefined
+      ? initialData.registeredCredits
+      : initialData?.credits !== undefined
+      ? initialData.credits
+      : 3
+  );
+  const [earnedCredits, setEarnedCredits] = useState<number | string>(
+    initialData?.earnedCredits !== undefined
+      ? initialData.earnedCredits
+      : initialData?.credits !== undefined
+      ? initialData.credits
+      : 3
   );
   const [grade, setGrade] = useState(initialData?.grade || 'A');
   const [status, setStatus] = useState<ResultStatus>(initialData?.status || 'Passed');
   const [isVerified, setIsVerified] = useState(initialData?.isVerified ?? true);
+  const [isRetake, setIsRetake] = useState(initialData?.isRetake || false);
+  const [source, setSource] = useState<'Manual' | 'Imported' | 'Catalogue'>(
+    initialData?.source || 'Manual'
+  );
+  const [catalogueCourseId, setCatalogueCourseId] = useState(
+    initialData?.catalogueCourseId || ''
+  );
   const [notes, setNotes] = useState(initialData?.notes || '');
+
+  // Catalogue Quick-Search & Notice
+  const [catalogueSearch, setCatalogueSearch] = useState('');
+  const [showCatalogueDropdown, setShowCatalogueDropdown] = useState(false);
+  const [creditNotice, setCreditNotice] = useState('');
+
+  const supportsCode = isRegulationSupportingCourseCode(regulation);
+
+  // Filter catalogue courses for autocomplete
+  const matchingCatalogueCourses = useMemo(() => {
+    const list = getCatalogueForRegulation(regulation);
+    return list.filter((c) => {
+      if (category && c.category !== category) return false;
+      if (catalogueSearch.trim()) {
+        const q = catalogueSearch.trim().toLowerCase();
+        const matchesName = c.name.toLowerCase().includes(q);
+        const matchesCode = supportsCode && c.code && c.code.toLowerCase().includes(q);
+        return matchesName || matchesCode;
+      }
+      return true;
+    });
+  }, [regulation, category, catalogueSearch, supportsCode]);
+
+  const handleSelectCatalogueCourse = (course: CatalogueCourse) => {
+    setName(course.name);
+    if (isRegulationSupportingCourseCode(regulation)) {
+      setCode(course.code || '');
+    } else {
+      setCode('');
+    }
+    setCategory(course.category);
+    setCatalogueCourseId(course.id);
+    setSource('Catalogue');
+    if (course.verifiedCredits !== undefined) {
+      setCredits(course.verifiedCredits);
+      setRegisteredCredits(course.verifiedCredits);
+      setEarnedCredits(status === 'Passed' ? course.verifiedCredits : 0);
+      setIsVerified(true);
+      setCreditNotice(`✓ Verified in ${regulation} syllabus: ${course.verifiedCredits} Cr`);
+    } else {
+      setCredits('');
+      setRegisteredCredits('');
+      setEarnedCredits('');
+      setIsVerified(false);
+      setCreditNotice('⚠️ Credit value unassigned in catalogue. Please enter credits from your curriculum syllabus.');
+    }
+    setCatalogueSearch('');
+    setShowCatalogueDropdown(false);
+  };
+
+  const duplicateWarning = useMemo(() => {
+    if (!name.trim() || !existingSubjects) return null;
+    const match = existingSubjects.find((s) => {
+      if (initialData?.id && s.id === initialData.id) return false;
+      if (supportsCode && code.trim() && s.code && s.code.toUpperCase() === code.trim().toUpperCase()) {
+        return true;
+      }
+      return s.name.trim().toLowerCase() === name.trim().toLowerCase();
+    });
+    if (match) {
+      return `Notice: Course already recorded in Semester ${match.semester}. Check "Repeat / Retake attempt" below if repeating.`;
+    }
+    return null;
+  }, [name, code, existingSubjects, initialData, supportsCode]);
 
   // NPTEL Fields
   const [nptelCourseName, setNptelCourseName] = useState(
@@ -2701,17 +2873,33 @@ const SubjectFormModal: React.FC<{
       const title = name.trim();
       if (!title) return;
 
+      const safeCredits = typeof credits === 'number' ? credits : parseFloat(String(credits)) || 0;
+      const safeRegCredits =
+        typeof registeredCredits === 'number'
+          ? registeredCredits
+          : parseFloat(String(registeredCredits)) || safeCredits;
+      const safeEarnedCredits =
+        typeof earnedCredits === 'number'
+          ? earnedCredits
+          : parseFloat(String(earnedCredits)) || (status === 'Passed' ? safeCredits : 0);
+
       onSave({
         name: title,
-        code: code.trim().toUpperCase(),
+        code: supportsCode && code.trim() ? code.trim().toUpperCase() : undefined,
         category,
         semester,
-        credits: Math.max(0, Number(credits) || 0),
+        credits: safeCredits,
+        registeredCredits: safeRegCredits,
+        earnedCredits: safeEarnedCredits,
         grade,
         status,
         isVerified,
+        isRetake,
         notes: notes.trim(),
         courseType,
+        source: source || 'Manual',
+        regulation,
+        catalogueCourseId: catalogueCourseId || undefined,
       });
     }
   };
@@ -3025,6 +3213,145 @@ const SubjectFormModal: React.FC<{
           ) : (
             /* ================= REGULAR / EXTERNAL COURSE FORM FIELDS ================= */
             <>
+              {/* Step 1 & 2: Regulation & Category */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-xl bg-[var(--bg-tertiary)]/70 border border-[var(--border-secondary)]">
+                {/* Regulation Selector */}
+                <div className="flex flex-col gap-1">
+                  <label className="font-semibold text-[var(--text-primary)]">
+                    Curriculum Regulation
+                  </label>
+                  <div className="flex items-center gap-1">
+                    {(['VTR21', 'VTR25', 'VTR18', 'VTR15'] as const).map((r) => (
+                      <button
+                        key={r}
+                        type="button"
+                        onClick={() => {
+                          setRegulation(r);
+                          if (!isRegulationSupportingCourseCode(r)) {
+                            setCode('');
+                          }
+                        }}
+                        className={`flex-1 py-1 px-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          regulation === r
+                            ? 'bg-[var(--surface)] text-[var(--text-primary)] shadow-xs border border-[var(--border-primary)]'
+                            : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                        }`}
+                      >
+                        {r}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Course Category */}
+                <div className="flex flex-col gap-1">
+                  <label className="font-semibold text-[var(--text-primary)]">
+                    Course Category <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    className="apple-input h-8 text-xs cursor-pointer font-medium"
+                  >
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} ({c.code})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Step 3: Quick Autocomplete Selector from Matching Catalogue */}
+              <div className="flex flex-col gap-1 relative">
+                <label className="font-semibold text-[var(--text-primary)] flex items-center justify-between">
+                  <span>Select from {regulation} Course Catalogue</span>
+                  <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-normal">
+                    Auto-fills course data
+                  </span>
+                </label>
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-[var(--text-tertiary)] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder={`Search ${regulation} catalogue for ${category}...`}
+                    value={catalogueSearch}
+                    onFocus={() => setShowCatalogueDropdown(true)}
+                    onChange={(e) => {
+                      setCatalogueSearch(e.target.value);
+                      setShowCatalogueDropdown(true);
+                    }}
+                    className="apple-input h-9 text-xs pl-8 pr-3 w-full"
+                  />
+                </div>
+
+                {/* Catalogue Dropdown Results */}
+                {showCatalogueDropdown && (
+                  <div className="absolute top-full left-0 right-0 mt-1 z-30 max-h-48 overflow-y-auto rounded-xl bg-[var(--surface)] border border-[var(--border-primary)] shadow-xl p-1 divide-y divide-[var(--border-secondary)]">
+                    {matchingCatalogueCourses.length === 0 ? (
+                      <div className="p-3 text-center text-xs text-[var(--text-tertiary)]">
+                        No courses found in {regulation} catalogue for this category. You can type course details manually below.
+                      </div>
+                    ) : (
+                      matchingCatalogueCourses.map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => handleSelectCatalogueCourse(c)}
+                          className="w-full text-left p-2 rounded-lg hover:bg-[var(--bg-tertiary)] flex items-center justify-between gap-2 transition-colors cursor-pointer"
+                        >
+                          <div className="flex flex-col">
+                            <span className="font-semibold text-[var(--text-primary)]">
+                              {c.name}
+                            </span>
+                            {supportsCode && c.code && (
+                              <span className="font-mono text-[10px] text-[var(--text-tertiary)]">
+                                Code: {c.code}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-right shrink-0">
+                            {c.verifiedCredits !== undefined ? (
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300">
+                                {c.verifiedCredits} Cr
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-amber-600 dark:text-amber-400">
+                                Unassigned
+                              </span>
+                            )}
+                          </div>
+                        </button>
+                      ))
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setShowCatalogueDropdown(false)}
+                      className="w-full text-center py-1 text-[10px] font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
+                    >
+                      Close dropdown
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Credit Notice if present */}
+              {creditNotice && (
+                <div className="p-2.5 rounded-lg bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-200/50 dark:border-indigo-800/50 text-[11px] text-indigo-900 dark:text-indigo-200 flex items-center gap-2">
+                  <Info className="w-3.5 h-3.5 shrink-0" />
+                  <span>{creditNotice}</span>
+                </div>
+              )}
+
+              {/* Duplicate / Retake Warning Alert */}
+              {duplicateWarning && (
+                <div className="p-2.5 rounded-lg bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/50 dark:border-amber-800/50 text-[11px] text-amber-900 dark:text-amber-200 flex items-start gap-2">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  <span>{duplicateWarning}</span>
+                </div>
+              )}
+
+              {/* Course Title */}
               <div className="flex flex-col gap-1">
                 <label className="font-semibold text-[var(--text-primary)]">
                   Course Title <span className="text-rose-500">*</span>
@@ -3039,46 +3366,69 @@ const SubjectFormModal: React.FC<{
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              {/* Course Code (STRICTLY HIDDEN for VTR25, VISIBLE for VTR15/18/21) */}
+              {supportsCode && (
                 <div className="flex flex-col gap-1">
-                  <label className="font-semibold text-[var(--text-primary)]">Course Code</label>
+                  <label className="font-semibold text-[var(--text-primary)]">
+                    Course Code (e.g. 10211CS102)
+                  </label>
                   <input
                     type="text"
-                    placeholder="e.g. 21CS201"
+                    placeholder="Enter official course code"
                     value={code}
                     onChange={(e) => setCode(e.target.value.toUpperCase())}
                     className="apple-input h-10 text-xs font-mono uppercase"
                   />
+                  <span className="text-[10px] text-[var(--text-tertiary)]">
+                    Applicable for {regulation}. (Omitted for VTR25)
+                  </span>
                 </div>
+              )}
 
+              {/* Credits & Semester & Grade */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="flex flex-col gap-1">
-                  <label className="font-semibold text-[var(--text-primary)]">Course Category</label>
-                  <select
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value)}
-                    className="apple-input h-10 text-xs cursor-pointer"
-                  >
-                    {categories.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name} ({c.code})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div className="flex flex-col gap-1">
-                  <label className="font-semibold text-[var(--text-primary)]">Credits</label>
+                  <label className="font-semibold text-[var(--text-primary)]">
+                    Registered Cr
+                  </label>
                   <input
                     type="number"
                     min={0}
                     max={20}
                     step={0.5}
                     required
-                    value={credits}
-                    onChange={(e) => setCredits(parseFloat(e.target.value) || 0)}
+                    placeholder="e.g. 3"
+                    value={registeredCredits}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setRegisteredCredits(val);
+                      if (status === 'Passed' && (!earnedCredits || earnedCredits === credits)) {
+                        setEarnedCredits(val);
+                        setCredits(val !== '' ? parseFloat(val) : 0);
+                      }
+                    }}
                     className="apple-input h-10 text-xs text-center font-bold"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="font-semibold text-[var(--text-primary)]">
+                    Earned Cr
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={20}
+                    step={0.5}
+                    required
+                    placeholder="e.g. 3"
+                    value={earnedCredits}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setEarnedCredits(val);
+                      setCredits(val !== '' ? parseFloat(val) : 0);
+                    }}
+                    className="apple-input h-10 text-xs text-center font-bold text-emerald-600 dark:text-emerald-400"
                   />
                 </div>
 
@@ -3087,7 +3437,7 @@ const SubjectFormModal: React.FC<{
                   <select
                     value={semester}
                     onChange={(e) => setSemester(parseInt(e.target.value) || 1)}
-                    className="apple-input h-10 text-xs cursor-pointer"
+                    className="apple-input h-10 text-xs cursor-pointer font-medium"
                   >
                     {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
                       <option key={s} value={s}>
@@ -3113,12 +3463,23 @@ const SubjectFormModal: React.FC<{
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              {/* Result Status & Checkboxes */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1">
                   <label className="font-semibold text-[var(--text-primary)]">Result Status</label>
                   <select
                     value={status}
-                    onChange={(e) => setStatus(e.target.value as ResultStatus)}
+                    onChange={(e) => {
+                      const nextStatus = e.target.value as ResultStatus;
+                      setStatus(nextStatus);
+                      if (nextStatus !== 'Passed') {
+                        setEarnedCredits(0);
+                        setCredits(0);
+                      } else {
+                        setEarnedCredits(registeredCredits || 3);
+                        setCredits(registeredCredits ? (typeof registeredCredits === 'number' ? registeredCredits : parseFloat(registeredCredits)) : 3);
+                      }
+                    }}
                     className="apple-input h-10 text-xs cursor-pointer font-semibold"
                   >
                     <option value="Passed">Passed</option>
@@ -3126,23 +3487,33 @@ const SubjectFormModal: React.FC<{
                     <option value="Pending">Pending</option>
                     <option value="Withdrawn">Withdrawn</option>
                     <option value="Incomplete">Incomplete</option>
+                    <option value="Exempted">Exempted</option>
                   </select>
                 </div>
 
-                <div className="flex items-center gap-2 pt-5">
-                  <input
-                    id="is-verified-chk"
-                    type="checkbox"
-                    checked={isVerified}
-                    onChange={(e) => setIsVerified(e.target.checked)}
-                    className="rounded border-[var(--border-primary)]"
-                  />
-                  <label htmlFor="is-verified-chk" className="font-medium cursor-pointer">
-                    Verified official record
+                <div className="flex flex-col justify-center gap-1.5 pt-2 sm:pt-4">
+                  <label className="flex items-center gap-2 cursor-pointer font-medium">
+                    <input
+                      type="checkbox"
+                      checked={isVerified}
+                      onChange={(e) => setIsVerified(e.target.checked)}
+                      className="rounded border-[var(--border-primary)]"
+                    />
+                    <span>Verified official record</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer font-medium text-amber-700 dark:text-amber-400">
+                    <input
+                      type="checkbox"
+                      checked={isRetake}
+                      onChange={(e) => setIsRetake(e.target.checked)}
+                      className="rounded border-[var(--border-primary)]"
+                    />
+                    <span>Course repeat / retake attempt</span>
                   </label>
                 </div>
 
-                <div className="flex flex-col gap-1 col-span-2">
+                <div className="flex flex-col gap-1 col-span-1 sm:col-span-2">
                   <label className="font-semibold text-[var(--text-primary)]">
                     Notes / Remarks (Optional)
                   </label>

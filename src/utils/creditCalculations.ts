@@ -295,8 +295,16 @@ export function calculateCreditSummary(
       continue;
     }
 
+    const studentEarned = sub.earnedCredits !== undefined ? sub.earnedCredits : rawCredits;
+    const studentRegistered =
+      sub.registeredCredits !== undefined
+        ? sub.registeredCredits
+        : advertisedCredits > 0
+        ? advertisedCredits
+        : rawCredits;
+
     // Attempted / Registered credits
-    totalRegisteredCredits += advertisedCredits > 0 ? advertisedCredits : rawCredits;
+    totalRegisteredCredits += studentRegistered;
 
     if (isNptel) {
       const eligibility = isNptelCourseEligible(sub, rules);
@@ -321,12 +329,14 @@ export function calculateCreditSummary(
         }
         if (dedupeKey) countedCourseCodes.add(dedupeKey);
 
-        totalEarnedCredits += rawCredits;
-        verifiedEarnedCredits += rawCredits;
+        totalEarnedCredits += studentEarned;
+        if (sub.isVerified) {
+          verifiedEarnedCredits += studentEarned;
+        }
       } else if (sub.status === 'Pending') {
-        pendingCredits += rawCredits;
+        pendingCredits += studentRegistered;
       } else if (sub.status === 'Failed') {
-        failedCredits += rawCredits;
+        failedCredits += studentRegistered;
       }
     }
   }

@@ -74,19 +74,22 @@ export interface CreditSubjectItem {
   code?: string;
   category: string; // matches CreditCategoryConfig.id
   semester: number; // 1 to 8
-  credits: number; // non-negative (supports 0-credit courses)
+  credits: number; // earned credits (non-negative, supports 0-credit courses)
+  registeredCredits?: number; // officially registered / attempted credits
+  earnedCredits?: number; // verified earned credits
   grade?: string; // O, A+, A, B+, B, C, D, RA, P, W, etc.
   status: ResultStatus;
   regulation?: string;
   notes?: string;
   isVerified: boolean;
-  source: 'Manual' | 'Imported';
+  source: 'Manual' | 'Imported' | 'Catalogue';
   isDuplicate?: boolean;
   isRetake?: boolean; // retake/repeat course attempt
 
   // Course type & NPTEL integration
   courseType?: CourseType;
   nptelDetails?: NptelDetails;
+  catalogueCourseId?: string;
 }
 
 export interface CreditCategoryConfig {
