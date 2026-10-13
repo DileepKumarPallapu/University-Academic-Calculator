@@ -8,10 +8,10 @@ export const AttendancePlannerPage: React.FC = () => {
   const { addHistory } = useHistory();
   const { showToast } = useAppToast();
 
-  const [conducted, setConducted] = useState<number | ''>(40);
-  const [attended, setAttended] = useState<number | ''>(34);
-  const [futureSessions, setFutureSessions] = useState<number | ''>(10);
-  const [targetPercentage, setTargetPercentage] = useState<number | ''>(85);
+  const [conducted, setConducted] = useState<number | ''>('');
+  const [attended, setAttended] = useState<number | ''>('');
+  const [futureSessions, setFutureSessions] = useState<number | ''>('');
+  const [targetPercentage, setTargetPercentage] = useState<number | ''>(75);
 
   const numConducted = typeof conducted === 'number' ? conducted : 0;
   const numAttended = typeof attended === 'number' ? attended : 0;
@@ -147,18 +147,18 @@ export const AttendancePlannerPage: React.FC = () => {
             <div className="flex items-baseline justify-between border-b border-black/[0.06] dark:border-white/[0.08] pb-5">
               <div className="flex flex-col">
                 <span className="text-5xl font-bold tracking-tight text-[#1D1D1F] dark:text-[#F5F5F7] tabular-nums">
-                  {formatFixed(result.currentPercentage, 1)}%
+                  {numConducted > 0 ? `${formatFixed(result.currentPercentage, 1)}%` : '—'}
                 </span>
                 <span className="text-xs text-[#6E6E73] dark:text-[#A1A1A6] mt-0.5">
-                  Current ({numAttended}/{numConducted})
+                  {numConducted > 0 ? `Current (${numAttended}/${numConducted})` : 'Not calculated'}
                 </span>
               </div>
               <div className="flex flex-col text-right">
                 <span className="text-2xl font-bold text-[#1D1D1F] dark:text-[#F5F5F7] tabular-nums">
-                  {formatFixed(result.projectedPercentage, 1)}%
+                  {numConducted > 0 ? `${formatFixed(result.projectedPercentage, 1)}%` : '—'}
                 </span>
                 <span className="text-xs text-[#6E6E73] dark:text-[#A1A1A6] mt-0.5">
-                  Projected (100% future attendance)
+                  {numConducted > 0 ? 'Projected (100% future attendance)' : 'Enter sessions'}
                 </span>
               </div>
             </div>

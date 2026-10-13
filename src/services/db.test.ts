@@ -251,5 +251,25 @@ describe('Storage & Multi-Student Isolation Service', () => {
     expect(dataA.creditProgress?.earnedCredits).toBe(120);
     expect(dataB.creditProgress).toBeNull();
   });
+
+  it('verifies fresh profile initializes without sample calculations or preloaded records', async () => {
+    const freshStudent: StudentProfile = {
+      id: 'fresh-student-99',
+      name: 'Fresh Student',
+      degreePathway: 'standard',
+      targetAttendance: 75,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    await saveProfile(freshStudent);
+
+    const calcs = await getCalculationsByProfile('fresh-student-99');
+    expect(calcs).toEqual([]);
+
+    const exported = await exportProfileData('fresh-student-99');
+    expect(exported.calculations).toEqual([]);
+    expect(exported.creditProgress).toBeNull();
+  });
 });
 

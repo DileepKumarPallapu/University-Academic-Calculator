@@ -40,7 +40,7 @@ type ActiveTab = 'planner' | 'subjects' | 'calendar';
 
 export const AttendancePage: React.FC = () => {
   const { profile, studentName, setStudentName, updateProfile, nameError, setNameError } = useStudentProfile();
-  const { getCalculation } = useProfile();
+  const { activeProfile, getCalculation } = useProfile();
   const { showToast } = useAppToast();
   const [searchParams] = useSearchParams();
   const calcIdParam = searchParams.get('calcId');
@@ -52,10 +52,10 @@ export const AttendancePage: React.FC = () => {
   // Active Tab
   const [activeTab, setActiveTab] = useState<ActiveTab>('planner');
 
-  // Primary Inputs
+  // Primary Inputs (Zero/empty defaults for fresh student)
   const [subjectName, setSubjectName] = useState<string>(() => {
     try {
-      const draft = localStorage.getItem('academic_draft_attendance');
+      const draft = localStorage.getItem(`academic_draft_attendance_${activeProfile.id}`) || localStorage.getItem('academic_draft_attendance');
       if (draft) {
         const parsed = JSON.parse(draft);
         if (parsed.subjectName !== undefined) return parsed.subjectName;
@@ -66,18 +66,18 @@ export const AttendancePage: React.FC = () => {
 
   const [totalSessionsInput, setTotalSessionsInput] = useState<string>(() => {
     try {
-      const draft = localStorage.getItem('academic_draft_attendance');
+      const draft = localStorage.getItem(`academic_draft_attendance_${activeProfile.id}`);
       if (draft) {
         const parsed = JSON.parse(draft);
         if (parsed.totalSessionsInput !== undefined) return parsed.totalSessionsInput;
       }
     } catch {}
-    return '50';
+    return '';
   });
 
   const [useFacultySessions, setUseFacultySessions] = useState<boolean>(() => {
     try {
-      const draft = localStorage.getItem('academic_draft_attendance');
+      const draft = localStorage.getItem(`academic_draft_attendance_${activeProfile.id}`);
       if (draft) {
         const parsed = JSON.parse(draft);
         if (parsed.useFacultySessions !== undefined) return parsed.useFacultySessions;
@@ -88,35 +88,35 @@ export const AttendancePage: React.FC = () => {
 
   const [facultySessionsInput, setFacultySessionsInput] = useState<string>(() => {
     try {
-      const draft = localStorage.getItem('academic_draft_attendance');
+      const draft = localStorage.getItem(`academic_draft_attendance_${activeProfile.id}`);
       if (draft) {
         const parsed = JSON.parse(draft);
         if (parsed.facultySessionsInput !== undefined) return parsed.facultySessionsInput;
       }
     } catch {}
-    return '50';
+    return '';
   });
 
   const [attendedInput, setAttendedInput] = useState<string>(() => {
     try {
-      const draft = localStorage.getItem('academic_draft_attendance');
+      const draft = localStorage.getItem(`academic_draft_attendance_${activeProfile.id}`);
       if (draft) {
         const parsed = JSON.parse(draft);
         if (parsed.attendedInput !== undefined) return parsed.attendedInput;
       }
     } catch {}
-    return '42';
+    return '';
   });
 
   const [targetPercentageInput, setTargetPercentageInput] = useState<string>(() => {
     try {
-      const draft = localStorage.getItem('academic_draft_attendance');
+      const draft = localStorage.getItem(`academic_draft_attendance_${activeProfile.id}`);
       if (draft) {
         const parsed = JSON.parse(draft);
         if (parsed.targetPercentageInput !== undefined) return parsed.targetPercentageInput;
       }
     } catch {}
-    return '75';
+    return String(activeProfile.targetAttendance || 75);
   });
 
   // Numeric parsing
@@ -159,54 +159,73 @@ export const AttendancePage: React.FC = () => {
     })();
   }, [calcIdParam, getCalculation, showToast]);
 
-  // Subject-Wise Tracker State with localStorage persistence
+  // Subject-Wise Tracker State with localStorage persistence per activeProfile
   const [subjects, setSubjects] = useState<SubjectAttendanceItem[]>(() => {
     try {
-      const saved = localStorage.getItem('academic_attendance_subjects_v2');
+      const saved = localStorage.getItem(`academic_attendance_subjects_${activeProfile.id}`);
       if (saved) return JSON.parse(saved);
     } catch {}
-    return [
-      { id: 'sub-1', name: 'Data Structures & Algorithms', conducted: 45, attended: 40, targetPercentage: 75 },
-      { id: 'sub-2', name: 'Computer Networks', conducted: 40, attended: 28, targetPercentage: 75 },
-      { id: 'sub-3', name: 'Operating Systems', conducted: 50, attended: 42, targetPercentage: 80 },
-    ];
+    return [];
   });
 
   useEffect(() => {
     try {
-      localStorage.setItem('academic_attendance_subjects_v2', JSON.stringify(subjects));
+      localStorage.setItem(`academic_attendance_subjects_${activeProfile.id}`, JSON.stringify(subjects));
     } catch {}
-  }, [subjects]);
+  }, [subjects, activeProfile.id]);
 
-  // Weekly Planner Log State with localStorage persistence
+  // Weekly Planner Log State with localStorage persistence per activeProfile
   const [classLogs, setClassLogs] = useState<ClassLogEntry[]>(() => {
     try {
-      const saved = localStorage.getItem('academic_attendance_logs_v2');
+      const saved = localStorage.getItem(`academic_attendance_logs_${activeProfile.id}`);
       if (saved) return JSON.parse(saved);
     } catch {}
-    const today = new Date().toISOString().split('T')[0];
-    return [
-      { id: 'log-1', date: today, subject: 'Computer Networks', status: 'attended' },
-      { id: 'log-2', date: today, subject: 'Operating Systems', status: 'planned', notes: 'Period 3' },
-    ];
+    return [];
   });
 
   useEffect(() => {
     try {
-      localStorage.setItem('academic_attendance_logs_v2', JSON.stringify(classLogs));
+      localStorage.setItem(`academic_attendance_logs_${activeProfile.id}`, JSON.stringify(classLogs));
     } catch {}
-  }, [classLogs]);
+  }, [classLogs, activeProfile.id]);
+
+  // Profile switch effect: keep attendance data strictly isolated
+  useEffect(() => {
+    try {
+      const draft = localStorage.getItem(`academic_draft_attendance_${activeProfile.id}`);
+      if (draft) {
+        const parsed = JSON.parse(draft);
+        setSubjectName(parsed.subjectName || '');
+        setTotalSessionsInput(parsed.totalSessionsInput || '');
+        setFacultySessionsInput(parsed.facultySessionsInput || '');
+        setAttendedInput(parsed.attendedInput || '');
+        setTargetPercentageInput(parsed.targetPercentageInput || String(activeProfile.targetAttendance || 75));
+        setUseFacultySessions(Boolean(parsed.useFacultySessions));
+      } else {
+        setSubjectName('');
+        setTotalSessionsInput('');
+        setFacultySessionsInput('');
+        setAttendedInput('');
+        setTargetPercentageInput(String(activeProfile.targetAttendance || 75));
+        setUseFacultySessions(false);
+      }
+      const savedSub = localStorage.getItem(`academic_attendance_subjects_${activeProfile.id}`);
+      setSubjects(savedSub ? JSON.parse(savedSub) : []);
+      const savedLogs = localStorage.getItem(`academic_attendance_logs_${activeProfile.id}`);
+      setClassLogs(savedLogs ? JSON.parse(savedLogs) : []);
+    } catch {}
+  }, [activeProfile.id, activeProfile.targetAttendance]);
 
   // Draft persistence for Planner
   const isDirty =
-    totalSessionsInput !== '50' ||
-    attendedInput !== '42' ||
-    targetPercentageInput !== '75' ||
+    totalSessionsInput !== '' ||
+    attendedInput !== '' ||
+    facultySessionsInput !== '' ||
     subjectName !== '';
 
   const [hasDraft, setHasDraft] = useState<boolean>(() => {
     try {
-      return !!localStorage.getItem('academic_draft_attendance');
+      return !!localStorage.getItem(`academic_draft_attendance_${activeProfile.id}`);
     } catch {
       return false;
     }
@@ -216,7 +235,7 @@ export const AttendancePage: React.FC = () => {
     if (isDirty) {
       try {
         localStorage.setItem(
-          'academic_draft_attendance',
+          `academic_draft_attendance_${activeProfile.id}`,
           JSON.stringify({
             subjectName,
             totalSessionsInput,
@@ -229,7 +248,7 @@ export const AttendancePage: React.FC = () => {
         setHasDraft(true);
       } catch {}
     }
-  }, [subjectName, totalSessionsInput, useFacultySessions, facultySessionsInput, attendedInput, targetPercentageInput, isDirty]);
+  }, [subjectName, totalSessionsInput, useFacultySessions, facultySessionsInput, attendedInput, targetPercentageInput, isDirty, activeProfile.id]);
 
   // Reset confirmation modals
   const [showResetModal, setShowResetModal] = useState(false);
@@ -237,30 +256,30 @@ export const AttendancePage: React.FC = () => {
 
   const handleReset = () => {
     try {
-      localStorage.removeItem('academic_draft_attendance');
+      localStorage.removeItem(`academic_draft_attendance_${activeProfile.id}`);
     } catch {}
     setSubjectName('');
-    setTotalSessionsInput('50');
+    setTotalSessionsInput('');
     setUseFacultySessions(false);
-    setFacultySessionsInput('50');
-    setAttendedInput('42');
-    setTargetPercentageInput('75');
+    setFacultySessionsInput('');
+    setAttendedInput('');
+    setTargetPercentageInput(String(activeProfile.targetAttendance || 75));
     setHasDraft(false);
     setShowResetModal(false);
-    showToast('Attendance calculator reset to defaults.', 'info');
+    showToast('Attendance calculator reset to zero defaults.', 'info');
   };
 
   const handleClearAllData = () => {
     try {
-      localStorage.removeItem('academic_draft_attendance');
-      localStorage.removeItem('academic_attendance_subjects_v2');
-      localStorage.removeItem('academic_attendance_logs_v2');
+      localStorage.removeItem(`academic_draft_attendance_${activeProfile.id}`);
+      localStorage.removeItem(`academic_attendance_subjects_${activeProfile.id}`);
+      localStorage.removeItem(`academic_attendance_logs_${activeProfile.id}`);
     } catch {}
     setSubjects([]);
     setClassLogs([]);
     handleReset();
     setShowClearAllModal(false);
-    showToast('All stored attendance data and logs cleared.', 'info');
+    showToast('All stored attendance data and logs reset to zero.', 'info');
   };
 
   // Subject management actions
@@ -628,7 +647,7 @@ export const AttendancePage: React.FC = () => {
                       { label: 'Classes to Recover', value: `${recoveryResult.requiredSessions}` },
                     ]}
                     resultLabel="Attendance"
-                    resultValue={attendanceData.percentage !== null ? `${attendanceData.percentage.toFixed(2)}%` : 'Insufficient Data'}
+                    resultValue={attendanceData.percentage !== null ? `${attendanceData.percentage.toFixed(2)}%` : 'Not calculated'}
                   />
 
                   {/* Save to History Button */}

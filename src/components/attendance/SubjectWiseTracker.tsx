@@ -39,16 +39,16 @@ export const SubjectWiseTracker: React.FC<SubjectWiseTrackerProps> = ({
 
   // Form state for add / edit
   const [formName, setFormName] = useState('');
-  const [formConducted, setFormConducted] = useState('40');
-  const [formAttended, setFormAttended] = useState('32');
+  const [formConducted, setFormConducted] = useState('');
+  const [formAttended, setFormAttended] = useState('');
   const [formTarget, setFormTarget] = useState('75');
   const [formError, setFormError] = useState<string | null>(null);
 
   const openAddModal = () => {
     setEditingSubject(null);
     setFormName('');
-    setFormConducted('40');
-    setFormAttended('32');
+    setFormConducted('');
+    setFormAttended('');
     setFormTarget('75');
     setFormError(null);
     setIsAddModalOpen(true);

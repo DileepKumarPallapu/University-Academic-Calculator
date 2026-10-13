@@ -61,22 +61,6 @@ import {
   calculateNptelDashboardStats,
 } from '../utils/creditCalculations';
 
-// Initial sample data based on college curriculum template
-const INITIAL_SUBJECTS_TEMPLATE: CreditSubjectItem[] = [
-  { id: 'sub-fnd-1', code: 'MA101', name: 'Engineering Mathematics I', category: 'foundation', semester: 1, credits: 4, grade: 'A', status: 'Passed', isVerified: true, source: 'Manual' },
-  { id: 'sub-fnd-2', code: 'PH101', name: 'Engineering Physics', category: 'foundation', semester: 1, credits: 4, grade: 'A+', status: 'Passed', isVerified: true, source: 'Manual' },
-  { id: 'sub-fnd-3', code: 'CS101', name: 'Problem Solving & Python Programming', category: 'foundation', semester: 1, credits: 3, grade: 'O', status: 'Passed', isVerified: true, source: 'Manual' },
-  { id: 'sub-core-1', code: 'CS201', name: 'Data Structures & Algorithms', category: 'programme_core', semester: 3, credits: 4, grade: 'A', status: 'Passed', isVerified: true, source: 'Manual' },
-  { id: 'sub-core-2', code: 'CS202', name: 'Computer Architecture & Organisation', category: 'programme_core', semester: 3, credits: 4, grade: 'B+', status: 'Passed', isVerified: true, source: 'Manual' },
-  { id: 'sub-core-3', code: 'CS301', name: 'Database Management Systems', category: 'programme_core', semester: 4, credits: 4, grade: 'A+', status: 'Passed', isVerified: true, source: 'Manual' },
-  { id: 'sub-pe-1', code: 'CS401', name: 'Cloud Computing Architecture', category: 'programme_elective', semester: 5, credits: 3, grade: 'A', status: 'Passed', isVerified: true, source: 'Manual' },
-  { id: 'sub-oe-1', code: 'OE301', name: 'Renewable Energy Systems', category: 'open_elective', semester: 5, credits: 3, grade: 'B+', status: 'Passed', isVerified: true, source: 'Manual' },
-  { id: 'sub-il-1', code: 'IL201', name: 'Technical Seminar & Self Study', category: 'independent_learning', semester: 4, credits: 2, grade: 'O', status: 'Passed', isVerified: true, source: 'Manual' },
-  { id: 'sub-ind-1', code: 'IND301', name: 'Industrial Internship / Training', category: 'industry_interaction', semester: 6, credits: 2, grade: 'A+', status: 'Passed', isVerified: true, source: 'Manual' },
-  { id: 'sub-ppc-1', code: 'PPC101', name: 'Professional Communication Lab', category: 'professional_proficiency', semester: 2, credits: 2, grade: 'A', status: 'Passed', isVerified: true, source: 'Manual' },
-  { id: 'sub-mc-1', code: 'MC101', name: 'Environmental Science & Sustainability', category: 'mandatory', semester: 2, credits: 0, grade: 'P', status: 'Passed', isVerified: true, source: 'Manual' },
-  { id: 'sub-cs-1', code: 'CS_G1', name: 'Complementary Skills G1 Benchmark', category: 'complementary_skills', semester: 3, credits: 0, grade: 'P', status: 'Passed', isVerified: true, source: 'Manual' },
-];
 
 export const CreditsPlannerPage: React.FC = () => {
   const { activeProfile, updateProfile, getCalculation } = useProfile();
@@ -101,13 +85,13 @@ export const CreditsPlannerPage: React.FC = () => {
     return JSON.parse(JSON.stringify(COLLEGE_CHART_TEMPLATE));
   });
 
-  // Subjects state with activeProfile local fallback
+  // Subjects state with activeProfile local fallback (Defaults to empty for fresh student)
   const [subjects, setSubjects] = useState<CreditSubjectItem[]>(() => {
     try {
       const saved = localStorage.getItem(`academic_credits_subjects_${activeProfile.id}`);
       if (saved) return JSON.parse(saved);
     } catch {}
-    return INITIAL_SUBJECTS_TEMPLATE;
+    return [];
   });
 
   // Semester planned targets (Sem 1 to 8)
@@ -209,7 +193,7 @@ export const CreditsPlannerPage: React.FC = () => {
   useEffect(() => {
     try {
       const savedSub = localStorage.getItem(`academic_credits_subjects_${activeProfile.id}`);
-      setSubjects(savedSub ? JSON.parse(savedSub) : INITIAL_SUBJECTS_TEMPLATE);
+      setSubjects(savedSub ? JSON.parse(savedSub) : []);
       const savedRules = localStorage.getItem(
         `academic_credits_nptel_rules_${activeProfile.id}`
       );
@@ -423,9 +407,9 @@ export const CreditsPlannerPage: React.FC = () => {
       semester: course.defaultSemester || 1,
       credits: course.verifiedCredits !== undefined ? course.verifiedCredits : 0,
       registeredCredits: course.verifiedCredits !== undefined ? course.verifiedCredits : 0,
-      earnedCredits: course.verifiedCredits !== undefined ? course.verifiedCredits : 0,
-      grade: 'A',
-      status: 'Passed',
+      earnedCredits: 0,
+      grade: '—',
+      status: 'Pending',
       isVerified: course.isVerified,
       source: 'Catalogue',
       regulation: course.regulation,
@@ -470,14 +454,17 @@ export const CreditsPlannerPage: React.FC = () => {
     );
   };
 
-  // Reset to College Template
-  const handleResetToTemplate = () => {
+  // Reset My Academic Data (Zeros personal records, preserves shared catalogues)
+  const handleResetAcademicData = () => {
     setCategories(JSON.parse(JSON.stringify(COLLEGE_CHART_TEMPLATE)));
-    setSubjects(INITIAL_SUBJECTS_TEMPLATE);
-    setTargetCredits(DEFAULT_PATHWAY_TARGETS[pathway]);
+    setSubjects([]);
+    setTargetCredits(DEFAULT_PATHWAY_TARGETS[pathway] || 164);
     setLoadedCalcTitle(null);
     setResetConfirmOpen(false);
-    showToast('Reset to college supplied credit template.', 'info');
+    try {
+      localStorage.removeItem(`academic_credits_subjects_${activeProfile.id}`);
+    } catch {}
+    showToast('Personal academic credit records reset to zero.', 'info');
   };
 
   // CSV Export
@@ -597,11 +584,11 @@ export const CreditsPlannerPage: React.FC = () => {
           <button
             type="button"
             onClick={() => setResetConfirmOpen(true)}
-            className="apple-btn-secondary text-xs h-10 px-3.5 gap-1.5 text-[var(--text-secondary)] hover:text-rose-600"
-            title="Reset to college credit template"
+            className="apple-btn-secondary text-xs h-10 px-3.5 gap-1.5 text-[var(--text-secondary)] hover:text-rose-600 cursor-pointer"
+            title="Reset personal academic records to zero"
           >
             <RotateCcw className="w-3.5 h-3.5" />
-            <span>Reset</span>
+            <span>Reset My Academic Data</span>
           </button>
 
           <SaveCalculationButton
@@ -1104,7 +1091,43 @@ export const CreditsPlannerPage: React.FC = () => {
                   {filteredSubjects.length === 0 ? (
                     <tr>
                       <td colSpan={9} className="py-12 text-center text-[var(--text-secondary)]">
-                        No course records found matching your filters.
+                        {subjects.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center gap-3 max-w-md mx-auto py-4">
+                            <div className="w-10 h-10 rounded-2xl bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] flex items-center justify-center text-[var(--text-tertiary)]">
+                              <BookOpen className="w-5 h-5" />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              <span className="font-bold text-sm text-[var(--text-primary)]">
+                                Zero Registered Courses
+                              </span>
+                              <span className="text-xs text-[var(--text-secondary)]">
+                                Your academic records are set to zero defaults. Add your courses manually or register them directly from the official Course Catalogue.
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 pt-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingSubject(null);
+                                  setSubjectModalInitialCourseType('regular');
+                                  setSubjectModalOpen(true);
+                                }}
+                                className="apple-btn-primary text-xs h-8 px-3 rounded-lg cursor-pointer"
+                              >
+                                + Add Course
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setActiveSection('catalogue')}
+                                className="apple-btn-secondary text-xs h-8 px-3 rounded-lg cursor-pointer"
+                              >
+                                Browse Catalogue
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          'No course records found matching your filters.'
+                        )}
                       </td>
                     </tr>
                   ) : (
@@ -1580,13 +1603,13 @@ export const CreditsPlannerPage: React.FC = () => {
         description="Are you sure you want to remove this course from your academic credit plan? This will immediately recalculate your earned credits."
       />
 
-      {/* Reset To Template Confirmation */}
+      {/* Reset Academic Data Confirmation */}
       <ResetConfirmModal
         isOpen={resetConfirmOpen}
         onClose={() => setResetConfirmOpen(false)}
-        onConfirm={handleResetToTemplate}
-        title="Reset to College Template?"
-        description="Are you sure you want to restore the official 164-credit college structure and initial template courses? Any custom courses added will be reset."
+        onConfirm={handleResetAcademicData}
+        title="Reset My Academic Data?"
+        description={`This will reset all registered courses, earned credits, and semester plans for "${activeProfile.name}" to zero. The shared college course catalogue and institutional rules will remain untouched.`}
       />
     </div>
   );
@@ -2700,7 +2723,7 @@ const SubjectFormModal: React.FC<{
     initialData?.regulation || profileRegulation || 'VTR21'
   );
 
-  // Regular Course Fields
+  // Regular Course Fields (Defaults to zero credits and Pending status)
   const [name, setName] = useState(initialData?.name || '');
   const [code, setCode] = useState(initialData?.code || '');
   const [category, setCategory] = useState(
@@ -2708,25 +2731,23 @@ const SubjectFormModal: React.FC<{
   );
   const [semester, setSemester] = useState(initialData?.semester || 1);
   const [credits, setCredits] = useState<number | string>(
-    initialData?.credits !== undefined ? initialData.credits : 3
+    initialData?.credits !== undefined ? initialData.credits : 0
   );
   const [registeredCredits, setRegisteredCredits] = useState<number | string>(
     initialData?.registeredCredits !== undefined
       ? initialData.registeredCredits
       : initialData?.credits !== undefined
       ? initialData.credits
-      : 3
+      : 0
   );
   const [earnedCredits, setEarnedCredits] = useState<number | string>(
     initialData?.earnedCredits !== undefined
       ? initialData.earnedCredits
-      : initialData?.credits !== undefined
-      ? initialData.credits
-      : 3
+      : 0
   );
-  const [grade, setGrade] = useState(initialData?.grade || 'A');
-  const [status, setStatus] = useState<ResultStatus>(initialData?.status || 'Passed');
-  const [isVerified, setIsVerified] = useState(initialData?.isVerified ?? true);
+  const [grade, setGrade] = useState(initialData?.grade || '—');
+  const [status, setStatus] = useState<ResultStatus>(initialData?.status || 'Pending');
+  const [isVerified, setIsVerified] = useState(initialData?.isVerified ?? (initialData?.source === 'Catalogue'));
   const [isRetake, setIsRetake] = useState(initialData?.isRetake || false);
   const [source, setSource] = useState<'Manual' | 'Imported' | 'Catalogue'>(
     initialData?.source || 'Manual'
@@ -2815,16 +2836,16 @@ const SubjectFormModal: React.FC<{
     initialData?.nptelDetails?.durationWeeks || '8 Weeks'
   );
   const [courseCredits, setCourseCredits] = useState<number>(
-    initialData?.nptelDetails?.courseCredits ?? 3
+    initialData?.nptelDetails?.courseCredits ?? 0
   );
   const [acceptedCredits, setAcceptedCredits] = useState<number>(
-    initialData?.nptelDetails?.acceptedCredits ?? (initialData?.credits ?? 3)
+    initialData?.nptelDetails?.acceptedCredits ?? 0
   );
   const [certStatus, setCertStatus] = useState<NptelCertificateStatus>(
-    initialData?.nptelDetails?.certificateStatus || 'completed'
+    initialData?.nptelDetails?.certificateStatus || 'in_progress'
   );
   const [approvalStatus, setApprovalStatus] = useState<NptelApprovalStatus>(
-    initialData?.nptelDetails?.approvalStatus || 'approved'
+    initialData?.nptelDetails?.approvalStatus || 'not_verified'
   );
   const [nptelSemesterCounted, setNptelSemesterCounted] = useState<number>(
     initialData?.nptelDetails?.semesterCounted ?? (initialData?.semester ?? 5)
@@ -3474,10 +3495,9 @@ const SubjectFormModal: React.FC<{
                       setStatus(nextStatus);
                       if (nextStatus !== 'Passed') {
                         setEarnedCredits(0);
-                        setCredits(0);
                       } else {
-                        setEarnedCredits(registeredCredits || 3);
-                        setCredits(registeredCredits ? (typeof registeredCredits === 'number' ? registeredCredits : parseFloat(registeredCredits)) : 3);
+                        const defaultCr = Number(registeredCredits) || Number(credits) || 0;
+                        setEarnedCredits(defaultCr);
                       }
                     }}
                     className="apple-input h-10 text-xs cursor-pointer font-semibold"

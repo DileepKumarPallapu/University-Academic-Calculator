@@ -329,6 +329,14 @@ export const ProfileProvider: React.FC<{ children: React.ReactNode }> = ({ child
       await db.deleteCalculation(c.id);
     }
     await db.deleteCreditProgress(activeProfileId);
+    try {
+      localStorage.removeItem(`academic_credits_subjects_${activeProfileId}`);
+      localStorage.removeItem(`academic_credits_nptel_rules_${activeProfileId}`);
+      localStorage.removeItem(`academic_attendance_subjects_${activeProfileId}`);
+      localStorage.removeItem(`academic_attendance_logs_${activeProfileId}`);
+      localStorage.removeItem(`academic_draft_attendance_${activeProfileId}`);
+      window.dispatchEvent(new Event('active-profile-changed'));
+    } catch {}
   }, [activeProfileId]);
 
   return (

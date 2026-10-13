@@ -126,7 +126,7 @@ export const AttendanceSummaryCard: React.FC<AttendanceSummaryCardProps> = ({
                 {percentage !== null ? `${percentage.toFixed(1)}%` : '—'}
               </span>
               <span className="text-xs font-semibold text-[var(--text-tertiary)] mt-0.5">
-                Current Attendance
+                {percentage !== null ? 'Current Attendance' : 'Not calculated'}
               </span>
             </div>
           </div>

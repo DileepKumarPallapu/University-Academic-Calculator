@@ -94,9 +94,9 @@ export function calculateCurrentAttendance(
   if (conducted <= 0) {
     const statusDetails: AttendanceStatusDetails = {
       status: 'Insufficient Data',
-      label: 'Insufficient Data',
+      label: 'Not calculated',
       badgeClass: 'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300 border-neutral-200 dark:border-neutral-700',
-      description: 'No sessions have been conducted yet.',
+      description: 'Enter your attendance numbers above to calculate.',
     };
     return {
       percentage: null,

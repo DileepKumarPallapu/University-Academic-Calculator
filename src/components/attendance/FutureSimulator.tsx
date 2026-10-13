@@ -13,9 +13,9 @@ export const FutureSimulator: React.FC<FutureSimulatorProps> = ({
   currentAttended,
   targetPercentage,
 }) => {
-  const [futurePlannedInput, setFuturePlannedInput] = useState<string>('15');
-  const [futureAttendedInput, setFutureAttendedInput] = useState<string>('12');
-  const [futureMissedInput, setFutureMissedInput] = useState<string>('3');
+  const [futurePlannedInput, setFuturePlannedInput] = useState<string>('');
+  const [futureAttendedInput, setFutureAttendedInput] = useState<string>('');
+  const [futureMissedInput, setFutureMissedInput] = useState<string>('');
 
   const futurePlanned = Math.max(0, parseInt(futurePlannedInput) || 0);
   const futureAttended = Math.max(0, parseInt(futureAttendedInput) || 0);
@@ -113,8 +113,14 @@ export const FutureSimulator: React.FC<FutureSimulatorProps> = ({
         </div>
       )}
 
+      {currentConducted <= 0 && (
+        <div className="p-4 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] text-xs text-[var(--text-secondary)]">
+          Enter current conducted and attended sessions above to run future attendance simulations.
+        </div>
+      )}
+
       {/* Results Comparison Card */}
-      {!isSumExceeded && currentConducted > 0 && simResult.projectedPercentage !== null && (
+      {!isSumExceeded && currentConducted > 0 && futurePlanned > 0 && simResult.projectedPercentage !== null && (
         <div className="p-4 sm:p-5 rounded-2xl bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] flex flex-col gap-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-tertiary)]">

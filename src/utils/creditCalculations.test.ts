@@ -891,4 +891,62 @@ describe('Credit Calculation & Graduation Progress System Tests', () => {
       expect(summary.creditsRemaining).toBe(155);
     });
   });
+
+  describe('Zero Defaults & Course Registration Separation Tests', () => {
+    it('initializes a fresh student record with exactly zero credits and 100% remaining', () => {
+      const freshSubjects: CreditSubjectItem[] = [];
+      const targetCredits = 164;
+      const summary = calculateCreditSummary(freshSubjects, targetCredits, COLLEGE_CHART_TEMPLATE);
+
+      expect(summary.totalRegisteredCredits).toBe(0);
+      expect(summary.totalEarnedCredits).toBe(0);
+      expect(summary.pendingCredits).toBe(0);
+      expect(summary.failedCredits).toBe(0);
+      expect(summary.extraCredits).toBe(0);
+      expect(summary.creditsRemaining).toBe(164);
+      expect(summary.completionPercentage).toBe(0);
+      expect(summary.mandatoryCompletedCount).toBe(0);
+      expect(summary.complementaryCompletedCount).toBe(0);
+    });
+
+    it('adding a course initializes with 0 earned credits and Pending status without prematurely inflating earned credits', () => {
+      // Adding a 4-credit course from catalogue as Pending / Not Started
+      const registeredCourse: CreditSubjectItem = {
+        id: 'new-reg-1',
+        name: 'Operating Systems',
+        code: 'CS202',
+        category: 'programme_core',
+        semester: 3,
+        credits: 4,
+        registeredCredits: 4,
+        earnedCredits: 0,
+        grade: '—',
+        status: 'Pending',
+        isVerified: true,
+        source: 'Catalogue',
+      };
+
+      const summary = calculateCreditSummary([registeredCourse], 164, COLLEGE_CHART_TEMPLATE);
+      expect(summary.totalRegisteredCredits).toBe(4);
+      expect(summary.totalEarnedCredits).toBe(0);
+      expect(summary.pendingCredits).toBe(4);
+      expect(summary.creditsRemaining).toBe(164);
+      expect(summary.completionPercentage).toBe(0);
+
+      // Explicitly passing the course awards the earned credits
+      const passedCourse: CreditSubjectItem = {
+        ...registeredCourse,
+        earnedCredits: 4,
+        grade: 'A',
+        status: 'Passed',
+      };
+
+      const updatedSummary = calculateCreditSummary([passedCourse], 164, COLLEGE_CHART_TEMPLATE);
+      expect(updatedSummary.totalRegisteredCredits).toBe(4);
+      expect(updatedSummary.totalEarnedCredits).toBe(4);
+      expect(updatedSummary.pendingCredits).toBe(0);
+      expect(updatedSummary.creditsRemaining).toBe(160);
+      expect(updatedSummary.completionPercentage).toBeCloseTo((4 / 164) * 100, 2);
+    });
+  });
 });
