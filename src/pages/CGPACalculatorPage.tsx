@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Plus, Trash2, RotateCcw, FileUp } from 'lucide-react';
 import { calculateCGPA, formatFixed } from '../utils/calculations';
 import { REGULATIONS, type RegulationId } from '../config/university';
@@ -7,9 +7,11 @@ import type { SemesterItem } from '../types';
 import { PrintButton } from '../components/common/PrintButton';
 import { AcademicPrintReport } from '../components/common/AcademicPrintReport';
 import { useStudentProfile } from '../hooks/useStudentProfile';
+import { useProfile } from '../context/ProfileContext';
 import { StudentNameInput } from '../components/common/StudentNameInput';
 import { GradeScaleModal } from '../components/common/GradeScaleModal';
 import { ResultActionButtons } from '../components/common/ResultActionButtons';
+import { SaveCalculationButton } from '../components/common/SaveCalculationModal';
 import { ResetConfirmModal } from '../components/common/ResetConfirmModal';
 import { saveRecentCalculation } from '../utils/recentCalculations';
 import { DraftIndicator } from '../components/common/DraftIndicator';
@@ -19,7 +21,12 @@ import { useAppToast } from '../components/layout/AppShell';
 
 export const CGPACalculatorPage: React.FC = () => {
   const { profile, studentName, setStudentName, updateProfile, nameError, setNameError } = useStudentProfile();
+  const { getCalculation } = useProfile();
   const { showToast } = useAppToast();
+  const [searchParams] = useSearchParams();
+  const calcIdParam = searchParams.get('calcId');
+  const [loadedCalcId, setLoadedCalcId] = useState<string | null>(calcIdParam);
+
   const studentNameInputRef = useRef<HTMLInputElement>(null);
   const [isGradeScaleOpen, setIsGradeScaleOpen] = useState(false);
   const [calcSuccess, setCalcSuccess] = useState<boolean>(false);
@@ -69,6 +76,24 @@ export const CGPACalculatorPage: React.FC = () => {
       return false;
     }
   });
+
+  // Reopen saved CGPA calculation from profile
+  useEffect(() => {
+    if (!calcIdParam) return;
+    (async () => {
+      const saved = await getCalculation(calcIdParam);
+      if (saved && saved.inputs && saved.type === 'cgpa') {
+        if (saved.inputs.regulation && REGULATIONS[saved.inputs.regulation as RegulationId]) {
+          setRegulation(saved.inputs.regulation as RegulationId);
+        }
+        if (Array.isArray(saved.inputs.semesters) && saved.inputs.semesters.length > 0) {
+          setSemesters(saved.inputs.semesters);
+        }
+        setLoadedCalcId(saved.id);
+        showToast(`Loaded saved CGPA calculation: "${saved.title}"`, 'success');
+      }
+    })();
+  }, [calcIdParam, getCalculation, showToast]);
 
   const handleRegulationChange = (newReg: RegulationId) => {
     setRegulation(newReg);
@@ -537,8 +562,26 @@ export const CGPACalculatorPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Result Action Buttons: Copy & Share */}
+            {/* Save Calculation to Student Profile */}
             <div className="pt-2">
+              <SaveCalculationButton
+                type="cgpa"
+                defaultTitle={`CGPA — ${semesters.length} Semesters (${regulation})`}
+                resultValue={`${formatFixed(cgpaResult.cgpa, 2)} / 10`}
+                resultSummary={`${cgpaResult.totalCredits} Total Credits • ${semesters.length} Semesters • ${regulation}`}
+                inputs={{
+                  regulation,
+                  semesters,
+                }}
+                regulation={regulation}
+                existingCalcId={loadedCalcId}
+                onSaved={(id) => setLoadedCalcId(id)}
+                className="w-full h-11"
+              />
+            </div>
+
+            {/* Result Action Buttons: Copy & Share */}
+            <div className="pt-1">
               <ResultActionButtons
                 title={`CGPA Summary (${regulation})`}
                 studentName={studentName}

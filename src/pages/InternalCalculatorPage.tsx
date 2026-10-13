@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   calculateTheoryInternal,
   calculateIntegratedInternal,
@@ -10,8 +11,10 @@ import type { TheoryInputs, IntegratedInputs } from '../types';
 import { PrintButton } from '../components/common/PrintButton';
 import { AcademicPrintReport } from '../components/common/AcademicPrintReport';
 import { useStudentProfile } from '../hooks/useStudentProfile';
+import { useProfile } from '../context/ProfileContext';
 import { StudentNameInput } from '../components/common/StudentNameInput';
 import { ResultActionButtons } from '../components/common/ResultActionButtons';
+import { SaveCalculationButton } from '../components/common/SaveCalculationModal';
 import { ResetConfirmModal } from '../components/common/ResetConfirmModal';
 import { saveRecentCalculation } from '../utils/recentCalculations';
 import { ChevronDown, BookmarkPlus } from 'lucide-react';
@@ -33,6 +36,11 @@ export const InternalCalculatorPage: React.FC = () => {
     return 'theory';
   });
   const { profile, studentName, setStudentName, updateProfile, nameError, setNameError } = useStudentProfile();
+  const { getCalculation } = useProfile();
+  const [searchParams] = useSearchParams();
+  const calcIdParam = searchParams.get('calcId');
+  const [loadedCalcId, setLoadedCalcId] = useState<string | null>(calcIdParam);
+
   const studentNameInputRef = useRef<HTMLInputElement>(null);
   const [calcSuccess, setCalcSuccess] = useState<boolean>(false);
 
@@ -79,6 +87,21 @@ export const InternalCalculatorPage: React.FC = () => {
       return false;
     }
   });
+
+  // Reopen saved internal calculation from profile
+  useEffect(() => {
+    if (!calcIdParam) return;
+    (async () => {
+      const saved = await getCalculation(calcIdParam);
+      if (saved && saved.inputs && saved.type === 'internals') {
+        if (saved.inputs.activeTab) setActiveTab(saved.inputs.activeTab);
+        if (saved.inputs.theory) setTheory(saved.inputs.theory);
+        if (saved.inputs.integrated) setIntegrated(saved.inputs.integrated);
+        setLoadedCalcId(saved.id);
+        showToast(`Loaded saved Internals: "${saved.title}"`, 'success');
+      }
+    })();
+  }, [calcIdParam, getCalculation, showToast]);
 
   const handleTheoryChange = (field: keyof TheoryInputs, value: string) => {
     if (value === '') {
@@ -886,8 +909,32 @@ export const InternalCalculatorPage: React.FC = () => {
               )}
             </div>
 
-            {/* Result Action Buttons: Copy & Share */}
+            {/* Save Calculation to Student Profile */}
             <div className="pt-2">
+              <SaveCalculationButton
+                type="internals"
+                defaultTitle={`Internal Marks — ${activeTab === 'theory' ? 'Theory Course' : 'Integrated Course'}`}
+                resultValue={`${formatFixed(
+                  activeTab === 'theory' ? theoryResult.totalInternal : integratedResult.totalInternal,
+                  2
+                )} / 40`}
+                resultSummary={`${formatFixed(
+                  activeTab === 'theory' ? theoryResult.percentage : integratedResult.percentage,
+                  2
+                )}% • ${activeTab.toUpperCase()}`}
+                inputs={{
+                  activeTab,
+                  theory,
+                  integrated,
+                }}
+                existingCalcId={loadedCalcId}
+                onSaved={(id) => setLoadedCalcId(id)}
+                className="w-full h-11"
+              />
+            </div>
+
+            {/* Result Action Buttons: Copy & Share */}
+            <div className="pt-1">
               <ResultActionButtons
                 title={activeTab === 'theory' ? 'Theory Internal Marks' : 'Integrated Internal Marks'}
                 studentName={studentName}

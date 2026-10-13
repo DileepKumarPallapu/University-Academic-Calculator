@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Clock,
   RotateCcw,
@@ -10,8 +11,10 @@ import {
 import { PrintButton } from '../components/common/PrintButton';
 import { AcademicPrintReport } from '../components/common/AcademicPrintReport';
 import { useStudentProfile } from '../hooks/useStudentProfile';
+import { useProfile } from '../context/ProfileContext';
 import { StudentNameInput } from '../components/common/StudentNameInput';
 import { ResultActionButtons } from '../components/common/ResultActionButtons';
+import { SaveCalculationButton } from '../components/common/SaveCalculationModal';
 import { ResetConfirmModal } from '../components/common/ResetConfirmModal';
 import { saveRecentCalculation } from '../utils/recentCalculations';
 import { useAppToast } from '../components/layout/AppShell';
@@ -37,7 +40,12 @@ type ActiveTab = 'planner' | 'subjects' | 'calendar';
 
 export const AttendancePage: React.FC = () => {
   const { profile, studentName, setStudentName, updateProfile, nameError, setNameError } = useStudentProfile();
+  const { getCalculation } = useProfile();
   const { showToast } = useAppToast();
+  const [searchParams] = useSearchParams();
+  const calcIdParam = searchParams.get('calcId');
+  const [loadedCalcId, setLoadedCalcId] = useState<string | null>(calcIdParam);
+
   const studentNameInputRef = useRef<HTMLInputElement>(null);
   const [calcSuccess, setCalcSuccess] = useState<boolean>(false);
 
@@ -132,6 +140,24 @@ export const AttendancePage: React.FC = () => {
   const attendanceData = calculateCurrentAttendance(effectiveConducted, attended, targetPercentage);
   const bunkResult = calculateBunkMargin(effectiveConducted, attended, targetPercentage);
   const recoveryResult = calculateRecoveryRequired(effectiveConducted, attended, targetPercentage);
+
+  // Reopen saved Attendance calculation from profile
+  useEffect(() => {
+    if (!calcIdParam) return;
+    (async () => {
+      const saved = await getCalculation(calcIdParam);
+      if (saved && saved.inputs && saved.type === 'attendance') {
+        if (saved.inputs.subjectName !== undefined) setSubjectName(saved.inputs.subjectName);
+        if (saved.inputs.totalSessionsInput !== undefined) setTotalSessionsInput(String(saved.inputs.totalSessionsInput));
+        if (saved.inputs.attendedInput !== undefined) setAttendedInput(String(saved.inputs.attendedInput));
+        if (saved.inputs.targetPercentageInput !== undefined) setTargetPercentageInput(String(saved.inputs.targetPercentageInput));
+        if (saved.inputs.useFacultySessions !== undefined) setUseFacultySessions(Boolean(saved.inputs.useFacultySessions));
+        if (saved.inputs.facultySessionsInput !== undefined) setFacultySessionsInput(String(saved.inputs.facultySessionsInput));
+        setLoadedCalcId(saved.id);
+        showToast(`Loaded saved Attendance: "${saved.title}"`, 'success');
+      }
+    })();
+  }, [calcIdParam, getCalculation, showToast]);
 
   // Subject-Wise Tracker State with localStorage persistence
   const [subjects, setSubjects] = useState<SubjectAttendanceItem[]>(() => {
@@ -564,6 +590,27 @@ export const AttendancePage: React.FC = () => {
                       Export & Actions
                     </span>
                     <CalculationStatus show={calcSuccess} onHide={() => setCalcSuccess(false)} />
+                  </div>
+
+                  {/* Save Calculation to Student Profile */}
+                  <div className="pt-2">
+                    <SaveCalculationButton
+                      type="attendance"
+                      defaultTitle={`Attendance — ${subjectName.trim() || 'General'} (${attendanceData.percentage !== null ? attendanceData.percentage.toFixed(1) : 0}%)`}
+                      resultValue={attendanceData.percentage !== null ? `${attendanceData.percentage.toFixed(2)}%` : '0.00%'}
+                      resultSummary={`${attended}/${effectiveConducted} classes attended • Target: ${targetPercentage}%`}
+                      inputs={{
+                        subjectName,
+                        totalSessionsInput,
+                        attendedInput,
+                        targetPercentageInput,
+                        useFacultySessions,
+                        facultySessionsInput,
+                      }}
+                      existingCalcId={loadedCalcId}
+                      onSaved={(id) => setLoadedCalcId(id)}
+                      className="w-full h-11"
+                    />
                   </div>
 
                   {/* Result Actions: Copy & Share */}

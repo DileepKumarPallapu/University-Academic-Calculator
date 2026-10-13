@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Plus, Trash2, RotateCcw, Download, ChevronDown } from 'lucide-react';
 import { calculateGPA, formatFixed } from '../utils/calculations';
 import { REGULATIONS, type RegulationId } from '../config/university';
@@ -6,9 +7,11 @@ import type { SubjectItem } from '../types';
 import { PrintButton } from '../components/common/PrintButton';
 import { AcademicPrintReport } from '../components/common/AcademicPrintReport';
 import { useStudentProfile } from '../hooks/useStudentProfile';
+import { useProfile } from '../context/ProfileContext';
 import { StudentNameInput } from '../components/common/StudentNameInput';
 import { GradeScaleModal } from '../components/common/GradeScaleModal';
 import { ResultActionButtons } from '../components/common/ResultActionButtons';
+import { SaveCalculationButton } from '../components/common/SaveCalculationModal';
 import { ResetConfirmModal } from '../components/common/ResetConfirmModal';
 import { saveRecentCalculation } from '../utils/recentCalculations';
 import { useAppToast } from '../components/layout/AppShell';
@@ -18,7 +21,12 @@ import { CalculationStatus } from '../components/common/CalculationStatus';
 
 export const GPACalculatorPage: React.FC = () => {
   const { profile, studentName, setStudentName, updateProfile, nameError, setNameError } = useStudentProfile();
+  const { getCalculation } = useProfile();
   const { showToast } = useAppToast();
+  const [searchParams] = useSearchParams();
+  const calcIdParam = searchParams.get('calcId');
+  const [loadedCalcId, setLoadedCalcId] = useState<string | null>(calcIdParam);
+
   const studentNameInputRef = useRef<HTMLInputElement>(null);
   const [isGradeScaleOpen, setIsGradeScaleOpen] = useState(false);
   const [calcSuccess, setCalcSuccess] = useState(false);
@@ -85,6 +93,27 @@ export const GPACalculatorPage: React.FC = () => {
       return false;
     }
   });
+
+  // Reopen calculation from profile
+  useEffect(() => {
+    if (!calcIdParam) return;
+    (async () => {
+      const saved = await getCalculation(calcIdParam);
+      if (saved && saved.inputs && saved.type === 'sgpa') {
+        if (saved.inputs.regulation && REGULATIONS[saved.inputs.regulation as RegulationId]) {
+          setRegulation(saved.inputs.regulation as RegulationId);
+        }
+        if (saved.inputs.selectedSemester) {
+          setSelectedSemester(Number(saved.inputs.selectedSemester));
+        }
+        if (Array.isArray(saved.inputs.subjects) && saved.inputs.subjects.length > 0) {
+          setSubjects(saved.inputs.subjects);
+        }
+        setLoadedCalcId(saved.id);
+        showToast(`Loaded saved SGPA calculation: "${saved.title}"`, 'success');
+      }
+    })();
+  }, [calcIdParam, getCalculation, showToast]);
 
   // Handle regulation change
   const handleRegulationChange = (newReg: RegulationId) => {
@@ -1096,8 +1125,32 @@ export const GPACalculatorPage: React.FC = () => {
               )}
             </div>
 
-            {/* Result Action Buttons: Copy & Share */}
+            {/* Save Calculation to Student Profile */}
             <div className="pt-2">
+              <SaveCalculationButton
+                type="sgpa"
+                defaultTitle={`SGPA — Semester ${selectedSemester} (${regulation})`}
+                resultValue={
+                  gpaResult.totalCredits > 0
+                    ? `${formatFixed(gpaResult.gpa, 2)} / 10`
+                    : '0.00 / 10'
+                }
+                resultSummary={`${gpaResult.totalCredits} Credits • ${subjects.length} Subjects • ${regulation}`}
+                inputs={{
+                  selectedSemester,
+                  regulation,
+                  subjects,
+                }}
+                semester={selectedSemester}
+                regulation={regulation}
+                existingCalcId={loadedCalcId}
+                onSaved={(id) => setLoadedCalcId(id)}
+                className="w-full h-11"
+              />
+            </div>
+
+            {/* Result Action Buttons: Copy & Share */}
+            <div className="pt-1">
               <ResultActionButtons
                 title={`SGPA - Semester ${selectedSemester} (${regulation})`}
                 studentName={studentName}

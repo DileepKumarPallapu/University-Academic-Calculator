@@ -65,6 +65,18 @@ export const LandingPage: React.FC = () => {
           >
             Calculate CGPA
           </Link>
+          <Link
+            to="/credits"
+            className="apple-btn-secondary text-xs h-9 px-3.5 py-0 rounded-full font-medium"
+          >
+            Credits Planner
+          </Link>
+          <Link
+            to="/profile"
+            className="apple-btn-secondary text-xs h-9 px-3.5 py-0 rounded-full font-medium"
+          >
+            My Profile
+          </Link>
         </div>
       </section>
 
