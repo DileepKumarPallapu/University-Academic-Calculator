@@ -1,0 +1,108 @@
+export type CourseCategoryType =
+  | 'foundation'
+  | 'programme_core'
+  | 'programme_elective'
+  | 'open_elective'
+  | 'independent_learning'
+  | 'industry_interaction'
+  | 'professional_proficiency'
+  | 'mandatory'
+  | 'complementary_skills'
+  | 'honours_minor'
+  | 'custom';
+
+export type ResultStatus = 'Passed' | 'Failed' | 'Pending' | 'Withdrawn' | 'Incomplete';
+
+export interface CreditSubjectItem {
+  id: string;
+  name: string;
+  code?: string;
+  category: string; // matches CreditCategoryConfig.id
+  semester: number; // 1 to 8
+  credits: number; // non-negative (supports 0-credit courses)
+  grade?: string; // O, A+, A, B+, B, C, D, RA, P, W, etc.
+  status: ResultStatus;
+  regulation?: string;
+  notes?: string;
+  isVerified: boolean;
+  source: 'Manual' | 'Imported';
+  isDuplicate?: boolean;
+  isRetake?: boolean; // retake/repeat course attempt
+}
+
+export interface CreditCategoryConfig {
+  id: string;
+  name: string;
+  code: string;
+  requiredCredits: number;
+  isMandatoryNonCredit?: boolean; // Excluded from base credit tally
+  isComplementarySkills?: boolean; // G1/G2 requirements
+  description?: string;
+}
+
+export interface DegreePathwayConfig {
+  pathway: 'standard' | 'honours' | 'minor';
+  title: string;
+  targetCredits: number;
+  additionalPathwayCredits: number;
+  description: string;
+}
+
+export interface CreditSummary {
+  targetCredits: number;
+  totalEarnedCredits: number; // verified passed
+  creditsRemaining: number;
+  completionPercentage: number;
+  totalRegisteredCredits: number;
+  verifiedEarnedCredits: number;
+  pendingCredits: number;
+  failedCredits: number;
+  extraCredits: number;
+  mandatoryCompletedCount: number;
+  mandatoryTotalCount: number;
+  complementaryCompletedCount: number;
+  complementaryTotalCount: number;
+}
+
+export interface CategoryProgressItem {
+  category: CreditCategoryConfig;
+  earnedCredits: number;
+  registeredCredits: number;
+  remainingCredits: number;
+  progressPercentage: number;
+  courseCount: number;
+  isSatisfied: boolean;
+  courses: CreditSubjectItem[];
+}
+
+export interface SemesterPlanItem {
+  semester: number;
+  plannedTarget: number;
+  registeredCredits: number;
+  earnedCredits: number;
+  failedCredits: number;
+  pendingCredits: number;
+  isCompleted: boolean;
+  courses: CreditSubjectItem[];
+}
+
+export interface GraduationChecklistItem {
+  id: string;
+  label: string;
+  isSatisfied: boolean;
+  current: string | number;
+  required: string | number;
+  details?: string;
+}
+
+export interface GraduationEligibilityResult {
+  isEligible: boolean;
+  status:
+    | 'Eligible under configured rules'
+    | 'Requirements remaining'
+    | 'Pending results or verification'
+    | 'Official rules not configured';
+  checklist: GraduationChecklistItem[];
+  deficitCategories: Array<{ name: string; remaining: number }>;
+  failedCourses: CreditSubjectItem[];
+}
