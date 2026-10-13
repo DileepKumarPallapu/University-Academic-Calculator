@@ -6,6 +6,8 @@ import type {
   SemesterPlanItem,
   GraduationEligibilityResult,
   GraduationChecklistItem,
+  NptelCollegeRulesConfig,
+  NptelDashboardStats,
 } from '../types/credits';
 
 /**
@@ -93,42 +95,132 @@ export const DEFAULT_PATHWAY_TARGETS = {
   minor: 182,
 };
 
+export const DEFAULT_NPTEL_RULES: NptelCollegeRulesConfig = {
+  allowProgrammeElective: true,
+  allowOpenElective: true,
+  allowedCreditValues: [2, 3, 4],
+  allowCustomCredits: false,
+  requireApproval: true,
+  requireCertificate: true,
+  maxNptelCreditsAllowed: 0,
+  allowMultiRequirementCount: false,
+};
+
 /**
- * Flags duplicate course codes and handles retake records.
- * If a course code appears multiple times:
- * - Flags as duplicates
- * - If one attempt is Passed and one is Failed, the passed attempt counts toward earned credits,
- *   preventing double counting the same course requirement.
+ * Checks whether an NPTEL course is verified eligible to count toward graduation requirements.
+ */
+export function isNptelCourseEligible(
+  subject: CreditSubjectItem,
+  rules: NptelCollegeRulesConfig = DEFAULT_NPTEL_RULES
+): {
+  isEligible: boolean;
+  eligibleCredits: number;
+  reason?: string;
+} {
+  if (subject.courseType !== 'nptel') {
+    const isPassed = subject.status === 'Passed';
+    return {
+      isEligible: isPassed,
+      eligibleCredits: isPassed ? Math.max(0, Number(subject.credits) || 0) : 0,
+      reason: isPassed ? 'Passed' : subject.status,
+    };
+  }
+
+  const details = subject.nptelDetails;
+  if (!details) {
+    const isPassed = subject.status === 'Passed';
+    return {
+      isEligible: isPassed,
+      eligibleCredits: isPassed ? Math.max(0, Number(subject.credits) || 0) : 0,
+      reason: isPassed ? 'Passed' : subject.status,
+    };
+  }
+
+  const targetCategory = details.categoryTarget || subject.category;
+  if (targetCategory === 'programme_elective' && !rules.allowProgrammeElective) {
+    return {
+      isEligible: false,
+      eligibleCredits: 0,
+      reason: 'NPTEL not permitted for Programme Electives under college rules',
+    };
+  }
+  if (targetCategory === 'open_elective' && !rules.allowOpenElective) {
+    return {
+      isEligible: false,
+      eligibleCredits: 0,
+      reason: 'NPTEL not permitted for Open Electives under college rules',
+    };
+  }
+
+  if (details.approvalStatus === 'rejected' || subject.status === 'Failed') {
+    return { isEligible: false, eligibleCredits: 0, reason: 'Course rejected or failed' };
+  }
+
+  if (rules.requireApproval && details.approvalStatus !== 'approved') {
+    return { isEligible: false, eligibleCredits: 0, reason: 'Awaiting college approval' };
+  }
+
+  if (rules.requireCertificate) {
+    const certValid =
+      details.certificateStatus === 'completed' ||
+      details.certificateStatus === 'certificate_received';
+    if (!certValid) {
+      return { isEligible: false, eligibleCredits: 0, reason: 'Certificate requirement not met' };
+    }
+  }
+
+  const acceptedCredits = Math.max(0, Number(details.acceptedCredits) || 0);
+  return {
+    isEligible: true,
+    eligibleCredits: acceptedCredits,
+    reason: 'Approved and eligible',
+  };
+}
+
+/**
+ * Flags duplicate course codes and NPTEL identifiers and handles retake records.
  */
 export function detectDuplicatesAndRetakes(subjects: CreditSubjectItem[]): CreditSubjectItem[] {
   const codeMap = new Map<string, CreditSubjectItem[]>();
+  const nptelIdMap = new Map<string, CreditSubjectItem[]>();
 
   for (const s of subjects) {
     const trimmedCode = (s.code || '').trim().toUpperCase();
     if (trimmedCode) {
-      if (!codeMap.has(trimmedCode)) {
-        codeMap.set(trimmedCode, []);
-      }
+      if (!codeMap.has(trimmedCode)) codeMap.set(trimmedCode, []);
       codeMap.get(trimmedCode)!.push(s);
+    }
+
+    const nptelId = (s.nptelDetails?.courseIdOrUrl || '').trim().toLowerCase();
+    if (nptelId) {
+      if (!nptelIdMap.has(nptelId)) nptelIdMap.set(nptelId, []);
+      nptelIdMap.get(nptelId)!.push(s);
     }
   }
 
   return subjects.map((sub) => {
     const trimmedCode = (sub.code || '').trim().toUpperCase();
-    if (!trimmedCode) {
-      return { ...sub, isDuplicate: false, isRetake: false };
-    }
+    const nptelId = (sub.nptelDetails?.courseIdOrUrl || '').trim().toLowerCase();
 
-    const matches = codeMap.get(trimmedCode) || [];
-    if (matches.length > 1) {
-      // Multiple attempts exist for the same course code
-      const hasPassed = matches.some((m) => m.status === 'Passed');
-      const isThisPassed = sub.status === 'Passed';
+    const codeMatches = trimmedCode ? codeMap.get(trimmedCode) || [] : [];
+    const nptelMatches = nptelId ? nptelIdMap.get(nptelId) || [] : [];
+
+    const isDup = codeMatches.length > 1 || nptelMatches.length > 1;
+
+    if (isDup) {
+      const allMatches = [...new Set([...codeMatches, ...nptelMatches])];
+      const hasPassed = allMatches.some(
+        (m) =>
+          m.status === 'Passed' ||
+          (m.courseType === 'nptel' && m.nptelDetails?.approvalStatus === 'approved')
+      );
+      const isThisPassed =
+        sub.status === 'Passed' ||
+        (sub.courseType === 'nptel' && sub.nptelDetails?.approvalStatus === 'approved');
 
       return {
         ...sub,
         isDuplicate: true,
-        // Mark as retake if there are multiple attempts with different semesters or statuses
         isRetake: hasPassed && !isThisPassed,
       };
     }
@@ -139,16 +231,18 @@ export function detectDuplicatesAndRetakes(subjects: CreditSubjectItem[]): Credi
 
 /**
  * Calculates overall credit summary.
+ * - Supports regular and NPTEL courses
  * - Handles 0-credit subjects (visible in records, add 0 to earned credits)
  * - Excludes non-credit mandatory courses from the base 164/182 tally
- * - Deduplicates repeated passed courses (never count same course code twice)
+ * - Deduplicates repeated passed courses (never count same course twice)
  * - Never allows completion percentage to exceed 100%
  * - Credits Remaining = max(0, target - earned)
  */
 export function calculateCreditSummary(
   subjects: CreditSubjectItem[],
   targetCredits: number,
-  categories: CreditCategoryConfig[] = COLLEGE_CHART_TEMPLATE
+  categories: CreditCategoryConfig[] = COLLEGE_CHART_TEMPLATE,
+  rules: NptelCollegeRulesConfig = DEFAULT_NPTEL_RULES
 ): CreditSummary {
   const annotated = detectDuplicatesAndRetakes(subjects);
   const countedCourseCodes = new Set<string>();
@@ -171,45 +265,69 @@ export function calculateCreditSummary(
   );
 
   for (const sub of annotated) {
-    const rawCredits = Math.max(0, Number(sub.credits) || 0);
-    const isNonCreditCategory = nonCreditCatIds.has(sub.category);
-    const code = (sub.code || '').trim().toUpperCase();
+    const isNptel = sub.courseType === 'nptel';
+    const effectiveCategory = isNptel
+      ? sub.nptelDetails?.categoryTarget || sub.category
+      : sub.category;
+    const isNonCreditCategory = nonCreditCatIds.has(effectiveCategory);
+
+    const rawCredits = isNptel
+      ? Math.max(0, Number(sub.nptelDetails?.acceptedCredits ?? sub.credits) || 0)
+      : Math.max(0, Number(sub.credits) || 0);
+
+    const advertisedCredits = isNptel
+      ? Math.max(0, Number(sub.nptelDetails?.courseCredits ?? sub.credits) || 0)
+      : rawCredits;
+
+    const code = (sub.code || sub.nptelDetails?.courseIdOrUrl || '').trim().toUpperCase();
+    const dedupeKey = code || (sub.name || '').trim().toLowerCase();
 
     // Track Mandatory & Complementary course counts
-    if (sub.category === 'mandatory') {
+    if (effectiveCategory === 'mandatory') {
       mandatoryTotalCount += 1;
       if (sub.status === 'Passed') mandatoryCompletedCount += 1;
-    } else if (sub.category === 'complementary_skills') {
+    } else if (effectiveCategory === 'complementary_skills') {
       complementaryTotalCount += 1;
       if (sub.status === 'Passed') complementaryCompletedCount += 1;
     }
 
-    // Only count credit-bearing categories toward the base degree tally
     if (isNonCreditCategory) {
       continue;
     }
 
     // Attempted / Registered credits
-    totalRegisteredCredits += rawCredits;
+    totalRegisteredCredits += advertisedCredits > 0 ? advertisedCredits : rawCredits;
 
-    if (sub.status === 'Passed') {
-      // Prevent double counting repeated courses
-      if (code && countedCourseCodes.has(code)) {
-        continue;
-      }
-      if (code) countedCourseCodes.add(code);
+    if (isNptel) {
+      const eligibility = isNptelCourseEligible(sub, rules);
+      if (eligibility.isEligible) {
+        if (dedupeKey && countedCourseCodes.has(dedupeKey)) {
+          continue; // Avoid double count
+        }
+        if (dedupeKey) countedCourseCodes.add(dedupeKey);
 
-      totalEarnedCredits += rawCredits;
-      if (sub.isVerified) {
-        verifiedEarnedCredits += rawCredits;
+        totalEarnedCredits += eligibility.eligibleCredits;
+        verifiedEarnedCredits += eligibility.eligibleCredits;
+      } else if (sub.nptelDetails?.approvalStatus === 'rejected' || sub.status === 'Failed') {
+        failedCredits += rawCredits;
       } else {
-        // If unverified, still track but verified count separates it
-        verifiedEarnedCredits += rawCredits;
+        // Awaiting approval or pending verification
+        pendingCredits += rawCredits;
       }
-    } else if (sub.status === 'Pending') {
-      pendingCredits += rawCredits;
-    } else if (sub.status === 'Failed') {
-      failedCredits += rawCredits;
+    } else {
+      if (sub.status === 'Passed') {
+        if (dedupeKey && countedCourseCodes.has(dedupeKey)) {
+          continue;
+        }
+        if (dedupeKey) countedCourseCodes.add(dedupeKey);
+
+        totalEarnedCredits += rawCredits;
+        verifiedEarnedCredits += rawCredits;
+      } else if (sub.status === 'Pending') {
+        pendingCredits += rawCredits;
+      } else if (sub.status === 'Failed') {
+        failedCredits += rawCredits;
+      }
     }
   }
 
@@ -240,28 +358,54 @@ export function calculateCreditSummary(
  */
 export function calculateCategoryProgress(
   categories: CreditCategoryConfig[],
-  subjects: CreditSubjectItem[]
+  subjects: CreditSubjectItem[],
+  rules: NptelCollegeRulesConfig = DEFAULT_NPTEL_RULES
 ): CategoryProgressItem[] {
   const annotated = detectDuplicatesAndRetakes(subjects);
 
   return categories.map((cat) => {
-    const catCourses = annotated.filter((s) => s.category === cat.id);
-    const countedCodes = new Set<string>();
+    const catCourses = annotated.filter((s) => {
+      const targetCat =
+        s.courseType === 'nptel' ? s.nptelDetails?.categoryTarget || s.category : s.category;
+      return targetCat === cat.id;
+    });
 
+    const countedCodes = new Set<string>();
     let earnedCredits = 0;
     let registeredCredits = 0;
 
     for (const c of catCourses) {
-      const cr = Math.max(0, Number(c.credits) || 0);
-      registeredCredits += cr;
+      const isNptel = c.courseType === 'nptel';
+      const cr = isNptel
+        ? Math.max(0, Number(c.nptelDetails?.acceptedCredits ?? c.credits) || 0)
+        : Math.max(0, Number(c.credits) || 0);
 
-      if (c.status === 'Passed') {
-        const code = (c.code || '').trim().toUpperCase();
-        if (code && countedCodes.has(code)) {
-          continue; // Avoid duplicate count
+      const advertisedCr = isNptel
+        ? Math.max(0, Number(c.nptelDetails?.courseCredits ?? c.credits) || 0)
+        : cr;
+
+      registeredCredits += advertisedCr > 0 ? advertisedCr : cr;
+
+      const code = (c.code || c.nptelDetails?.courseIdOrUrl || '').trim().toUpperCase();
+      const dedupeKey = code || (c.name || '').trim().toLowerCase();
+
+      if (isNptel) {
+        const eligibility = isNptelCourseEligible(c, rules);
+        if (eligibility.isEligible) {
+          if (dedupeKey && countedCodes.has(dedupeKey)) {
+            continue; // Avoid duplicate count
+          }
+          if (dedupeKey) countedCodes.add(dedupeKey);
+          earnedCredits += eligibility.eligibleCredits;
         }
-        if (code) countedCodes.add(code);
-        earnedCredits += cr;
+      } else {
+        if (c.status === 'Passed') {
+          if (dedupeKey && countedCodes.has(dedupeKey)) {
+            continue;
+          }
+          if (dedupeKey) countedCodes.add(dedupeKey);
+          earnedCredits += cr;
+        }
       }
     }
 
@@ -296,32 +440,63 @@ export function calculateCategoryProgress(
  */
 export function calculateSemesterProgress(
   subjects: CreditSubjectItem[],
-  plannedTargets: Record<number, number> = {}
+  plannedTargets: Record<number, number> = {},
+  rules: NptelCollegeRulesConfig = DEFAULT_NPTEL_RULES
 ): SemesterPlanItem[] {
   const annotated = detectDuplicatesAndRetakes(subjects);
   const result: SemesterPlanItem[] = [];
 
   for (let sem = 1; sem <= 8; sem++) {
-    const semCourses = annotated.filter((s) => s.semester === sem);
+    const semCourses = annotated.filter((s) => {
+      const courseSem = s.courseType === 'nptel' ? s.nptelDetails?.semesterCounted || s.semester : s.semester;
+      return courseSem === sem;
+    });
+
     let registeredCredits = 0;
     let earnedCredits = 0;
     let failedCredits = 0;
     let pendingCredits = 0;
 
     for (const c of semCourses) {
-      const cr = Math.max(0, Number(c.credits) || 0);
-      registeredCredits += cr;
-      if (c.status === 'Passed') {
-        earnedCredits += cr;
-      } else if (c.status === 'Failed') {
-        failedCredits += cr;
-      } else if (c.status === 'Pending') {
-        pendingCredits += cr;
+      const isNptel = c.courseType === 'nptel';
+      const cr = isNptel
+        ? Math.max(0, Number(c.nptelDetails?.acceptedCredits ?? c.credits) || 0)
+        : Math.max(0, Number(c.credits) || 0);
+
+      const advertisedCr = isNptel
+        ? Math.max(0, Number(c.nptelDetails?.courseCredits ?? c.credits) || 0)
+        : cr;
+
+      registeredCredits += advertisedCr > 0 ? advertisedCr : cr;
+
+      if (isNptel) {
+        const eligibility = isNptelCourseEligible(c, rules);
+        if (eligibility.isEligible) {
+          earnedCredits += eligibility.eligibleCredits;
+        } else if (c.nptelDetails?.approvalStatus === 'rejected' || c.status === 'Failed') {
+          failedCredits += cr;
+        } else {
+          pendingCredits += cr;
+        }
+      } else {
+        if (c.status === 'Passed') {
+          earnedCredits += cr;
+        } else if (c.status === 'Failed') {
+          failedCredits += cr;
+        } else if (c.status === 'Pending') {
+          pendingCredits += cr;
+        }
       }
     }
 
     const plannedTarget = plannedTargets[sem] || 0;
-    const isCompleted = semCourses.length > 0 && semCourses.every((c) => c.status === 'Passed');
+    const isCompleted =
+      semCourses.length > 0 &&
+      semCourses.every((c) =>
+        c.courseType === 'nptel'
+          ? isNptelCourseEligible(c, rules).isEligible
+          : c.status === 'Passed'
+      );
 
     result.push({
       semester: sem,
@@ -336,6 +511,82 @@ export function calculateSemesterProgress(
   }
 
   return result;
+}
+
+/**
+ * Calculates NPTEL summary statistics for the NPTEL Dashboard.
+ */
+export function calculateNptelDashboardStats(
+  subjects: CreditSubjectItem[],
+  rules: NptelCollegeRulesConfig = DEFAULT_NPTEL_RULES
+): NptelDashboardStats {
+  const nptelCourses = subjects.filter((s) => s.courseType === 'nptel');
+  const countedPe = new Set<string>();
+  const countedOe = new Set<string>();
+
+  let inProgressCourses = 0;
+  let completedCertificates = 0;
+  let awaitingApprovalCourses = 0;
+  let approvedPeCredits = 0;
+  let approvedOeCredits = 0;
+  let pendingCredits = 0;
+  let rejectedCredits = 0;
+
+  for (const s of nptelCourses) {
+    const details = s.nptelDetails;
+    const cat = details?.categoryTarget || s.category;
+    const acceptedCr = Math.max(0, Number(details?.acceptedCredits ?? s.credits) || 0);
+    const advertisedCr = Math.max(0, Number(details?.courseCredits ?? s.credits) || 0);
+    const effectiveCr = acceptedCr > 0 ? acceptedCr : advertisedCr;
+
+    const dedupeKey = (details?.courseIdOrUrl || s.code || s.name || s.id).trim().toLowerCase();
+
+    // Certificate status
+    if (details?.certificateStatus === 'in_progress') {
+      inProgressCourses += 1;
+    } else if (
+      details?.certificateStatus === 'completed' ||
+      details?.certificateStatus === 'certificate_received'
+    ) {
+      completedCertificates += 1;
+    }
+
+    // Approval status
+    if (details?.approvalStatus === 'submitted' || details?.approvalStatus === 'not_verified') {
+      awaitingApprovalCourses += 1;
+      pendingCredits += effectiveCr;
+    } else if (details?.approvalStatus === 'rejected') {
+      rejectedCredits += effectiveCr;
+    } else if (details?.approvalStatus === 'approved') {
+      const eligibility = isNptelCourseEligible(s, rules);
+      if (eligibility.isEligible) {
+        if (cat === 'programme_elective') {
+          if (!countedPe.has(dedupeKey)) {
+            countedPe.add(dedupeKey);
+            approvedPeCredits += eligibility.eligibleCredits;
+          }
+        } else if (cat === 'open_elective') {
+          if (!countedOe.has(dedupeKey)) {
+            countedOe.add(dedupeKey);
+            approvedOeCredits += eligibility.eligibleCredits;
+          }
+        }
+      } else {
+        pendingCredits += effectiveCr;
+      }
+    }
+  }
+
+  return {
+    totalCourses: nptelCourses.length,
+    inProgressCourses,
+    completedCertificates,
+    awaitingApprovalCourses,
+    approvedPeCredits,
+    approvedOeCredits,
+    pendingCredits,
+    rejectedCredits,
+  };
 }
 
 /**

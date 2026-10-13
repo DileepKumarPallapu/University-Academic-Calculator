@@ -11,7 +11,62 @@ export type CourseCategoryType =
   | 'honours_minor'
   | 'custom';
 
-export type ResultStatus = 'Passed' | 'Failed' | 'Pending' | 'Withdrawn' | 'Incomplete';
+export type CourseType = 'regular' | 'nptel' | 'external';
+
+export type ResultStatus =
+  | 'Passed'
+  | 'Failed'
+  | 'Pending'
+  | 'Withdrawn'
+  | 'Incomplete'
+  | 'Exempted';
+
+export type NptelCertificateStatus =
+  | 'not_started'
+  | 'in_progress'
+  | 'completed'
+  | 'certificate_received';
+
+export type NptelApprovalStatus =
+  | 'not_verified'
+  | 'submitted'
+  | 'approved'
+  | 'rejected';
+
+export interface NptelDetails {
+  courseName?: string;
+  courseIdOrUrl?: string; // Course ID or URL (e.g. noc24-cs101)
+  categoryTarget: 'programme_elective' | 'open_elective' | string;
+  durationWeeks?: string; // e.g. '4 Weeks', '8 Weeks', '12 Weeks'
+  certificateStatus: NptelCertificateStatus;
+  courseCredits: number; // Advertised / course credits selected by student (2, 3, 4, custom)
+  acceptedCredits: number; // Officially recognized / accepted by college
+  approvalStatus: NptelApprovalStatus;
+  semesterCounted: number; // 1 to 8
+  notes?: string;
+}
+
+export interface NptelCollegeRulesConfig {
+  allowProgrammeElective: boolean;
+  allowOpenElective: boolean;
+  allowedCreditValues: number[];
+  allowCustomCredits: boolean;
+  requireApproval: boolean;
+  requireCertificate: boolean;
+  maxNptelCreditsAllowed: number; // 0 = unlimited / no cap
+  allowMultiRequirementCount: boolean;
+}
+
+export interface NptelDashboardStats {
+  totalCourses: number;
+  inProgressCourses: number;
+  completedCertificates: number;
+  awaitingApprovalCourses: number;
+  approvedPeCredits: number;
+  approvedOeCredits: number;
+  pendingCredits: number;
+  rejectedCredits: number;
+}
 
 export interface CreditSubjectItem {
   id: string;
@@ -28,6 +83,10 @@ export interface CreditSubjectItem {
   source: 'Manual' | 'Imported';
   isDuplicate?: boolean;
   isRetake?: boolean; // retake/repeat course attempt
+
+  // Course type & NPTEL integration
+  courseType?: CourseType;
+  nptelDetails?: NptelDetails;
 }
 
 export interface CreditCategoryConfig {

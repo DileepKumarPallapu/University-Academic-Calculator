@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   COLLEGE_CHART_TEMPLATE,
+  DEFAULT_NPTEL_RULES,
   calculateCreditSummary,
   detectDuplicatesAndRetakes,
   calculateCategoryProgress,
@@ -10,8 +11,10 @@ import {
   checkGraduationEligibility,
   exportCreditsToCSV,
   parseCreditsFromCSV,
+  isNptelCourseEligible,
+  calculateNptelDashboardStats,
 } from './creditCalculations';
-import type { CreditSubjectItem } from '../types/credits';
+import type { CreditSubjectItem, NptelCollegeRulesConfig } from '../types/credits';
 
 describe('Credit Calculation & Graduation Progress System Tests', () => {
   // Test 1: Standard B.Tech with 100 verified credits and 164 target has 64 remaining
@@ -344,5 +347,548 @@ describe('Credit Calculation & Graduation Progress System Tests', () => {
     expect(imported[0].name).toBe('Programming in C');
     expect(imported[0].credits).toBe(4);
     expect(imported[0].status).toBe('Passed');
+  });
+
+  // =========================================================================
+  // NPTEL INTEGRATION & CUSTOM CREDIT MAPPING TEST CASES
+  // =========================================================================
+  describe('NPTEL Course Integration & Custom Credit Mapping Tests', () => {
+    // 1. An approved 2-credit NPTEL PE course adds 2 eligible credits to PE
+    it('Case 1: an approved 2-credit NPTEL PE course adds 2 eligible credits to PE and updates progress', () => {
+      const subjects: CreditSubjectItem[] = [
+        {
+          id: 'nptel-1',
+          name: 'Cloud Computing Fundamentals',
+          code: 'NPTEL-CS01',
+          category: 'programme_elective',
+          semester: 5,
+          credits: 2,
+          status: 'Passed',
+          isVerified: true,
+          source: 'Manual',
+          courseType: 'nptel',
+          nptelDetails: {
+            courseName: 'Cloud Computing Fundamentals',
+            courseIdOrUrl: 'noc24-cs01',
+            categoryTarget: 'programme_elective',
+            durationWeeks: '8 Weeks',
+            certificateStatus: 'certificate_received',
+            courseCredits: 2,
+            acceptedCredits: 2,
+            approvalStatus: 'approved',
+            semesterCounted: 5,
+          },
+        },
+      ];
+
+      const catProgress = calculateCategoryProgress(COLLEGE_CHART_TEMPLATE, subjects);
+      const peCategory = catProgress.find((c) => c.category.id === 'programme_elective')!;
+
+      expect(peCategory.earnedCredits).toBe(2);
+      expect(peCategory.remainingCredits).toBe(16); // 18 - 2 = 16
+
+      const summary = calculateCreditSummary(subjects, 164, COLLEGE_CHART_TEMPLATE);
+      expect(summary.totalEarnedCredits).toBe(2);
+      expect(summary.verifiedEarnedCredits).toBe(2);
+    });
+
+    // 2. An approved 3-credit NPTEL OE course adds 3 eligible credits to OE
+    it('Case 2: an approved 3-credit NPTEL OE course adds 3 eligible credits to OE', () => {
+      const subjects: CreditSubjectItem[] = [
+        {
+          id: 'nptel-2',
+          name: 'German Language & Culture',
+          code: 'NPTEL-HS02',
+          category: 'open_elective',
+          semester: 6,
+          credits: 3,
+          status: 'Passed',
+          isVerified: true,
+          source: 'Manual',
+          courseType: 'nptel',
+          nptelDetails: {
+            courseName: 'German Language & Culture',
+            courseIdOrUrl: 'noc24-hs02',
+            categoryTarget: 'open_elective',
+            durationWeeks: '12 Weeks',
+            certificateStatus: 'completed',
+            courseCredits: 3,
+            acceptedCredits: 3,
+            approvalStatus: 'approved',
+            semesterCounted: 6,
+          },
+        },
+      ];
+
+      const catProgress = calculateCategoryProgress(COLLEGE_CHART_TEMPLATE, subjects);
+      const oeCategory = catProgress.find((c) => c.category.id === 'open_elective')!;
+
+      expect(oeCategory.earnedCredits).toBe(3);
+      expect(oeCategory.remainingCredits).toBe(9); // 12 - 3 = 9
+
+      const summary = calculateCreditSummary(subjects, 164, COLLEGE_CHART_TEMPLATE);
+      expect(summary.totalEarnedCredits).toBe(3);
+    });
+
+    // 3. A 4-credit course awaiting approval does not count as verified earned credit
+    it('Case 3: a 4-credit course awaiting approval does not count as verified earned credit', () => {
+      const subjects: CreditSubjectItem[] = [
+        {
+          id: 'nptel-3',
+          name: 'Deep Learning',
+          code: 'NPTEL-CS03',
+          category: 'programme_elective',
+          semester: 6,
+          credits: 4,
+          status: 'Pending',
+          isVerified: false,
+          source: 'Manual',
+          courseType: 'nptel',
+          nptelDetails: {
+            courseName: 'Deep Learning',
+            courseIdOrUrl: 'noc24-cs03',
+            categoryTarget: 'programme_elective',
+            durationWeeks: '12 Weeks',
+            certificateStatus: 'completed',
+            courseCredits: 4,
+            acceptedCredits: 4,
+            approvalStatus: 'submitted',
+            semesterCounted: 6,
+          },
+        },
+      ];
+
+      const catProgress = calculateCategoryProgress(COLLEGE_CHART_TEMPLATE, subjects);
+      const peCategory = catProgress.find((c) => c.category.id === 'programme_elective')!;
+
+      expect(peCategory.earnedCredits).toBe(0);
+      expect(peCategory.remainingCredits).toBe(18);
+
+      const summary = calculateCreditSummary(subjects, 164, COLLEGE_CHART_TEMPLATE);
+      expect(summary.totalEarnedCredits).toBe(0);
+      expect(summary.verifiedEarnedCredits).toBe(0);
+      expect(summary.pendingCredits).toBe(4);
+    });
+
+    // 4. A rejected course does not count toward graduation
+    it('Case 4: a rejected course does not count toward graduation', () => {
+      const subjects: CreditSubjectItem[] = [
+        {
+          id: 'nptel-4',
+          name: 'Disallowed Topic Course',
+          code: 'NPTEL-REJ01',
+          category: 'open_elective',
+          semester: 4,
+          credits: 3,
+          status: 'Failed',
+          isVerified: false,
+          source: 'Manual',
+          courseType: 'nptel',
+          nptelDetails: {
+            courseName: 'Disallowed Topic Course',
+            courseIdOrUrl: 'noc24-rej01',
+            categoryTarget: 'open_elective',
+            durationWeeks: '8 Weeks',
+            certificateStatus: 'completed',
+            courseCredits: 3,
+            acceptedCredits: 3,
+            approvalStatus: 'rejected',
+            semesterCounted: 4,
+          },
+        },
+      ];
+
+      const catProgress = calculateCategoryProgress(COLLEGE_CHART_TEMPLATE, subjects);
+      const oeCategory = catProgress.find((c) => c.category.id === 'open_elective')!;
+
+      expect(oeCategory.earnedCredits).toBe(0);
+
+      const summary = calculateCreditSummary(subjects, 164, COLLEGE_CHART_TEMPLATE);
+      expect(summary.totalEarnedCredits).toBe(0);
+      expect(summary.failedCredits).toBe(3);
+    });
+
+    // 5. Changing a course from PE to OE moves its eligible credits correctly
+    it('Case 5: changing a course from PE to OE moves its eligible credits correctly without duplication', () => {
+      const originalSubject: CreditSubjectItem = {
+        id: 'nptel-5',
+        name: 'Internet of Things',
+        code: 'NPTEL-IOT',
+        category: 'programme_elective',
+        semester: 5,
+        credits: 3,
+        status: 'Passed',
+        isVerified: true,
+        source: 'Manual',
+        courseType: 'nptel',
+        nptelDetails: {
+          courseName: 'Internet of Things',
+          courseIdOrUrl: 'noc24-iot',
+          categoryTarget: 'programme_elective',
+          durationWeeks: '12 Weeks',
+          certificateStatus: 'certificate_received',
+          courseCredits: 3,
+          acceptedCredits: 3,
+          approvalStatus: 'approved',
+          semesterCounted: 5,
+        },
+      };
+
+      // As PE
+      let progress = calculateCategoryProgress(COLLEGE_CHART_TEMPLATE, [originalSubject]);
+      let pe = progress.find((c) => c.category.id === 'programme_elective')!;
+      let oe = progress.find((c) => c.category.id === 'open_elective')!;
+      expect(pe.earnedCredits).toBe(3);
+      expect(oe.earnedCredits).toBe(0);
+
+      // Student reclassifies to OE
+      const reclassifiedSubject: CreditSubjectItem = {
+        ...originalSubject,
+        category: 'open_elective',
+        nptelDetails: {
+          ...originalSubject.nptelDetails!,
+          categoryTarget: 'open_elective',
+        },
+      };
+
+      progress = calculateCategoryProgress(COLLEGE_CHART_TEMPLATE, [reclassifiedSubject]);
+      pe = progress.find((c) => c.category.id === 'programme_elective')!;
+      oe = progress.find((c) => c.category.id === 'open_elective')!;
+      expect(pe.earnedCredits).toBe(0);
+      expect(oe.earnedCredits).toBe(3);
+    });
+
+    // 6. A duplicate NPTEL course is flagged
+    it('Case 6: a duplicate NPTEL course is flagged based on course ID or code', () => {
+      const subjects: CreditSubjectItem[] = [
+        {
+          id: 'nptel-6a',
+          name: 'Machine Learning',
+          code: 'NOC24-CS06',
+          category: 'programme_elective',
+          semester: 5,
+          credits: 4,
+          status: 'Passed',
+          isVerified: true,
+          source: 'Manual',
+          courseType: 'nptel',
+          nptelDetails: {
+            courseName: 'Machine Learning',
+            courseIdOrUrl: 'noc24-cs06',
+            categoryTarget: 'programme_elective',
+            certificateStatus: 'certificate_received',
+            courseCredits: 4,
+            acceptedCredits: 4,
+            approvalStatus: 'approved',
+            semesterCounted: 5,
+          },
+        },
+        {
+          id: 'nptel-6b',
+          name: 'Machine Learning Attempt 2',
+          code: 'NOC24-CS06',
+          category: 'programme_elective',
+          semester: 6,
+          credits: 4,
+          status: 'Passed',
+          isVerified: true,
+          source: 'Manual',
+          courseType: 'nptel',
+          nptelDetails: {
+            courseName: 'Machine Learning Attempt 2',
+            courseIdOrUrl: 'noc24-cs06',
+            categoryTarget: 'programme_elective',
+            certificateStatus: 'certificate_received',
+            courseCredits: 4,
+            acceptedCredits: 4,
+            approvalStatus: 'approved',
+            semesterCounted: 6,
+          },
+        },
+      ];
+
+      const annotated = detectDuplicatesAndRetakes(subjects);
+      expect(annotated[0].isDuplicate).toBe(true);
+      expect(annotated[1].isDuplicate).toBe(true);
+    });
+
+    // 7. The same course is not counted twice
+    it('Case 7: the same course is not counted twice toward graduation requirements', () => {
+      const subjects: CreditSubjectItem[] = [
+        {
+          id: 'nptel-7a',
+          name: 'Data Mining',
+          code: 'NOC24-CS07',
+          category: 'programme_elective',
+          semester: 5,
+          credits: 3,
+          status: 'Passed',
+          isVerified: true,
+          source: 'Manual',
+          courseType: 'nptel',
+          nptelDetails: {
+            courseName: 'Data Mining',
+            courseIdOrUrl: 'noc24-cs07',
+            categoryTarget: 'programme_elective',
+            certificateStatus: 'certificate_received',
+            courseCredits: 3,
+            acceptedCredits: 3,
+            approvalStatus: 'approved',
+            semesterCounted: 5,
+          },
+        },
+        {
+          id: 'nptel-7b',
+          name: 'Data Mining Repeat',
+          code: 'NOC24-CS07',
+          category: 'programme_elective',
+          semester: 6,
+          credits: 3,
+          status: 'Passed',
+          isVerified: true,
+          source: 'Manual',
+          courseType: 'nptel',
+          nptelDetails: {
+            courseName: 'Data Mining Repeat',
+            courseIdOrUrl: 'noc24-cs07',
+            categoryTarget: 'programme_elective',
+            certificateStatus: 'certificate_received',
+            courseCredits: 3,
+            acceptedCredits: 3,
+            approvalStatus: 'approved',
+            semesterCounted: 6,
+          },
+        },
+      ];
+
+      const progress = calculateCategoryProgress(COLLEGE_CHART_TEMPLATE, subjects);
+      const pe = progress.find((c) => c.category.id === 'programme_elective')!;
+      expect(pe.earnedCredits).toBe(3); // Not 6!
+
+      const summary = calculateCreditSummary(subjects, 164, COLLEGE_CHART_TEMPLATE);
+      expect(summary.totalEarnedCredits).toBe(3); // Not 6!
+    });
+
+    // 8. Changing the college's permitted credit options updates rules and input validation
+    it('Case 8: changing permitted credit options and rules updates eligibility correctly', () => {
+      const subject: CreditSubjectItem = {
+        id: 'nptel-8',
+        name: 'Advanced Robotics',
+        category: 'programme_elective',
+        semester: 6,
+        credits: 2,
+        status: 'Passed',
+        isVerified: true,
+        source: 'Manual',
+        courseType: 'nptel',
+        nptelDetails: {
+          categoryTarget: 'programme_elective',
+          certificateStatus: 'certificate_received',
+          courseCredits: 2,
+          acceptedCredits: 2,
+          approvalStatus: 'approved',
+          semesterCounted: 6,
+        },
+      };
+
+      // Allowed under default rules
+      const eligibleWithDefault = isNptelCourseEligible(subject, DEFAULT_NPTEL_RULES);
+      expect(eligibleWithDefault.isEligible).toBe(true);
+
+      // Institution custom rules where PE is NOT allowed via NPTEL
+      const restrictiveRules: NptelCollegeRulesConfig = {
+        ...DEFAULT_NPTEL_RULES,
+        allowProgrammeElective: false,
+      };
+      const ineligibleWithRestrictive = isNptelCourseEligible(subject, restrictiveRules);
+      expect(ineligibleWithRestrictive.isEligible).toBe(false);
+      expect(ineligibleWithRestrictive.reason).toContain('not permitted for Programme Electives');
+    });
+
+    // 9. NPTEL data persists after refresh (serialization roundtrip)
+    it('Case 9: NPTEL data persists after JSON serialization and parsing', () => {
+      const original: CreditSubjectItem = {
+        id: 'nptel-9',
+        name: 'Cyber Security Essentials',
+        code: 'NOC24-CS09',
+        category: 'open_elective',
+        semester: 5,
+        credits: 3,
+        status: 'Passed',
+        isVerified: true,
+        source: 'Manual',
+        courseType: 'nptel',
+        nptelDetails: {
+          courseName: 'Cyber Security Essentials',
+          courseIdOrUrl: 'noc24-cs09',
+          categoryTarget: 'open_elective',
+          durationWeeks: '12 Weeks',
+          certificateStatus: 'certificate_received',
+          courseCredits: 3,
+          acceptedCredits: 3,
+          approvalStatus: 'approved',
+          semesterCounted: 5,
+          notes: 'Dean approval letter dated 12/09/2024',
+        },
+      };
+
+      const serialized = JSON.stringify([original]);
+      const restored: CreditSubjectItem[] = JSON.parse(serialized);
+
+      expect(restored[0].courseType).toBe('nptel');
+      expect(restored[0].nptelDetails?.acceptedCredits).toBe(3);
+      expect(restored[0].nptelDetails?.approvalStatus).toBe('approved');
+      expect(restored[0].nptelDetails?.notes).toBe('Dean approval letter dated 12/09/2024');
+    });
+
+    // 10. Switching student profiles does not mix records
+    it('Case 10: switching student profiles keeps records isolated', () => {
+      const studentAKey = 'academic_credits_subjects_student_alpha';
+      const studentBKey = 'academic_credits_subjects_student_beta';
+
+      const studentACourses: CreditSubjectItem[] = [
+        {
+          id: 'nptel-a',
+          name: 'Student A Course',
+          category: 'programme_elective',
+          semester: 5,
+          credits: 3,
+          status: 'Passed',
+          isVerified: true,
+          source: 'Manual',
+          courseType: 'nptel',
+          nptelDetails: {
+            categoryTarget: 'programme_elective',
+            courseCredits: 3,
+            acceptedCredits: 3,
+            certificateStatus: 'certificate_received',
+            approvalStatus: 'approved',
+            semesterCounted: 5,
+          },
+        },
+      ];
+
+      const studentBCourses: CreditSubjectItem[] = [
+        {
+          id: 'nptel-b',
+          name: 'Student B Course',
+          category: 'open_elective',
+          semester: 6,
+          credits: 2,
+          status: 'Passed',
+          isVerified: true,
+          source: 'Manual',
+          courseType: 'nptel',
+          nptelDetails: {
+            categoryTarget: 'open_elective',
+            courseCredits: 2,
+            acceptedCredits: 2,
+            certificateStatus: 'completed',
+            approvalStatus: 'approved',
+            semesterCounted: 6,
+          },
+        },
+      ];
+
+      const fakeStorage = new Map<string, string>();
+      fakeStorage.set(studentAKey, JSON.stringify(studentACourses));
+      fakeStorage.set(studentBKey, JSON.stringify(studentBCourses));
+
+      const loadedA: CreditSubjectItem[] = JSON.parse(fakeStorage.get(studentAKey)!);
+      const loadedB: CreditSubjectItem[] = JSON.parse(fakeStorage.get(studentBKey)!);
+
+      expect(loadedA[0].name).toBe('Student A Course');
+      expect(loadedA[0].nptelDetails?.categoryTarget).toBe('programme_elective');
+
+      expect(loadedB[0].name).toBe('Student B Course');
+      expect(loadedB[0].nptelDetails?.categoryTarget).toBe('open_elective');
+    });
+
+    // 11. Existing SGPA, CGPA, Internal Marks, Attendance, and Credit calculations continue to work
+    it('Case 11: dashboard stats and existing calculators remain intact', () => {
+      const mixedSubjects: CreditSubjectItem[] = [
+        {
+          id: 'reg-1',
+          name: 'Data Structures',
+          category: 'programme_core',
+          semester: 3,
+          credits: 4,
+          status: 'Passed',
+          isVerified: true,
+          source: 'Manual',
+        },
+        {
+          id: 'nptel-pe',
+          name: 'Cloud Computing',
+          category: 'programme_elective',
+          semester: 5,
+          credits: 3,
+          status: 'Passed',
+          isVerified: true,
+          source: 'Manual',
+          courseType: 'nptel',
+          nptelDetails: {
+            categoryTarget: 'programme_elective',
+            courseCredits: 3,
+            acceptedCredits: 3,
+            certificateStatus: 'certificate_received',
+            approvalStatus: 'approved',
+            semesterCounted: 5,
+          },
+        },
+        {
+          id: 'nptel-oe',
+          name: 'German Language',
+          category: 'open_elective',
+          semester: 5,
+          credits: 2,
+          status: 'Passed',
+          isVerified: true,
+          source: 'Manual',
+          courseType: 'nptel',
+          nptelDetails: {
+            categoryTarget: 'open_elective',
+            courseCredits: 2,
+            acceptedCredits: 2,
+            certificateStatus: 'completed',
+            approvalStatus: 'approved',
+            semesterCounted: 5,
+          },
+        },
+        {
+          id: 'nptel-pending',
+          name: 'AI Ethics',
+          category: 'open_elective',
+          semester: 6,
+          credits: 3,
+          status: 'Pending',
+          isVerified: false,
+          source: 'Manual',
+          courseType: 'nptel',
+          nptelDetails: {
+            categoryTarget: 'open_elective',
+            courseCredits: 3,
+            acceptedCredits: 3,
+            certificateStatus: 'in_progress',
+            approvalStatus: 'submitted',
+            semesterCounted: 6,
+          },
+        },
+      ];
+
+      const dashboard = calculateNptelDashboardStats(mixedSubjects);
+      expect(dashboard.totalCourses).toBe(3);
+      expect(dashboard.inProgressCourses).toBe(1);
+      expect(dashboard.completedCertificates).toBe(2);
+      expect(dashboard.awaitingApprovalCourses).toBe(1);
+      expect(dashboard.approvedPeCredits).toBe(3);
+      expect(dashboard.approvedOeCredits).toBe(2);
+      expect(dashboard.pendingCredits).toBe(3);
+
+      const summary = calculateCreditSummary(mixedSubjects, 164, COLLEGE_CHART_TEMPLATE);
+      // 4 (core) + 3 (approved PE) + 2 (approved OE) = 9
+      expect(summary.totalEarnedCredits).toBe(9);
+      expect(summary.creditsRemaining).toBe(155);
+    });
   });
 });

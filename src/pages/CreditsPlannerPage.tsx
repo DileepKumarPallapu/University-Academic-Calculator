@@ -18,6 +18,9 @@ import {
   Check,
   X,
   ArrowUpDown,
+  BookOpen,
+  ExternalLink,
+  Settings,
 } from 'lucide-react';
 import { useProfile } from '../context/ProfileContext';
 import { useAppToast } from '../components/layout/AppShell';
@@ -27,10 +30,18 @@ import type {
   CreditSubjectItem,
   CreditCategoryConfig,
   ResultStatus,
+  CourseType,
+  NptelDetails,
+  NptelCertificateStatus,
+  NptelApprovalStatus,
+  NptelCollegeRulesConfig,
+  NptelDashboardStats,
+  CategoryProgressItem,
 } from '../types/credits';
 import {
   COLLEGE_CHART_TEMPLATE,
   DEFAULT_PATHWAY_TARGETS,
+  DEFAULT_NPTEL_RULES,
   calculateCreditSummary,
   calculateCategoryProgress,
   calculateSemesterProgress,
@@ -40,6 +51,7 @@ import {
   exportCreditsToCSV,
   parseCreditsFromCSV,
   detectDuplicatesAndRetakes,
+  calculateNptelDashboardStats,
 } from '../utils/creditCalculations';
 
 // Initial sample data based on college curriculum template
@@ -103,18 +115,47 @@ export const CreditsPlannerPage: React.FC = () => {
     8: 18,
   });
 
+  // NPTEL Institutional Rules state per profile
+  const [nptelRules, setNptelRules] = useState<NptelCollegeRulesConfig>(() => {
+    try {
+      const saved = localStorage.getItem(`academic_credits_nptel_rules_${activeProfile.id}`);
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return DEFAULT_NPTEL_RULES;
+  });
+
   // Filter & Search states
   const [searchQuery, setSearchQuery] = useState('');
   const [filterSemester, setFilterSemester] = useState<string>('all');
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [filterCourseType, setFilterCourseType] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'name' | 'credits' | 'semester' | 'status'>('semester');
 
+  // NPTEL Hub Filters & Settings state
+  const [nptelSearchQuery, setNptelSearchQuery] = useState('');
+  const [nptelFilterCategory, setNptelFilterCategory] = useState<string>('all');
+  const [nptelFilterSemester, setNptelFilterSemester] = useState<string>('all');
+  const [nptelFilterCert, setNptelFilterCert] = useState<string>('all');
+  const [nptelFilterApproval, setNptelFilterApproval] = useState<string>('all');
+  const [nptelRulesExpanded, setNptelRulesExpanded] = useState(false);
+
   // Active Tab / View
-  const [activeSection, setActiveSection] = useState<'dashboard' | 'subjects' | 'categories' | 'semesters' | 'calculator' | 'pathways' | 'eligibility'>('dashboard');
+  const [activeSection, setActiveSection] = useState<
+    | 'dashboard'
+    | 'subjects'
+    | 'nptel'
+    | 'categories'
+    | 'semesters'
+    | 'calculator'
+    | 'pathways'
+    | 'eligibility'
+  >('dashboard');
 
   // Modals state
   const [subjectModalOpen, setSubjectModalOpen] = useState(false);
+  const [subjectModalInitialCourseType, setSubjectModalInitialCourseType] =
+    useState<CourseType>('regular');
   const [editingSubject, setEditingSubject] = useState<CreditSubjectItem | null>(null);
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
   const [deleteSubjectId, setDeleteSubjectId] = useState<string | null>(null);
@@ -133,6 +174,28 @@ export const CreditsPlannerPage: React.FC = () => {
     } catch {}
   }, [subjects, activeProfile.id]);
 
+  // Sync NPTEL rules to localStorage per profile
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        `academic_credits_nptel_rules_${activeProfile.id}`,
+        JSON.stringify(nptelRules)
+      );
+    } catch {}
+  }, [nptelRules, activeProfile.id]);
+
+  // Profile switch effect: keep records isolated
+  useEffect(() => {
+    try {
+      const savedSub = localStorage.getItem(`academic_credits_subjects_${activeProfile.id}`);
+      setSubjects(savedSub ? JSON.parse(savedSub) : INITIAL_SUBJECTS_TEMPLATE);
+      const savedRules = localStorage.getItem(
+        `academic_credits_nptel_rules_${activeProfile.id}`
+      );
+      setNptelRules(savedRules ? JSON.parse(savedRules) : DEFAULT_NPTEL_RULES);
+    } catch {}
+  }, [activeProfile.id]);
+
   // Load from Profile Context if calcIdParam is provided
   useEffect(() => {
     if (!calcIdParam) return;
@@ -144,6 +207,7 @@ export const CreditsPlannerPage: React.FC = () => {
         if (Array.isArray(saved.inputs.categories)) setCategories(saved.inputs.categories);
         if (Array.isArray(saved.inputs.subjects)) setSubjects(saved.inputs.subjects);
         if (saved.inputs.plannedTargets) setPlannedTargets(saved.inputs.plannedTargets);
+        if (saved.inputs.nptelRules) setNptelRules(saved.inputs.nptelRules);
         setLoadedCalcTitle(saved.title);
         showToast(`Loaded saved credit records: "${saved.title}"`, 'success');
       }
@@ -154,18 +218,28 @@ export const CreditsPlannerPage: React.FC = () => {
   const annotatedSubjects = useMemo(() => detectDuplicatesAndRetakes(subjects), [subjects]);
 
   const summary = useMemo(
-    () => calculateCreditSummary(annotatedSubjects, targetCredits, categories),
-    [annotatedSubjects, targetCredits, categories]
+    () => calculateCreditSummary(annotatedSubjects, targetCredits, categories, nptelRules),
+    [annotatedSubjects, targetCredits, categories, nptelRules]
   );
 
   const categoryStats = useMemo(
-    () => calculateCategoryProgress(categories, annotatedSubjects),
-    [categories, annotatedSubjects]
+    () => calculateCategoryProgress(categories, annotatedSubjects, nptelRules),
+    [categories, annotatedSubjects, nptelRules]
   );
 
   const semesterStats = useMemo(
-    () => calculateSemesterProgress(annotatedSubjects, plannedTargets),
-    [annotatedSubjects, plannedTargets]
+    () => calculateSemesterProgress(annotatedSubjects, plannedTargets, nptelRules),
+    [annotatedSubjects, plannedTargets, nptelRules]
+  );
+
+  const nptelStats = useMemo(
+    () => calculateNptelDashboardStats(annotatedSubjects, nptelRules),
+    [annotatedSubjects, nptelRules]
+  );
+
+  const nptelCount = useMemo(
+    () => subjects.filter((s) => s.courseType === 'nptel').length,
+    [subjects]
   );
 
   const eligibility = useMemo(
@@ -177,13 +251,25 @@ export const CreditsPlannerPage: React.FC = () => {
   const filteredSubjects = useMemo(() => {
     return annotatedSubjects
       .filter((s) => {
+        const query = searchQuery.toLowerCase();
         const matchesSearch =
-          s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (s.code || '').toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesSem = filterSemester === 'all' || s.semester === Number(filterSemester);
-        const matchesCat = filterCategory === 'all' || s.category === filterCategory;
+          s.name.toLowerCase().includes(query) ||
+          (s.code || '').toLowerCase().includes(query) ||
+          (s.nptelDetails?.courseIdOrUrl &&
+            s.nptelDetails.courseIdOrUrl.toLowerCase().includes(query));
+
+        const matchesSem =
+          filterSemester === 'all' || s.semester === Number(filterSemester);
+        const effectiveCat =
+          s.courseType === 'nptel' ? s.nptelDetails?.categoryTarget || s.category : s.category;
+        const matchesCat = filterCategory === 'all' || effectiveCat === filterCategory;
         const matchesStatus = filterStatus === 'all' || s.status === filterStatus;
-        return matchesSearch && matchesSem && matchesCat && matchesStatus;
+        const matchesCourseType =
+          filterCourseType === 'all' ||
+          (filterCourseType === 'regular' && (!s.courseType || s.courseType === 'regular')) ||
+          s.courseType === filterCourseType;
+
+        return matchesSearch && matchesSem && matchesCat && matchesStatus && matchesCourseType;
       })
       .sort((a, b) => {
         if (sortBy === 'name') return a.name.localeCompare(b.name);
@@ -191,7 +277,15 @@ export const CreditsPlannerPage: React.FC = () => {
         if (sortBy === 'status') return a.status.localeCompare(b.status);
         return a.semester - b.semester;
       });
-  }, [annotatedSubjects, searchQuery, filterSemester, filterCategory, filterStatus, sortBy]);
+  }, [
+    annotatedSubjects,
+    searchQuery,
+    filterSemester,
+    filterCategory,
+    filterStatus,
+    filterCourseType,
+    sortBy,
+  ]);
 
   // Pathway Switch Handler
   const handlePathwayChange = (newPathway: 'standard' | 'honours' | 'minor') => {
@@ -204,31 +298,82 @@ export const CreditsPlannerPage: React.FC = () => {
 
   // Add / Edit Subject Save Handler
   const handleSaveSubject = (data: Partial<CreditSubjectItem>) => {
-    if (!data.name?.trim()) {
+    const isNptel = data.courseType === 'nptel';
+    const courseTitle = isNptel
+      ? (data.nptelDetails?.courseName || data.name || '').trim()
+      : (data.name || '').trim();
+
+    if (!courseTitle) {
       showToast('Course name is required', 'error');
       return;
     }
 
-    const cr = Math.max(0, Number(data.credits) || 0);
+    const cr = isNptel
+      ? Math.max(0, Number(data.nptelDetails?.acceptedCredits ?? data.credits) || 0)
+      : Math.max(0, Number(data.credits) || 0);
+
+    const sem = isNptel
+      ? Number(data.nptelDetails?.semesterCounted ?? data.semester) || 1
+      : Number(data.semester) || 1;
+
+    const cat = isNptel
+      ? data.nptelDetails?.categoryTarget || data.category || 'programme_elective'
+      : data.category || 'programme_core';
+
+    let status = data.status || 'Passed';
+    let isVerified = data.isVerified !== undefined ? data.isVerified : true;
+
+    if (isNptel && data.nptelDetails) {
+      if (data.nptelDetails.approvalStatus === 'approved') {
+        const certValid =
+          data.nptelDetails.certificateStatus === 'completed' ||
+          data.nptelDetails.certificateStatus === 'certificate_received';
+        status = certValid ? 'Passed' : 'Pending';
+        isVerified = certValid;
+      } else if (data.nptelDetails.approvalStatus === 'rejected') {
+        status = 'Failed';
+        isVerified = false;
+      } else {
+        status = 'Pending';
+        isVerified = false;
+      }
+    }
 
     if (editingSubject) {
       setSubjects((prev) =>
-        prev.map((s) => (s.id === editingSubject.id ? { ...s, ...data, credits: cr } : s))
+        prev.map((s) =>
+          s.id === editingSubject.id
+            ? {
+                ...s,
+                ...data,
+                name: courseTitle,
+                category: cat,
+                credits: cr,
+                semester: sem,
+                status,
+                isVerified,
+                courseType: data.courseType || 'regular',
+                nptelDetails: data.nptelDetails,
+              }
+            : s
+        )
       );
-      showToast(`Updated course: ${data.name}`, 'success');
+      showToast(`Updated course: ${courseTitle}`, 'success');
     } else {
       const newSubject: CreditSubjectItem = {
         id: `sub-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-        name: data.name.trim(),
-        code: data.code?.trim().toUpperCase(),
-        category: data.category || 'programme_core',
-        semester: Number(data.semester) || 1,
+        name: courseTitle,
+        code: (data.code || data.nptelDetails?.courseIdOrUrl || '').trim().toUpperCase(),
+        category: cat,
+        semester: sem,
         credits: cr,
-        grade: data.grade || 'A',
-        status: data.status || 'Passed',
-        isVerified: data.isVerified !== undefined ? data.isVerified : true,
+        grade: data.grade || (isNptel ? 'Elite' : 'A'),
+        status,
+        isVerified,
         source: 'Manual',
-        notes: data.notes?.trim(),
+        notes: data.notes?.trim() || data.nptelDetails?.notes?.trim(),
+        courseType: data.courseType || 'regular',
+        nptelDetails: data.nptelDetails,
       };
       setSubjects((prev) => [...prev, newSubject]);
       showToast(`Added course: ${newSubject.name}`, 'success');
@@ -245,6 +390,31 @@ export const CreditsPlannerPage: React.FC = () => {
       setDeleteSubjectId(null);
       showToast('Course record deleted', 'info');
     }
+  };
+
+  // Switch NPTEL category between PE and OE
+  const handleSwitchNptelCategory = (
+    course: CreditSubjectItem,
+    newCat: 'programme_elective' | 'open_elective'
+  ) => {
+    setSubjects((prev) =>
+      prev.map((s) => {
+        if (s.id !== course.id) return s;
+        return {
+          ...s,
+          category: newCat,
+          nptelDetails: s.nptelDetails
+            ? { ...s.nptelDetails, categoryTarget: newCat }
+            : undefined,
+        };
+      })
+    );
+    showToast(
+      `Moved course to ${
+        newCat === 'programme_elective' ? 'Programme Elective (PE)' : 'Open Elective (OE)'
+      }`,
+      'success'
+    );
   };
 
   // Reset to College Template
@@ -392,6 +562,7 @@ export const CreditsPlannerPage: React.FC = () => {
               categories,
               subjects,
               plannedTargets,
+              nptelRules,
             }}
             existingCalcId={calcIdParam}
             onSaved={() => setLoadedCalcTitle(`Credit Audit — ${pathway.toUpperCase()}`)}
@@ -472,11 +643,12 @@ export const CreditsPlannerPage: React.FC = () => {
           [
             { id: 'dashboard', label: '1. Credit Dashboard' },
             { id: 'subjects', label: `2. Subject Manager (${subjects.length})` },
-            { id: 'categories', label: '3. Category Progress' },
-            { id: 'semesters', label: '4. Semester Planner' },
-            { id: 'calculator', label: '5. Credits Required Calculator' },
-            { id: 'pathways', label: '6. Honours & Minor' },
-            { id: 'eligibility', label: '7. Graduation Eligibility' },
+            { id: 'nptel', label: `3. NPTEL Courses (${nptelCount})` },
+            { id: 'categories', label: '4. Category Progress' },
+            { id: 'semesters', label: '5. Semester Planner' },
+            { id: 'calculator', label: '6. Credits Required Calculator' },
+            { id: 'pathways', label: '7. Honours & Minor' },
+            { id: 'eligibility', label: '8. Graduation Eligibility' },
           ] as const
         ).map((tab) => (
           <button
@@ -631,7 +803,7 @@ export const CreditsPlannerPage: React.FC = () => {
               <div className="flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600" />
                 <span>
-                  <strong>Duplicate Course Warning:</strong> {duplicateCount} records share identical course codes. Repeated passed courses are counted only once to avoid double-counting.
+                  <strong>Duplicate Course Warning:</strong> {duplicateCount} records share identical course codes or NPTEL IDs. Repeated passed courses are counted only once to avoid double-counting.
                 </span>
               </div>
               <button
@@ -643,6 +815,50 @@ export const CreditsPlannerPage: React.FC = () => {
               </button>
             </div>
           )}
+
+          {/* NPTEL Electives Transfer Summary Card */}
+          <div className="p-5 rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-5">
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                <BookOpen className="w-5 h-5" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-sm text-[var(--text-primary)]">
+                    NPTEL & External Elective Credits
+                  </h3>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300">
+                    {nptelStats.totalCourses} recorded
+                  </span>
+                </div>
+                <p className="text-xs text-[var(--text-secondary)]">
+                  Approved PE: <strong className="text-[var(--text-primary)]">{nptelStats.approvedPeCredits} Cr</strong> • Approved OE: <strong className="text-[var(--text-primary)]">{nptelStats.approvedOeCredits} Cr</strong> • Awaiting Approval: <strong className="text-amber-600 dark:text-amber-400">{nptelStats.pendingCredits} Cr</strong>
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingSubject(null);
+                  setSubjectModalInitialCourseType('nptel');
+                  setSubjectModalOpen(true);
+                }}
+                className="apple-btn-secondary text-xs h-9 px-3.5 gap-1.5 font-semibold text-emerald-600 dark:text-emerald-400 border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-950/20"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>+ Add NPTEL Course</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveSection('nptel')}
+                className="apple-btn-primary text-xs h-9 px-3.5 gap-1.5 font-semibold"
+              >
+                <span>Manage NPTEL ({nptelStats.totalCourses})</span>
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -658,7 +874,7 @@ export const CreditsPlannerPage: React.FC = () => {
               <Search className="w-4 h-4 absolute left-3.5 top-3 text-[var(--text-tertiary)]" />
               <input
                 type="text"
-                placeholder="Search by course name or code..."
+                placeholder="Search by course name, code, or NPTEL ID..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="apple-input h-10 pl-9 text-xs w-full"
@@ -671,12 +887,26 @@ export const CreditsPlannerPage: React.FC = () => {
                 type="button"
                 onClick={() => {
                   setEditingSubject(null);
+                  setSubjectModalInitialCourseType('regular');
                   setSubjectModalOpen(true);
                 }}
                 className="apple-btn-primary text-xs h-10 px-3.5 gap-1.5 font-semibold"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add Subject</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingSubject(null);
+                  setSubjectModalInitialCourseType('nptel');
+                  setSubjectModalOpen(true);
+                }}
+                className="apple-btn-secondary text-xs h-10 px-3.5 gap-1.5 font-semibold text-emerald-600 dark:text-emerald-400 border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-950/20"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>+ Add NPTEL Course</span>
               </button>
 
               <button
@@ -757,6 +987,18 @@ export const CreditsPlannerPage: React.FC = () => {
                 <option value="Withdrawn">Withdrawn</option>
                 <option value="Incomplete">Incomplete</option>
               </select>
+
+              {/* Course Type Filter */}
+              <select
+                value={filterCourseType}
+                onChange={(e) => setFilterCourseType(e.target.value)}
+                className="apple-input h-8 text-xs font-medium cursor-pointer"
+              >
+                <option value="all">All Types</option>
+                <option value="regular">Regular</option>
+                <option value="nptel">NPTEL</option>
+                <option value="external">External</option>
+              </select>
             </div>
 
             {/* Sort Controls */}
@@ -821,7 +1063,19 @@ export const CreditsPlannerPage: React.FC = () => {
                             )}
                           </td>
                           <td className="py-3 px-3.5 font-medium text-[var(--text-primary)]">
-                            {sub.name}
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span>{sub.name}</span>
+                              {sub.courseType === 'nptel' && (
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300">
+                                  NPTEL ({sub.nptelDetails?.categoryTarget === 'open_elective' ? 'OE' : 'PE'})
+                                </span>
+                              )}
+                              {sub.courseType === 'external' && (
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300">
+                                  External
+                                </span>
+                              )}
+                            </div>
                             {sub.notes && (
                               <span className="block text-[10px] text-[var(--text-tertiary)]">
                                 {sub.notes}
@@ -861,15 +1115,37 @@ export const CreditsPlannerPage: React.FC = () => {
                             </span>
                           </td>
                           <td className="py-3 px-3 text-center">
-                            <span
-                              className={`text-[11px] font-medium ${
-                                sub.isVerified
-                                  ? 'text-emerald-600 dark:text-emerald-400'
-                                  : 'text-[var(--text-tertiary)]'
-                              }`}
-                            >
-                              {sub.isVerified ? '✓ Verified' : 'Unverified'}
-                            </span>
+                            {sub.courseType === 'nptel' ? (
+                              <span
+                                className={`text-[11px] font-bold ${
+                                  sub.nptelDetails?.approvalStatus === 'approved'
+                                    ? 'text-emerald-600 dark:text-emerald-400'
+                                    : sub.nptelDetails?.approvalStatus === 'submitted'
+                                    ? 'text-amber-600 dark:text-amber-400'
+                                    : sub.nptelDetails?.approvalStatus === 'rejected'
+                                    ? 'text-rose-600 dark:text-rose-400'
+                                    : 'text-[var(--text-tertiary)]'
+                                }`}
+                              >
+                                {sub.nptelDetails?.approvalStatus === 'approved'
+                                  ? '✓ Approved'
+                                  : sub.nptelDetails?.approvalStatus === 'submitted'
+                                  ? '⏳ Submitted'
+                                  : sub.nptelDetails?.approvalStatus === 'rejected'
+                                  ? '✕ Rejected'
+                                  : 'Unverified'}
+                              </span>
+                            ) : (
+                              <span
+                                className={`text-[11px] font-medium ${
+                                  sub.isVerified
+                                    ? 'text-emerald-600 dark:text-emerald-400'
+                                    : 'text-[var(--text-tertiary)]'
+                                }`}
+                              >
+                                {sub.isVerified ? '✓ Verified' : 'Unverified'}
+                              </span>
+                            )}
                           </td>
                           <td className="py-3 px-3 text-right">
                             <div className="flex items-center justify-end gap-1">
@@ -906,7 +1182,49 @@ export const CreditsPlannerPage: React.FC = () => {
       )}
 
       {/* ======================================================== */}
-      {/* 3. CATEGORY-WISE PROGRESS                                */}
+      {/* 3. NPTEL COURSES & CREDIT TRANSFER                       */}
+      {/* ======================================================== */}
+      {activeSection === 'nptel' && (
+        <NptelDashboardSection
+          nptelStats={nptelStats}
+          subjects={annotatedSubjects}
+          categoryStats={categoryStats}
+          nptelRules={nptelRules}
+          onUpdateRules={(updated) => {
+            setNptelRules(updated);
+            showToast('Updated institutional NPTEL rules', 'info');
+          }}
+          onAddCourse={() => {
+            setEditingSubject(null);
+            setSubjectModalInitialCourseType('nptel');
+            setSubjectModalOpen(true);
+          }}
+          onEditCourse={(course) => {
+            setEditingSubject(course);
+            setSubjectModalInitialCourseType(course.courseType || 'nptel');
+            setSubjectModalOpen(true);
+          }}
+          onDeleteCourse={(id) => {
+            setDeleteSubjectId(id);
+          }}
+          onSwitchCategory={handleSwitchNptelCategory}
+          searchQuery={nptelSearchQuery}
+          setSearchQuery={setNptelSearchQuery}
+          filterCategory={nptelFilterCategory}
+          setFilterCategory={setNptelFilterCategory}
+          filterSemester={nptelFilterSemester}
+          setFilterSemester={setNptelFilterSemester}
+          filterCert={nptelFilterCert}
+          setFilterCert={setNptelFilterCert}
+          filterApproval={nptelFilterApproval}
+          setFilterApproval={setNptelFilterApproval}
+          rulesExpanded={nptelRulesExpanded}
+          setRulesExpanded={setNptelRulesExpanded}
+        />
+      )}
+
+      {/* ======================================================== */}
+      {/* 4. CATEGORY-WISE PROGRESS                                */}
       {/* ======================================================== */}
       {activeSection === 'categories' && (
         <div className="flex flex-col gap-6 animate-appleFadeIn">
@@ -1139,7 +1457,9 @@ export const CreditsPlannerPage: React.FC = () => {
         <SubjectFormModal
           isOpen={subjectModalOpen}
           initialData={editingSubject}
+          initialCourseType={subjectModalInitialCourseType}
           categories={categories}
+          nptelRules={nptelRules}
           onClose={() => {
             setSubjectModalOpen(false);
             setEditingSubject(null);
@@ -1571,183 +1891,1285 @@ const GraduationEligibilitySection: React.FC<{
 };
 
 /* ========================================================================= */
-/* MODAL: Subject Form (Add / Edit)                                          */
+/* SUB-COMPONENT: NPTEL Dashboard & Management Hub                           */
+/* ========================================================================= */
+const NptelDashboardSection: React.FC<{
+  nptelStats: NptelDashboardStats;
+  subjects: CreditSubjectItem[];
+  categoryStats: CategoryProgressItem[];
+  nptelRules: NptelCollegeRulesConfig;
+  onUpdateRules: (rules: NptelCollegeRulesConfig) => void;
+  onAddCourse: () => void;
+  onEditCourse: (course: CreditSubjectItem) => void;
+  onDeleteCourse: (id: string) => void;
+  onSwitchCategory: (course: CreditSubjectItem, newCat: 'programme_elective' | 'open_elective') => void;
+  searchQuery: string;
+  setSearchQuery: (q: string) => void;
+  filterCategory: string;
+  setFilterCategory: (c: string) => void;
+  filterSemester: string;
+  setFilterSemester: (s: string) => void;
+  filterCert: string;
+  setFilterCert: (c: string) => void;
+  filterApproval: string;
+  setFilterApproval: (a: string) => void;
+  rulesExpanded: boolean;
+  setRulesExpanded: (e: boolean) => void;
+}> = ({
+  nptelStats,
+  subjects,
+  categoryStats,
+  nptelRules,
+  onUpdateRules,
+  onAddCourse,
+  onEditCourse,
+  onDeleteCourse,
+  onSwitchCategory,
+  searchQuery,
+  setSearchQuery,
+  filterCategory,
+  setFilterCategory,
+  filterSemester,
+  setFilterSemester,
+  filterCert,
+  setFilterCert,
+  filterApproval,
+  setFilterApproval,
+  rulesExpanded,
+  setRulesExpanded,
+}) => {
+  const peStat = categoryStats.find((c) => c.category.id === 'programme_elective');
+  const oeStat = categoryStats.find((c) => c.category.id === 'open_elective');
+
+  const peRequired = peStat?.category.requiredCredits || 18;
+  const peEarned = peStat?.earnedCredits || 0;
+  const peRemaining = Math.max(0, peRequired - peEarned);
+
+  const oeRequired = oeStat?.category.requiredCredits || 12;
+  const oeEarned = oeStat?.earnedCredits || 0;
+  const oeRemaining = Math.max(0, oeRequired - oeEarned);
+
+  const nptelCourses = subjects.filter((s) => s.courseType === 'nptel');
+
+  const filteredCourses = nptelCourses.filter((s) => {
+    const q = searchQuery.trim().toLowerCase();
+    const matchesSearch =
+      !q ||
+      s.name.toLowerCase().includes(q) ||
+      (s.code && s.code.toLowerCase().includes(q)) ||
+      (s.nptelDetails?.courseName && s.nptelDetails.courseName.toLowerCase().includes(q)) ||
+      (s.nptelDetails?.courseIdOrUrl && s.nptelDetails.courseIdOrUrl.toLowerCase().includes(q));
+
+    const cat = s.nptelDetails?.categoryTarget || s.category;
+    const matchesCat = filterCategory === 'all' || cat === filterCategory;
+
+    const sem = s.nptelDetails?.semesterCounted || s.semester;
+    const matchesSem = filterSemester === 'all' || sem === parseInt(filterSemester);
+
+    const cert = s.nptelDetails?.certificateStatus || 'not_started';
+    const matchesCert = filterCert === 'all' || cert === filterCert;
+
+    const approval = s.nptelDetails?.approvalStatus || 'not_verified';
+    const matchesApproval = filterApproval === 'all' || approval === filterApproval;
+
+    return matchesSearch && matchesCat && matchesSem && matchesCert && matchesApproval;
+  });
+
+  const [localRules, setLocalRules] = useState<NptelCollegeRulesConfig>(nptelRules);
+  useEffect(() => {
+    setLocalRules(nptelRules);
+  }, [nptelRules]);
+
+  return (
+    <div className="flex flex-col gap-6 animate-appleFadeIn">
+      {/* Top Header Card */}
+      <div className="rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] p-6 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300">
+              NPTEL Transfer Hub
+            </span>
+            <span className="text-xs text-[var(--text-tertiary)] font-medium">
+              SWAYAM / NPTEL MOOCs Integration
+            </span>
+          </div>
+          <h2 className="text-xl font-bold tracking-tight text-[var(--text-primary)] mt-1">
+            NPTEL Course Integration & Custom Credit Transfer
+          </h2>
+          <p className="text-xs text-[var(--text-secondary)] mt-1 max-w-2xl leading-relaxed">
+            Record NPTEL online courses, verify certifications, and transfer credits toward Programme Electives (PE) or Open Electives (OE) per university guidelines.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => setRulesExpanded(!rulesExpanded)}
+            className={`apple-btn-secondary text-xs h-10 px-3.5 gap-1.5 font-semibold transition-all ${
+              rulesExpanded
+                ? 'bg-black text-white dark:bg-white dark:text-black border-transparent shadow-xs'
+                : ''
+            }`}
+          >
+            <Settings className="w-3.5 h-3.5" />
+            <span>{rulesExpanded ? 'Hide College Rules' : 'College Rules Settings'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onAddCourse}
+            className="apple-btn-primary text-xs h-10 px-4 gap-1.5 font-semibold"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>+ Add NPTEL Course</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 8-Card NPTEL Summary Dashboard */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+        <div className="p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] shadow-xs flex flex-col justify-between">
+          <span className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase">
+            Total Recorded
+          </span>
+          <div className="text-2xl sm:text-3xl font-bold text-[var(--text-primary)] tabular-nums mt-1">
+            {nptelStats.totalCourses}
+          </div>
+          <span className="text-[10px] text-[var(--text-tertiary)] mt-0.5">NPTEL courses logged</span>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] shadow-xs flex flex-col justify-between">
+          <span className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase">
+            In Progress
+          </span>
+          <div className="text-2xl sm:text-3xl font-bold text-amber-600 dark:text-amber-400 tabular-nums mt-1">
+            {nptelStats.inProgressCourses}
+          </div>
+          <span className="text-[10px] text-[var(--text-tertiary)] mt-0.5">Currently pursuing</span>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] shadow-xs flex flex-col justify-between">
+          <span className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase">
+            Certificates Received
+          </span>
+          <div className="text-2xl sm:text-3xl font-bold text-emerald-600 dark:text-emerald-400 tabular-nums mt-1">
+            {nptelStats.completedCertificates}
+          </div>
+          <span className="text-[10px] text-[var(--text-tertiary)] mt-0.5">Completed exam passed</span>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] shadow-xs flex flex-col justify-between">
+          <span className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase">
+            Awaiting Approval
+          </span>
+          <div className="text-2xl sm:text-3xl font-bold text-indigo-600 dark:text-indigo-400 tabular-nums mt-1">
+            {nptelStats.awaitingApprovalCourses}
+          </div>
+          <span className="text-[10px] text-[var(--text-tertiary)] mt-0.5">Submitted to college</span>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-[var(--surface)] border border-emerald-500/20 bg-emerald-50/20 dark:bg-emerald-950/10 shadow-xs flex flex-col justify-between">
+          <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 uppercase">
+            Approved PE Credits
+          </span>
+          <div className="text-2xl sm:text-3xl font-bold text-emerald-600 dark:text-emerald-400 tabular-nums mt-1">
+            {nptelStats.approvedPeCredits} Cr
+          </div>
+          <span className="text-[10px] text-emerald-700/80 dark:text-emerald-300/80 mt-0.5">
+            Target: {peRequired} Cr • Remaining: {peRemaining} Cr
+          </span>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-[var(--surface)] border border-emerald-500/20 bg-emerald-50/20 dark:bg-emerald-950/10 shadow-xs flex flex-col justify-between">
+          <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 uppercase">
+            Approved OE Credits
+          </span>
+          <div className="text-2xl sm:text-3xl font-bold text-emerald-600 dark:text-emerald-400 tabular-nums mt-1">
+            {nptelStats.approvedOeCredits} Cr
+          </div>
+          <span className="text-[10px] text-emerald-700/80 dark:text-emerald-300/80 mt-0.5">
+            Target: {oeRequired} Cr • Remaining: {oeRemaining} Cr
+          </span>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] shadow-xs flex flex-col justify-between">
+          <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300 uppercase">
+            Pending Credits
+          </span>
+          <div className="text-2xl sm:text-3xl font-bold text-amber-600 dark:text-amber-400 tabular-nums mt-1">
+            {nptelStats.pendingCredits} Cr
+          </div>
+          <span className="text-[10px] text-[var(--text-tertiary)] mt-0.5">Awaiting verification</span>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] shadow-xs flex flex-col justify-between">
+          <span className="text-[11px] font-semibold text-rose-700 dark:text-rose-300 uppercase">
+            Rejected Credits
+          </span>
+          <div className="text-2xl sm:text-3xl font-bold text-rose-600 dark:text-rose-400 tabular-nums mt-1">
+            {nptelStats.rejectedCredits} Cr
+          </div>
+          <span className="text-[10px] text-[var(--text-tertiary)] mt-0.5">Ineligible / not approved</span>
+        </div>
+      </div>
+
+      {/* Credit Transfer Formula Calculation Panels */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="p-4 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <span className="font-bold text-xs text-[var(--text-primary)]">
+              Programme Elective (PE) Transfer Progress
+            </span>
+            <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+              {peEarned} / {peRequired} Cr
+            </span>
+          </div>
+          <div className="text-[11px] font-mono text-[var(--text-secondary)] bg-[var(--surface)] p-2.5 rounded-lg border border-[var(--border-secondary)]">
+            Remaining PE Credits = max(0, {peRequired} Required PE − {peEarned} Verified PE) = <strong>{peRemaining} Cr</strong>
+          </div>
+          <div className="text-[10px] text-[var(--text-tertiary)]">
+            Approved NPTEL PE credits ({nptelStats.approvedPeCredits} Cr) reduce your remaining departmental elective requirement.
+          </div>
+        </div>
+
+        <div className="p-4 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <span className="font-bold text-xs text-[var(--text-primary)]">
+              Open Elective (OE) Transfer Progress
+            </span>
+            <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+              {oeEarned} / {oeRequired} Cr
+            </span>
+          </div>
+          <div className="text-[11px] font-mono text-[var(--text-secondary)] bg-[var(--surface)] p-2.5 rounded-lg border border-[var(--border-secondary)]">
+            Remaining OE Credits = max(0, {oeRequired} Required OE − {oeEarned} Verified OE) = <strong>{oeRemaining} Cr</strong>
+          </div>
+          <div className="text-[10px] text-[var(--text-tertiary)]">
+            Approved NPTEL OE credits ({nptelStats.approvedOeCredits} Cr) reduce your remaining interdisciplinary elective requirement.
+          </div>
+        </div>
+      </div>
+
+      {/* College NPTEL Rules Configuration Card (Expandable) */}
+      {rulesExpanded && (
+        <div className="p-6 rounded-2xl bg-[var(--surface)] border border-emerald-500/30 shadow-md flex flex-col gap-5 animate-appleFadeIn">
+          <div className="flex items-center justify-between border-b border-[var(--border-secondary)] pb-3">
+            <div>
+              <h3 className="text-sm font-bold text-[var(--text-primary)] flex items-center gap-2">
+                <Settings className="w-4 h-4 text-emerald-600" />
+                Institutional NPTEL Credit Transfer Policies
+              </h3>
+              <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                Customize the rules according to your college's specific academic council regulations.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setLocalRules(DEFAULT_NPTEL_RULES);
+                onUpdateRules(DEFAULT_NPTEL_RULES);
+              }}
+              className="apple-btn-secondary text-xs h-8 px-2.5"
+            >
+              Reset to Defaults
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
+            <div className="p-3.5 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] flex flex-col justify-between gap-3">
+              <div>
+                <span className="font-bold text-[var(--text-primary)] block">Programme Electives (PE)</span>
+                <span className="text-[11px] text-[var(--text-secondary)]">Can NPTEL courses satisfy departmental PE credits?</span>
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer font-semibold">
+                <input
+                  type="checkbox"
+                  checked={localRules.allowProgrammeElective}
+                  onChange={(e) => {
+                    const updated = { ...localRules, allowProgrammeElective: e.target.checked };
+                    setLocalRules(updated);
+                    onUpdateRules(updated);
+                  }}
+                  className="rounded text-emerald-600"
+                />
+                <span>Allow PE Mapping</span>
+              </label>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] flex flex-col justify-between gap-3">
+              <div>
+                <span className="font-bold text-[var(--text-primary)] block">Open Electives (OE)</span>
+                <span className="text-[11px] text-[var(--text-secondary)]">Can NPTEL courses satisfy multidisciplinary OE credits?</span>
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer font-semibold">
+                <input
+                  type="checkbox"
+                  checked={localRules.allowOpenElective}
+                  onChange={(e) => {
+                    const updated = { ...localRules, allowOpenElective: e.target.checked };
+                    setLocalRules(updated);
+                    onUpdateRules(updated);
+                  }}
+                  className="rounded text-emerald-600"
+                />
+                <span>Allow OE Mapping</span>
+              </label>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] flex flex-col justify-between gap-3">
+              <div>
+                <span className="font-bold text-[var(--text-primary)] block">Faculty / Dept Approval</span>
+                <span className="text-[11px] text-[var(--text-secondary)]">Requires official department signature before counting?</span>
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer font-semibold">
+                <input
+                  type="checkbox"
+                  checked={localRules.requireApproval}
+                  onChange={(e) => {
+                    const updated = { ...localRules, requireApproval: e.target.checked };
+                    setLocalRules(updated);
+                    onUpdateRules(updated);
+                  }}
+                  className="rounded text-emerald-600"
+                />
+                <span>Require College Approval</span>
+              </label>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] flex flex-col justify-between gap-3">
+              <div>
+                <span className="font-bold text-[var(--text-primary)] block">Certificate Requirement</span>
+                <span className="text-[11px] text-[var(--text-secondary)]">Exam pass certificate must be earned?</span>
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer font-semibold">
+                <input
+                  type="checkbox"
+                  checked={localRules.requireCertificate}
+                  onChange={(e) => {
+                    const updated = { ...localRules, requireCertificate: e.target.checked };
+                    setLocalRules(updated);
+                    onUpdateRules(updated);
+                  }}
+                  className="rounded text-emerald-600"
+                />
+                <span>Require Certificate</span>
+              </label>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] flex flex-col justify-between gap-3">
+              <div>
+                <span className="font-bold text-[var(--text-primary)] block">Permitted Credit Values</span>
+                <span className="text-[11px] text-[var(--text-secondary)]">Allowed values: {localRules.allowedCreditValues.join(', ')} credits</span>
+              </div>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {[1, 2, 3, 4, 6].map((cr) => {
+                  const has = localRules.allowedCreditValues.includes(cr);
+                  return (
+                    <button
+                      key={cr}
+                      type="button"
+                      onClick={() => {
+                        const next = has
+                          ? localRules.allowedCreditValues.filter((v) => v !== cr)
+                          : [...localRules.allowedCreditValues, cr].sort();
+                        if (next.length > 0) {
+                          const updated = { ...localRules, allowedCreditValues: next };
+                          setLocalRules(updated);
+                          onUpdateRules(updated);
+                        }
+                      }}
+                      className={`px-2.5 py-1 rounded-md text-xs font-bold border transition-all ${
+                        has
+                          ? 'bg-black text-white dark:bg-white dark:text-black border-transparent shadow-xs'
+                          : 'bg-[var(--surface)] border-[var(--border-primary)] text-[var(--text-secondary)]'
+                      }`}
+                    >
+                      {cr} Cr
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] flex flex-col justify-between gap-3">
+              <div>
+                <span className="font-bold text-[var(--text-primary)] block">Custom Credit Options</span>
+                <span className="text-[11px] text-[var(--text-secondary)]">Allow entering arbitrary custom credit values?</span>
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer font-semibold">
+                <input
+                  type="checkbox"
+                  checked={localRules.allowCustomCredits}
+                  onChange={(e) => {
+                    const updated = { ...localRules, allowCustomCredits: e.target.checked };
+                    setLocalRules(updated);
+                    onUpdateRules(updated);
+                  }}
+                  className="rounded text-emerald-600"
+                />
+                <span>Allow Custom Values</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Search and Filters Bar */}
+      <div className="p-3.5 rounded-xl bg-[var(--surface)] border border-[var(--border-primary)] flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
+          <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-[var(--text-tertiary)]" />
+          <input
+            type="text"
+            placeholder="Search NPTEL course title, ID or URL..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="apple-input h-8 pl-8 text-xs w-full"
+          />
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Category Filter */}
+          <select
+            value={filterCategory}
+            onChange={(e) => setFilterCategory(e.target.value)}
+            className="apple-input h-8 text-xs font-medium cursor-pointer"
+          >
+            <option value="all">All Electives</option>
+            <option value="programme_elective">Programme Elective (PE)</option>
+            <option value="open_elective">Open Elective (OE)</option>
+          </select>
+
+          {/* Semester Filter */}
+          <select
+            value={filterSemester}
+            onChange={(e) => setFilterSemester(e.target.value)}
+            className="apple-input h-8 text-xs font-medium cursor-pointer"
+          >
+            <option value="all">All Semesters</option>
+            {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
+              <option key={s} value={s}>
+                Semester {s}
+              </option>
+            ))}
+          </select>
+
+          {/* Certificate Filter */}
+          <select
+            value={filterCert}
+            onChange={(e) => setFilterCert(e.target.value)}
+            className="apple-input h-8 text-xs font-medium cursor-pointer"
+          >
+            <option value="all">All Certificate States</option>
+            <option value="not_started">Not started</option>
+            <option value="in_progress">In progress</option>
+            <option value="completed">Completed</option>
+            <option value="certificate_received">Certificate received</option>
+          </select>
+
+          {/* Approval Filter */}
+          <select
+            value={filterApproval}
+            onChange={(e) => setFilterApproval(e.target.value)}
+            className="apple-input h-8 text-xs font-medium cursor-pointer"
+          >
+            <option value="all">All Approval States</option>
+            <option value="not_verified">Not verified</option>
+            <option value="submitted">Submitted for approval</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+          </select>
+        </div>
+      </div>
+
+      {/* NPTEL Courses Table */}
+      <div className="rounded-2xl border border-[var(--border-primary)] bg-[var(--surface)] overflow-hidden shadow-xs">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="bg-[var(--bg-tertiary)] border-b border-[var(--border-primary)] text-[var(--text-secondary)] font-bold uppercase tracking-wider text-[11px]">
+                <th className="py-3 px-3.5">Course & ID / URL</th>
+                <th className="py-3 px-3.5 text-center">Elective Target</th>
+                <th className="py-3 px-2 text-center">Duration / Sem</th>
+                <th className="py-3 px-3 text-center">Credits (Accepted / NPTEL)</th>
+                <th className="py-3 px-3 text-center">Certificate Status</th>
+                <th className="py-3 px-3 text-center">College Approval</th>
+                <th className="py-3 px-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[var(--border-secondary)]">
+              {filteredCourses.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-12 text-center text-[var(--text-secondary)]">
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <BookOpen className="w-8 h-8 opacity-30" />
+                      <p className="font-semibold text-sm">No NPTEL courses found</p>
+                      <p className="text-xs text-[var(--text-tertiary)] max-w-sm">
+                        Add an NPTEL MOOC course to track certificate progress and transfer credits to PE or OE.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={onAddCourse}
+                        className="apple-btn-primary text-xs h-9 px-4 mt-2 gap-1.5 font-semibold"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Add Your First NPTEL Course</span>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                filteredCourses.map((sub) => {
+                  const details = sub.nptelDetails;
+                  const targetCat = details?.categoryTarget || sub.category;
+                  const isPE = targetCat === 'programme_elective';
+                  const isURL = details?.courseIdOrUrl?.startsWith('http');
+
+                  return (
+                    <tr
+                      key={sub.id}
+                      className="hover:bg-[var(--bg-tertiary)] transition-colors group"
+                    >
+                      <td className="py-3.5 px-3.5">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-[var(--text-primary)] text-sm">
+                            {details?.courseName || sub.name}
+                          </span>
+                          {sub.isDuplicate && (
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300">
+                              Duplicate ID
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5 text-[11px] text-[var(--text-tertiary)]">
+                          {details?.courseIdOrUrl ? (
+                            isURL ? (
+                              <a
+                                href={details.courseIdOrUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 hover:underline"
+                              >
+                                <span>Course Link</span>
+                                <ExternalLink className="w-3 h-3" />
+                              </a>
+                            ) : (
+                              <span className="font-mono">{details.courseIdOrUrl}</span>
+                            )
+                          ) : (
+                            <span>ID: {sub.code || '—'}</span>
+                          )}
+                          {details?.notes && <span>• {details.notes}</span>}
+                        </div>
+                      </td>
+
+                      <td className="py-3.5 px-3.5 text-center">
+                        <div className="inline-flex items-center gap-1.5">
+                          <span
+                            className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                              isPE
+                                ? 'bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300'
+                                : 'bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300'
+                            }`}
+                          >
+                            {isPE ? 'Programme Elective (PE)' : 'Open Elective (OE)'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onSwitchCategory(sub, isPE ? 'open_elective' : 'programme_elective')
+                            }
+                            className="p-1 rounded text-[10px] font-semibold text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--border-secondary)] cursor-pointer"
+                            title={`Switch to ${isPE ? 'Open Elective' : 'Programme Elective'}`}
+                          >
+                            ⇄ Move
+                          </button>
+                        </div>
+                      </td>
+
+                      <td className="py-3.5 px-2 text-center tabular-nums">
+                        <div className="font-semibold text-[var(--text-primary)]">
+                          Sem {details?.semesterCounted || sub.semester}
+                        </div>
+                        <div className="text-[10px] text-[var(--text-tertiary)]">
+                          {details?.durationWeeks || '8 Weeks'}
+                        </div>
+                      </td>
+
+                      <td className="py-3.5 px-3 text-center">
+                        <div className="flex items-center justify-center gap-1 font-bold text-xs">
+                          <span
+                            className="text-emerald-600 dark:text-emerald-400"
+                            title="Accepted Credits officially recognized by college"
+                          >
+                            {details?.acceptedCredits ?? sub.credits} Accepted
+                          </span>
+                          <span className="text-[var(--text-tertiary)] font-normal">/</span>
+                          <span
+                            className="text-[var(--text-secondary)] font-normal text-[11px]"
+                            title="Advertised NPTEL course credit value"
+                          >
+                            {details?.courseCredits ?? sub.credits} NPTEL
+                          </span>
+                        </div>
+                      </td>
+
+                      <td className="py-3.5 px-3 text-center">
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                            details?.certificateStatus === 'certificate_received'
+                              ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300'
+                              : details?.certificateStatus === 'completed'
+                              ? 'bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300'
+                              : details?.certificateStatus === 'in_progress'
+                              ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300'
+                              : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400'
+                          }`}
+                        >
+                          {details?.certificateStatus === 'certificate_received'
+                            ? 'Certificate Received'
+                            : details?.certificateStatus === 'completed'
+                            ? 'Exam Passed'
+                            : details?.certificateStatus === 'in_progress'
+                            ? 'In Progress'
+                            : 'Not Started'}
+                        </span>
+                      </td>
+
+                      <td className="py-3.5 px-3 text-center">
+                        <span
+                          className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                            details?.approvalStatus === 'approved'
+                              ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300'
+                              : details?.approvalStatus === 'submitted'
+                              ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300'
+                              : details?.approvalStatus === 'rejected'
+                              ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300'
+                              : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400'
+                          }`}
+                        >
+                          {details?.approvalStatus === 'approved'
+                            ? '✓ Approved'
+                            : details?.approvalStatus === 'submitted'
+                            ? '⏳ Submitted'
+                            : details?.approvalStatus === 'rejected'
+                            ? '✕ Rejected'
+                            : 'Not Verified'}
+                        </span>
+                      </td>
+
+                      <td className="py-3.5 px-3 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            type="button"
+                            onClick={() => onEditCourse(sub)}
+                            className="p-1.5 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--border-secondary)] cursor-pointer"
+                            title="Edit course"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onDeleteCourse(sub.id)}
+                            className="p-1.5 rounded-lg text-[var(--text-secondary)] hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 cursor-pointer"
+                            title="Delete course"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ========================================================================= */
+/* MODAL: Subject Form (Add / Edit) with NPTEL Integration                   */
 /* ========================================================================= */
 const SubjectFormModal: React.FC<{
   isOpen: boolean;
   initialData: CreditSubjectItem | null;
+  initialCourseType?: CourseType;
   categories: CreditCategoryConfig[];
+  nptelRules: NptelCollegeRulesConfig;
   onClose: () => void;
   onSave: (data: Partial<CreditSubjectItem>) => void;
-}> = ({ isOpen, initialData, categories, onClose, onSave }) => {
-  const [formData, setFormData] = useState<Partial<CreditSubjectItem>>(() => {
-    return (
-      initialData || {
-        name: '',
-        code: '',
-        category: categories[0]?.id || 'foundation',
-        semester: 1,
-        credits: 3,
-        grade: 'A',
-        status: 'Passed',
-        isVerified: true,
-        notes: '',
-      }
-    );
-  });
+}> = ({
+  isOpen,
+  initialData,
+  initialCourseType = 'regular',
+  categories,
+  nptelRules,
+  onClose,
+  onSave,
+}) => {
+  const [courseType, setCourseType] = useState<CourseType>(
+    initialData?.courseType || initialCourseType
+  );
+
+  // Regular Course Fields
+  const [name, setName] = useState(initialData?.name || '');
+  const [code, setCode] = useState(initialData?.code || '');
+  const [category, setCategory] = useState(
+    initialData?.category || categories[0]?.id || 'foundation'
+  );
+  const [semester, setSemester] = useState(initialData?.semester || 1);
+  const [credits, setCredits] = useState(
+    initialData?.credits !== undefined ? initialData.credits : 3
+  );
+  const [grade, setGrade] = useState(initialData?.grade || 'A');
+  const [status, setStatus] = useState<ResultStatus>(initialData?.status || 'Passed');
+  const [isVerified, setIsVerified] = useState(initialData?.isVerified ?? true);
+  const [notes, setNotes] = useState(initialData?.notes || '');
+
+  // NPTEL Fields
+  const [nptelCourseName, setNptelCourseName] = useState(
+    initialData?.nptelDetails?.courseName || initialData?.name || ''
+  );
+  const [nptelCourseIdOrUrl, setNptelCourseIdOrUrl] = useState(
+    initialData?.nptelDetails?.courseIdOrUrl || initialData?.code || ''
+  );
+  const [categoryTarget, setCategoryTarget] = useState<'programme_elective' | 'open_elective'>(
+    (initialData?.nptelDetails?.categoryTarget as any) ||
+      (initialData?.category === 'open_elective' ? 'open_elective' : 'programme_elective')
+  );
+  const [durationWeeks, setDurationWeeks] = useState(
+    initialData?.nptelDetails?.durationWeeks || '8 Weeks'
+  );
+  const [courseCredits, setCourseCredits] = useState<number>(
+    initialData?.nptelDetails?.courseCredits ?? 3
+  );
+  const [acceptedCredits, setAcceptedCredits] = useState<number>(
+    initialData?.nptelDetails?.acceptedCredits ?? (initialData?.credits ?? 3)
+  );
+  const [certStatus, setCertStatus] = useState<NptelCertificateStatus>(
+    initialData?.nptelDetails?.certificateStatus || 'completed'
+  );
+  const [approvalStatus, setApprovalStatus] = useState<NptelApprovalStatus>(
+    initialData?.nptelDetails?.approvalStatus || 'approved'
+  );
+  const [nptelSemesterCounted, setNptelSemesterCounted] = useState<number>(
+    initialData?.nptelDetails?.semesterCounted ?? (initialData?.semester ?? 5)
+  );
+  const [nptelNotes, setNptelNotes] = useState(
+    initialData?.nptelDetails?.notes || initialData?.notes || ''
+  );
 
   if (!isOpen) return null;
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (courseType === 'nptel') {
+      const title = nptelCourseName.trim();
+      if (!title) return;
+
+      const safeCourseCr = Math.max(0, Number(courseCredits) || 0);
+      const safeAcceptedCr = Math.max(0, Number(acceptedCredits) || 0);
+
+      const nptelDetails: NptelDetails = {
+        courseName: title,
+        courseIdOrUrl: nptelCourseIdOrUrl.trim(),
+        categoryTarget,
+        durationWeeks,
+        certificateStatus: certStatus,
+        courseCredits: safeCourseCr,
+        acceptedCredits: safeAcceptedCr,
+        approvalStatus,
+        semesterCounted: nptelSemesterCounted,
+        notes: nptelNotes.trim(),
+      };
+
+      onSave({
+        name: title,
+        code: nptelCourseIdOrUrl.trim().toUpperCase() || 'NPTEL',
+        category: categoryTarget,
+        semester: nptelSemesterCounted,
+        credits: safeAcceptedCr,
+        courseType: 'nptel',
+        nptelDetails,
+        grade: 'Elite',
+        notes: nptelNotes.trim(),
+      });
+    } else {
+      const title = name.trim();
+      if (!title) return;
+
+      onSave({
+        name: title,
+        code: code.trim().toUpperCase(),
+        category,
+        semester,
+        credits: Math.max(0, Number(credits) || 0),
+        grade,
+        status,
+        isVerified,
+        notes: notes.trim(),
+        courseType,
+      });
+    }
+  };
 
   return (
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 dark:bg-black/60 backdrop-blur-sm animate-appleFadeIn"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 dark:bg-black/60 backdrop-blur-sm animate-appleFadeIn overflow-y-auto"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] shadow-2xl p-6 flex flex-col gap-4 text-[var(--text-primary)] text-xs"
+        className="w-full max-w-lg my-8 rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] shadow-2xl p-6 flex flex-col gap-4 text-[var(--text-primary)] text-xs"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-[var(--border-secondary)] pb-3">
           <h3 className="text-base font-bold text-[var(--text-primary)]">
-            {initialData ? 'Edit Course Record' : 'Add New Course'}
+            {initialData
+              ? `Edit ${courseType === 'nptel' ? 'NPTEL' : 'Course'} Record`
+              : `Add New ${courseType === 'nptel' ? 'NPTEL' : 'Course'}`}
           </h3>
-          <button type="button" onClick={onClose} className="p-1 rounded-lg text-[var(--text-secondary)]">
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+          >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            onSave(formData);
-          }}
-          className="flex flex-col gap-3.5"
-        >
-          <div className="flex flex-col gap-1">
-            <label className="font-semibold text-[var(--text-primary)]">
-              Course Title <span className="text-rose-500">*</span>
-            </label>
-            <input
-              type="text"
-              required
-              placeholder="e.g. Data Structures and Algorithms"
-              value={formData.name || ''}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="apple-input h-10 text-xs"
-            />
-          </div>
+        {/* Course Type Selector */}
+        <div className="flex items-center gap-1.5 p-1 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-secondary)]">
+          <button
+            type="button"
+            onClick={() => setCourseType('regular')}
+            className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              courseType === 'regular'
+                ? 'bg-[var(--surface)] text-[var(--text-primary)] shadow-xs'
+                : 'text-[var(--text-secondary)]'
+            }`}
+          >
+            Regular Course
+          </button>
+          <button
+            type="button"
+            onClick={() => setCourseType('nptel')}
+            className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              courseType === 'nptel'
+                ? 'bg-[var(--surface)] text-emerald-600 dark:text-emerald-400 shadow-xs'
+                : 'text-[var(--text-secondary)]'
+            }`}
+          >
+            NPTEL Course
+          </button>
+          <button
+            type="button"
+            onClick={() => setCourseType('external')}
+            className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              courseType === 'external'
+                ? 'bg-[var(--surface)] text-[var(--text-primary)] shadow-xs'
+                : 'text-[var(--text-secondary)]'
+            }`}
+          >
+            Other External
+          </button>
+        </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex flex-col gap-1">
-              <label className="font-semibold text-[var(--text-primary)]">Course Code</label>
-              <input
-                type="text"
-                placeholder="e.g. 21CS201"
-                value={formData.code || ''}
-                onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
-                className="apple-input h-10 text-xs font-mono uppercase"
-              />
-            </div>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3.5">
+          {courseType === 'nptel' ? (
+            /* ================= NPTEL SPECIFIC FORM FIELDS ================= */
+            <>
+              {/* Elective Category Selector */}
+              <div className="flex flex-col gap-1">
+                <label className="font-semibold text-[var(--text-primary)] flex items-center justify-between">
+                  <span>
+                    Elective Category Mapping <span className="text-rose-500">*</span>
+                  </span>
+                  <span className="text-[10px] text-[var(--text-tertiary)] font-normal">
+                    Programme Elective (PE) or Open Elective (OE)
+                  </span>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    disabled={!nptelRules.allowProgrammeElective}
+                    onClick={() => setCategoryTarget('programme_elective')}
+                    className={`p-2.5 rounded-xl border text-xs font-semibold flex flex-col items-center gap-1 transition-all ${
+                      categoryTarget === 'programme_elective'
+                        ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300'
+                        : 'border-[var(--border-primary)] bg-[var(--surface)] text-[var(--text-secondary)]'
+                    } ${
+                      !nptelRules.allowProgrammeElective
+                        ? 'opacity-40 cursor-not-allowed'
+                        : 'cursor-pointer'
+                    }`}
+                  >
+                    <span>Programme Elective (PE)</span>
+                    <span className="text-[10px] opacity-75">Departmental Core Elective</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!nptelRules.allowOpenElective}
+                    onClick={() => setCategoryTarget('open_elective')}
+                    className={`p-2.5 rounded-xl border text-xs font-semibold flex flex-col items-center gap-1 transition-all ${
+                      categoryTarget === 'open_elective'
+                        ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300'
+                        : 'border-[var(--border-primary)] bg-[var(--surface)] text-[var(--text-secondary)]'
+                    } ${
+                      !nptelRules.allowOpenElective
+                        ? 'opacity-40 cursor-not-allowed'
+                        : 'cursor-pointer'
+                    }`}
+                  >
+                    <span>Open Elective (OE)</span>
+                    <span className="text-[10px] opacity-75">Interdisciplinary Elective</span>
+                  </button>
+                </div>
+              </div>
 
-            <div className="flex flex-col gap-1">
-              <label className="font-semibold text-[var(--text-primary)]">Course Category</label>
-              <select
-                value={formData.category || 'foundation'}
-                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                className="apple-input h-10 text-xs cursor-pointer"
-              >
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} ({c.code})
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
+              {/* Course Title */}
+              <div className="flex flex-col gap-1">
+                <label className="font-semibold text-[var(--text-primary)]">
+                  NPTEL Course Name <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Cloud Computing or Introduction to Machine Learning"
+                  value={nptelCourseName}
+                  onChange={(e) => setNptelCourseName(e.target.value)}
+                  className="apple-input h-10 text-xs"
+                />
+              </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            <div className="flex flex-col gap-1">
-              <label className="font-semibold text-[var(--text-primary)]">Credits</label>
-              <input
-                type="number"
-                min={0}
-                max={20}
-                step={0.5}
-                required
-                value={formData.credits !== undefined ? formData.credits : 3}
-                onChange={(e) => setFormData({ ...formData, credits: parseFloat(e.target.value) || 0 })}
-                className="apple-input h-10 text-xs text-center font-bold"
-              />
-            </div>
+              {/* Course ID or URL & Duration */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="font-semibold text-[var(--text-primary)]">
+                    NPTEL Course ID / URL (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. noc24-cs101 or nptel.ac.in/..."
+                    value={nptelCourseIdOrUrl}
+                    onChange={(e) => setNptelCourseIdOrUrl(e.target.value)}
+                    className="apple-input h-10 text-xs"
+                  />
+                </div>
 
-            <div className="flex flex-col gap-1">
-              <label className="font-semibold text-[var(--text-primary)]">Semester</label>
-              <select
-                value={formData.semester || 1}
-                onChange={(e) => setFormData({ ...formData, semester: parseInt(e.target.value) || 1 })}
-                className="apple-input h-10 text-xs cursor-pointer"
-              >
-                {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
-                  <option key={s} value={s}>
-                    Semester {s}
-                  </option>
-                ))}
-              </select>
-            </div>
+                <div className="flex flex-col gap-1">
+                  <label className="font-semibold text-[var(--text-primary)]">
+                    Course Duration
+                  </label>
+                  <select
+                    value={durationWeeks}
+                    onChange={(e) => setDurationWeeks(e.target.value)}
+                    className="apple-input h-10 text-xs cursor-pointer"
+                  >
+                    <option value="4 Weeks">4 Weeks</option>
+                    <option value="8 Weeks">8 Weeks</option>
+                    <option value="12 Weeks">12 Weeks</option>
+                    <option value="Self-paced">Self-paced</option>
+                  </select>
+                </div>
+              </div>
 
-            <div className="flex flex-col gap-1">
-              <label className="font-semibold text-[var(--text-primary)]">Grade</label>
-              <select
-                value={formData.grade || 'A'}
-                onChange={(e) => setFormData({ ...formData, grade: e.target.value })}
-                className="apple-input h-10 text-xs cursor-pointer font-bold"
-              >
-                {['O', 'A+', 'A', 'B+', 'B', 'C', 'D', 'RA', 'P', 'F', 'W'].map((g) => (
-                  <option key={g} value={g}>
-                    {g}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
+              {/* Advertised Credits vs Accepted Credits */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-secondary)]">
+                <div className="flex flex-col gap-1.5">
+                  <label className="font-semibold text-[var(--text-primary)] text-xs">
+                    Course Credits (Advertised)
+                  </label>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {nptelRules.allowedCreditValues.map((val) => (
+                      <button
+                        key={val}
+                        type="button"
+                        onClick={() => {
+                          setCourseCredits(val);
+                          if (acceptedCredits === 0 || acceptedCredits === courseCredits) {
+                            setAcceptedCredits(val);
+                          }
+                        }}
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+                          courseCredits === val
+                            ? 'bg-black text-white dark:bg-white dark:text-black border-transparent shadow-xs'
+                            : 'bg-[var(--surface)] border-[var(--border-primary)] text-[var(--text-secondary)]'
+                        }`}
+                      >
+                        {val} Cr
+                      </button>
+                    ))}
+                    {nptelRules.allowCustomCredits && (
+                      <input
+                        type="number"
+                        min={0}
+                        max={20}
+                        step={0.5}
+                        placeholder="Custom"
+                        value={courseCredits}
+                        onChange={(e) =>
+                          setCourseCredits(Math.max(0, parseFloat(e.target.value) || 0))
+                        }
+                        className="apple-input h-8 text-xs w-16 text-center font-bold"
+                      />
+                    )}
+                  </div>
+                  <span className="text-[10px] text-[var(--text-tertiary)]">
+                    Portal credit value
+                  </span>
+                </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex flex-col gap-1">
-              <label className="font-semibold text-[var(--text-primary)]">Result Status</label>
-              <select
-                value={formData.status || 'Passed'}
-                onChange={(e) => setFormData({ ...formData, status: e.target.value as ResultStatus })}
-                className="apple-input h-10 text-xs cursor-pointer font-semibold"
-              >
-                <option value="Passed">Passed</option>
-                <option value="Failed">Failed</option>
-                <option value="Pending">Pending</option>
-                <option value="Withdrawn">Withdrawn</option>
-                <option value="Incomplete">Incomplete</option>
-              </select>
-            </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="font-semibold text-[var(--text-primary)] text-xs">
+                    Credits Accepted by College <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={20}
+                    step={0.5}
+                    required
+                    value={acceptedCredits}
+                    onChange={(e) =>
+                      setAcceptedCredits(Math.max(0, parseFloat(e.target.value) || 0))
+                    }
+                    className="apple-input h-8 text-xs text-center font-bold text-emerald-600 dark:text-emerald-400"
+                  />
+                  <span className="text-[10px] text-[var(--text-tertiary)]">
+                    Officially transferred to degree
+                  </span>
+                </div>
+              </div>
 
-            <div className="flex items-center gap-2 pt-5">
-              <input
-                id="is-verified-chk"
-                type="checkbox"
-                checked={formData.isVerified ?? true}
-                onChange={(e) => setFormData({ ...formData, isVerified: e.target.checked })}
-                className="rounded border-[var(--border-primary)]"
-              />
-              <label htmlFor="is-verified-chk" className="font-medium cursor-pointer">
-                Verified official record
-              </label>
-            </div>
-          </div>
+              {/* Certificate Status & Approval Status */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="font-semibold text-[var(--text-primary)]">
+                    NPTEL Certificate Status
+                  </label>
+                  <select
+                    value={certStatus}
+                    onChange={(e) => setCertStatus(e.target.value as NptelCertificateStatus)}
+                    className="apple-input h-10 text-xs cursor-pointer font-medium"
+                  >
+                    <option value="not_started">Not started</option>
+                    <option value="in_progress">In progress</option>
+                    <option value="completed">Completed (Exam Passed)</option>
+                    <option value="certificate_received">Certificate received</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="font-semibold text-[var(--text-primary)]">
+                    College Verification / Approval
+                  </label>
+                  <select
+                    value={approvalStatus}
+                    onChange={(e) => setApprovalStatus(e.target.value as NptelApprovalStatus)}
+                    className={`apple-input h-10 text-xs cursor-pointer font-bold ${
+                      approvalStatus === 'approved'
+                        ? 'text-emerald-600 dark:text-emerald-400'
+                        : approvalStatus === 'submitted'
+                        ? 'text-amber-600 dark:text-amber-400'
+                        : approvalStatus === 'rejected'
+                        ? 'text-rose-600 dark:text-rose-400'
+                        : ''
+                    }`}
+                  >
+                    <option value="not_verified">Not verified</option>
+                    <option value="submitted">Submitted for approval</option>
+                    <option value="approved">Approved</option>
+                    <option value="rejected">Rejected</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Semester Counted & Notes */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="font-semibold text-[var(--text-primary)]">
+                    Semester Counted
+                  </label>
+                  <select
+                    value={nptelSemesterCounted}
+                    onChange={(e) => setNptelSemesterCounted(parseInt(e.target.value) || 1)}
+                    className="apple-input h-10 text-xs cursor-pointer"
+                  >
+                    {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
+                      <option key={s} value={s}>
+                        Semester {s}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="font-semibold text-[var(--text-primary)]">
+                    Optional Transfer Notes
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Dean letter or NOC approval"
+                    value={nptelNotes}
+                    onChange={(e) => setNptelNotes(e.target.value)}
+                    className="apple-input h-10 text-xs"
+                  />
+                </div>
+              </div>
+            </>
+          ) : (
+            /* ================= REGULAR / EXTERNAL COURSE FORM FIELDS ================= */
+            <>
+              <div className="flex flex-col gap-1">
+                <label className="font-semibold text-[var(--text-primary)]">
+                  Course Title <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Data Structures and Algorithms"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="apple-input h-10 text-xs"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="font-semibold text-[var(--text-primary)]">Course Code</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 21CS201"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value.toUpperCase())}
+                    className="apple-input h-10 text-xs font-mono uppercase"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="font-semibold text-[var(--text-primary)]">Course Category</label>
+                  <select
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    className="apple-input h-10 text-xs cursor-pointer"
+                  >
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} ({c.code})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="font-semibold text-[var(--text-primary)]">Credits</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={20}
+                    step={0.5}
+                    required
+                    value={credits}
+                    onChange={(e) => setCredits(parseFloat(e.target.value) || 0)}
+                    className="apple-input h-10 text-xs text-center font-bold"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="font-semibold text-[var(--text-primary)]">Semester</label>
+                  <select
+                    value={semester}
+                    onChange={(e) => setSemester(parseInt(e.target.value) || 1)}
+                    className="apple-input h-10 text-xs cursor-pointer"
+                  >
+                    {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
+                      <option key={s} value={s}>
+                        Semester {s}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="font-semibold text-[var(--text-primary)]">Grade</label>
+                  <select
+                    value={grade}
+                    onChange={(e) => setGrade(e.target.value)}
+                    className="apple-input h-10 text-xs cursor-pointer font-bold"
+                  >
+                    {['O', 'A+', 'A', 'B+', 'B', 'C', 'D', 'RA', 'P', 'F', 'W'].map((g) => (
+                      <option key={g} value={g}>
+                        {g}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="font-semibold text-[var(--text-primary)]">Result Status</label>
+                  <select
+                    value={status}
+                    onChange={(e) => setStatus(e.target.value as ResultStatus)}
+                    className="apple-input h-10 text-xs cursor-pointer font-semibold"
+                  >
+                    <option value="Passed">Passed</option>
+                    <option value="Failed">Failed</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Withdrawn">Withdrawn</option>
+                    <option value="Incomplete">Incomplete</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-2 pt-5">
+                  <input
+                    id="is-verified-chk"
+                    type="checkbox"
+                    checked={isVerified}
+                    onChange={(e) => setIsVerified(e.target.checked)}
+                    className="rounded border-[var(--border-primary)]"
+                  />
+                  <label htmlFor="is-verified-chk" className="font-medium cursor-pointer">
+                    Verified official record
+                  </label>
+                </div>
+
+                <div className="flex flex-col gap-1 col-span-2">
+                  <label className="font-semibold text-[var(--text-primary)]">
+                    Notes / Remarks (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Audit, lab component, exemption"
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    className="apple-input h-10 text-xs"
+                  />
+                </div>
+              </div>
+            </>
+          )}
 
           <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border-secondary)]">
-            <button type="button" onClick={onClose} className="apple-btn-secondary text-xs h-9 px-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="apple-btn-secondary text-xs h-9 px-4 cursor-pointer"
+            >
               Cancel
             </button>
-            <button type="submit" className="apple-btn-primary text-xs h-9 px-5 font-semibold">
+            <button
+              type="submit"
+              className="apple-btn-primary text-xs h-9 px-5 font-semibold cursor-pointer"
+            >
               Save Course Record
             </button>
           </div>
