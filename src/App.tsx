@@ -45,6 +45,7 @@ export function App() {
                 <Route path="/reports" element={<AcademicReportsPage />} />
                 <Route path="/catalogue" element={<Navigate to="/credits?tab=catalogue" replace />} />
                 <Route path="/profile" element={<ProfilePage />} />
+                <Route path="/ams-portal" element={<AmsConnectPage />} />
                 <Route path="/ams-connect" element={<AmsConnectPage />} />
                 <Route path="/ams" element={<AmsConnectPage />} />
                 <Route path="/ams-import" element={<AmsImportPage />} />

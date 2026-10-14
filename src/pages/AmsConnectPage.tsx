@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Shield,
   ExternalLink,
@@ -7,7 +8,6 @@ import {
   Calendar,
   CheckCircle2,
   BookOpen,
-  Award,
   Layers,
   FileText,
   User,
@@ -20,6 +20,9 @@ import {
   FileCheck,
   Building2,
   Lock,
+  LayoutDashboard,
+  Printer,
+  Sparkles,
 } from 'lucide-react';
 import { useProfile } from '../context/ProfileContext';
 import { useAppToast } from '../components/layout/AppShell';
@@ -44,14 +47,14 @@ import type { AmsExtractionResult } from '../types/ams';
 import { ResetConfirmModal } from '../components/common/ResetConfirmModal';
 
 type DashboardTab =
+  | 'dashboard'
   | 'timetable'
   | 'attendance'
   | 'internals'
-  | 'assessments'
   | 'results'
-  | 'credits'
   | 'registered'
-  | 'profile'
+  | 'credits'
+  | 'reports'
   | 'history';
 
 const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const;
@@ -60,7 +63,7 @@ export const AmsConnectPage: React.FC = () => {
   const { activeProfile, updateProfile } = useProfile();
   const { showToast } = useAppToast();
 
-  const [activeTab, setActiveTab] = useState<DashboardTab>('timetable');
+  const [activeTab, setActiveTab] = useState<DashboardTab>('dashboard');
   const [dashboardData, setDashboardData] = useState<AmsDashboardData>(() =>
     getAmsDashboardData(activeProfile.id)
   );
@@ -86,8 +89,8 @@ export const AmsConnectPage: React.FC = () => {
   // Attendance manual add modal
   const [isAddAttendanceModalOpen, setIsAddAttendanceModalOpen] = useState(false);
 
-  // Assessment sub-filter: 'test' | 'assignment' | 'lab'
-  const [assessmentCategory, setAssessmentCategory] = useState<'test' | 'assignment' | 'lab'>('test');
+  // Assessment sub-filter: 'all' | 'internal' | 'test' | 'assignment' | 'lab'
+  const [assessmentCategory, setAssessmentCategory] = useState<'all' | 'internal' | 'test' | 'assignment' | 'lab'>('all');
 
   // Semester results filter
   const [resultsSemesterFilter, setResultsSemesterFilter] = useState<string>('all');
@@ -314,6 +317,7 @@ export const AmsConnectPage: React.FC = () => {
 
   // Filtered Assessments
   const filteredAssessments = useMemo(() => {
+    if (assessmentCategory === 'all') return dashboardData.internalMarks;
     return dashboardData.internalMarks.filter((m) => m.category === assessmentCategory);
   }, [dashboardData.internalMarks, assessmentCategory]);
 
@@ -466,17 +470,63 @@ export const AmsConnectPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Module Navigation Tabs */}
+        {/* Advanced Academic Tools Secondary Toolbar */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-2xl bg-[var(--bg-tertiary)]/50 border border-[var(--border-secondary)]">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--text-secondary)]">
+            <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
+            <span>Advanced Academic Planners & Tools:</span>
+          </div>
+          <div className="flex items-center gap-1.5 flex-wrap text-xs">
+            <Link
+              to="/credits"
+              className="px-2.5 py-1 rounded-lg bg-[var(--surface)] border border-[var(--border-primary)] text-[var(--text-primary)] hover:border-indigo-500 font-medium transition-colors"
+            >
+              Credits Planner
+            </Link>
+            <Link
+              to="/credits?tab=nptel"
+              className="px-2.5 py-1 rounded-lg bg-[var(--surface)] border border-[var(--border-primary)] text-[var(--text-primary)] hover:border-indigo-500 font-medium transition-colors"
+            >
+              NPTEL Manager
+            </Link>
+            <Link
+              to="/planner"
+              className="px-2.5 py-1 rounded-lg bg-[var(--surface)] border border-[var(--border-primary)] text-[var(--text-primary)] hover:border-indigo-500 font-medium transition-colors"
+            >
+              Semester Planner
+            </Link>
+            <Link
+              to="/forecaster"
+              className="px-2.5 py-1 rounded-lg bg-[var(--surface)] border border-[var(--border-primary)] text-[var(--text-primary)] hover:border-indigo-500 font-medium transition-colors"
+            >
+              Marks Forecaster
+            </Link>
+            <Link
+              to="/reports"
+              className="px-2.5 py-1 rounded-lg bg-[var(--surface)] border border-[var(--border-primary)] text-[var(--text-primary)] hover:border-indigo-500 font-medium transition-colors"
+            >
+              Academic Reports
+            </Link>
+            <Link
+              to="/profile"
+              className="px-2.5 py-1 rounded-lg bg-[var(--surface)] border border-[var(--border-primary)] text-[var(--text-primary)] hover:border-indigo-500 font-medium transition-colors"
+            >
+              Saved Records
+            </Link>
+          </div>
+        </div>
+
+        {/* Module Navigation Tabs (9 Subsections) */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 border-b border-[var(--border-secondary)] text-xs scrollbar-none">
           {[
-            { id: 'timetable', label: 'Today\'s Timetable', icon: Calendar, badge: dashboardData.timetable.length },
-            { id: 'attendance', label: 'Daily Attendance', icon: FileCheck, badge: dashboardData.attendance.length },
-            { id: 'internals', label: 'Internal Marks', icon: BookOpen, badge: dashboardData.internalMarks.length },
-            { id: 'assessments', label: 'Test & Lab Marks', icon: Award },
+            { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+            { id: 'timetable', label: "Today's Timetable", icon: Calendar, badge: dashboardData.timetable.length },
+            { id: 'attendance', label: 'Attendance Records', icon: FileCheck, badge: dashboardData.attendance.length },
+            { id: 'internals', label: 'Internal & Assessment Marks', icon: BookOpen, badge: dashboardData.internalMarks.length },
             { id: 'results', label: 'Semester Results', icon: FileText, badge: dashboardData.semesterResults.length },
-            { id: 'credits', label: 'Credits Earned', icon: Layers },
             { id: 'registered', label: 'Registered Courses', icon: BookOpen, badge: dashboardData.registeredCourses.length },
-            { id: 'profile', label: 'Academic Profile', icon: User },
+            { id: 'credits', label: 'Credit Earned Details', icon: Layers },
+            { id: 'reports', label: 'Academic Reports', icon: Printer },
             { id: 'history', label: 'Sync History', icon: History, badge: dashboardData.syncLogs.length },
           ].map((tab) => {
             const Icon = tab.icon;
@@ -514,6 +564,218 @@ export const AmsConnectPage: React.FC = () => {
       {/* ========================================================================= */}
       {/* 2. TAB CONTENT MODULES                                                    */}
       {/* ========================================================================= */}
+
+      {/* MODULE 1: DASHBOARD */}
+      {activeTab === 'dashboard' && (
+        <div className="flex flex-col gap-6 animate-appleFadeIn">
+          {/* Quick Stats Grid */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
+            <div className="rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] p-4 sm:p-5 flex flex-col justify-between">
+              <span className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
+                Credits Progress
+              </span>
+              <div className="flex items-baseline gap-1 mt-2">
+                <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
+                  {totalCreditsEarned}
+                </span>
+                <span className="text-xs text-[var(--text-secondary)]">/ {totalCreditsRegistered} Cr</span>
+              </div>
+              <span className="text-[10px] text-[var(--text-tertiary)] mt-1">Official AMS verified</span>
+            </div>
+
+            <div className="rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] p-4 sm:p-5 flex flex-col justify-between">
+              <span className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
+                Attendance Tracks
+              </span>
+              <div className="flex items-baseline gap-1 mt-2">
+                <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400">
+                  {dashboardData.attendance.length}
+                </span>
+                <span className="text-xs text-[var(--text-secondary)]">Subjects</span>
+              </div>
+              <span className="text-[10px] text-[var(--text-tertiary)] mt-1">Active attendance monitoring</span>
+            </div>
+
+            <div className="rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] p-4 sm:p-5 flex flex-col justify-between">
+              <span className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
+                Today's Classes
+              </span>
+              <div className="flex items-baseline gap-1 mt-2">
+                <span className="text-2xl font-black text-[var(--text-primary)]">
+                  {todayClasses.length}
+                </span>
+                <span className="text-xs text-[var(--text-secondary)]">Periods ({selectedDay.slice(0, 3)})</span>
+              </div>
+              <span className="text-[10px] text-[var(--text-tertiary)] mt-1">From schedule calendar</span>
+            </div>
+
+            <div className="rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] p-4 sm:p-5 flex flex-col justify-between">
+              <span className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
+                Semester Results
+              </span>
+              <div className="flex items-baseline gap-1 mt-2">
+                <span className="text-2xl font-black text-purple-600 dark:text-purple-400">
+                  {dashboardData.semesterResults.length}
+                </span>
+                <span className="text-xs text-[var(--text-secondary)]">Courses Logged</span>
+              </div>
+              <span className="text-[10px] text-[var(--text-tertiary)] mt-1">Official grade records</span>
+            </div>
+          </div>
+
+          {/* Student Academic Profile Header Card */}
+          <div className="rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] p-5 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 rounded-xl bg-indigo-50 dark:bg-indigo-950 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold shrink-0">
+                <User className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-[var(--text-primary)]">
+                  {dashboardData.academicProfile.studentName || activeProfile.name}
+                </h3>
+                <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)] flex-wrap">
+                  <span>{dashboardData.academicProfile.registerNumber || activeProfile.rollNumber || 'ID Not Linked'}</span>
+                  <span>•</span>
+                  <span>{dashboardData.academicProfile.degree || activeProfile.degree || 'B.Tech'} - {dashboardData.academicProfile.department || activeProfile.department || 'CSE'}</span>
+                  <span>•</span>
+                  <span className="font-mono font-semibold text-indigo-600 dark:text-indigo-400">
+                    {dashboardData.academicProfile.regulation || activeProfile.regulation || 'VTR21'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsImportModalOpen(true)}
+                className="apple-btn-primary text-xs h-8 px-3.5 gap-1.5 font-semibold cursor-pointer"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span>Import Statement</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Two-Column Grid: Today's Schedule & Quick Academic Shortcuts */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            {/* Today's Timetable Widget */}
+            <div className="rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] p-5 flex flex-col gap-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                  <h4 className="text-sm font-bold text-[var(--text-primary)]">Today's Timetable ({selectedDay})</h4>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('timetable')}
+                  className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                >
+                  View Full Schedule →
+                </button>
+              </div>
+
+              {todayClasses.length === 0 ? (
+                <div className="py-8 text-center flex flex-col items-center justify-center gap-2">
+                  <Calendar className="w-8 h-8 text-[var(--text-tertiary)] stroke-1" />
+                  <p className="text-xs text-[var(--text-secondary)]">No classes scheduled for today ({selectedDay}).</p>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('timetable')}
+                    className="apple-btn-secondary text-xs h-7 px-3 mt-1 cursor-pointer"
+                  >
+                    Open Timetable Planner
+                  </button>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {todayClasses.slice(0, 3).map((cls) => (
+                    <div
+                      key={cls.id}
+                      className="p-3 rounded-xl bg-[var(--bg-tertiary)]/50 border border-[var(--border-secondary)] flex items-center justify-between text-xs"
+                    >
+                      <div className="flex flex-col">
+                        <span className="font-bold text-[var(--text-primary)]">{cls.subjectName}</span>
+                        <span className="text-[11px] text-[var(--text-secondary)]">
+                          {cls.room ? `Room ${cls.room}` : 'Assigned Class'} • {cls.faculty || 'Staff'}
+                        </span>
+                      </div>
+                      <span className="font-mono text-[11px] font-semibold text-indigo-600 dark:text-indigo-400">
+                        {cls.startTime} - {cls.endTime}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Attendance & Results Quick Status */}
+            <div className="rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] p-5 flex flex-col gap-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FileCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  <h4 className="text-sm font-bold text-[var(--text-primary)]">Attendance & Results Snapshot</h4>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('attendance')}
+                  className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                >
+                  View Details →
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3.5 rounded-xl bg-[var(--bg-tertiary)]/50 border border-[var(--border-secondary)] flex flex-col gap-1">
+                  <span className="text-[11px] font-medium text-[var(--text-secondary)]">Tracked Attendance</span>
+                  <span className="text-lg font-bold text-[var(--text-primary)]">
+                    {dashboardData.attendance.length > 0 ? `${dashboardData.attendance.length} Subjects` : 'None logged'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('attendance')}
+                    className="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold text-left hover:underline mt-1 cursor-pointer"
+                  >
+                    Manage attendance →
+                  </button>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-[var(--bg-tertiary)]/50 border border-[var(--border-secondary)] flex flex-col gap-1">
+                  <span className="text-[11px] font-medium text-[var(--text-secondary)]">Semester Results</span>
+                  <span className="text-lg font-bold text-[var(--text-primary)]">
+                    {dashboardData.semesterResults.length > 0 ? `${dashboardData.semesterResults.length} Courses` : 'None imported'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('results')}
+                    className="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold text-left hover:underline mt-1 cursor-pointer"
+                  >
+                    View Grade card →
+                  </button>
+                </div>
+              </div>
+
+              {/* Quick Actions Bar */}
+              <div className="pt-2 border-t border-[var(--border-secondary)] flex items-center justify-between flex-wrap gap-2 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('reports')}
+                  className="text-indigo-600 dark:text-indigo-400 font-semibold hover:underline flex items-center gap-1 cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>Generate Academic Report</span>
+                </button>
+                <Link
+                  to="/credits"
+                  className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] font-medium flex items-center gap-1"
+                >
+                  <span>Open Credits Planner →</span>
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODULE 1: TIMETABLE */}
       {activeTab === 'timetable' && (
@@ -694,23 +956,51 @@ export const AmsConnectPage: React.FC = () => {
         </div>
       )}
 
-      {/* MODULE 3: INTERNAL MARKS */}
+      {/* MODULE 4: INTERNAL AND ASSESSMENT MARKS */}
       {activeTab === 'internals' && (
         <div className="flex flex-col gap-4 animate-appleFadeIn">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-[var(--text-primary)]">
-              Internal Assessment Marks (IA 1, IA 2, Model Exams)
-            </h3>
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-1.5 p-1 rounded-xl bg-[var(--surface)] border border-[var(--border-primary)] shadow-xs overflow-x-auto scrollbar-none">
+              {[
+                { id: 'all', label: 'All Marks' },
+                { id: 'internal', label: 'Internal Assessments' },
+                { id: 'test', label: 'Cycle Tests' },
+                { id: 'assignment', label: 'Assignments' },
+                { id: 'lab', label: 'Lab Practicals' },
+              ].map((cat) => (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => setAssessmentCategory(cat.id as any)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+                    assessmentCategory === cat.id
+                      ? 'bg-black text-white dark:bg-white dark:text-black shadow-xs'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                  }`}
+                >
+                  {cat.label}
+                </button>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsImportModalOpen(true)}
+              className="apple-btn-secondary text-xs h-8 px-3 gap-1.5 font-semibold cursor-pointer"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              <span>Import Marks</span>
+            </button>
           </div>
 
-          {dashboardData.internalMarks.length === 0 ? (
+          {filteredAssessments.length === 0 ? (
             <div className="rounded-3xl bg-[var(--surface)] border border-[var(--border-primary)] p-12 text-center flex flex-col items-center justify-center gap-3">
               <BookOpen className="w-10 h-10 text-[var(--text-tertiary)] stroke-1" />
               <h3 className="text-sm font-semibold text-[var(--text-primary)]">
-                No Internal Marks Recorded
+                No Assessment Marks Recorded
               </h3>
               <p className="text-xs text-[var(--text-secondary)] max-w-sm">
-                Internal marks published on the AMS portal will appear here once synchronized or imported.
+                Internal marks, cycle test scores, assignments, and lab records will appear here once imported.
               </p>
               <button
                 type="button"
@@ -722,82 +1012,35 @@ export const AmsConnectPage: React.FC = () => {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-              {dashboardData.internalMarks.map((item) => (
+              {filteredAssessments.map((item) => (
                 <div
                   key={item.id}
                   className="rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] p-4 shadow-xs flex flex-col justify-between gap-3"
                 >
                   <div className="flex flex-col gap-1">
-                    <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wide">
-                      {item.assessmentType}
-                    </span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wide">
+                        {item.assessmentType}
+                      </span>
+                      {item.courseCode && supportsCode && (
+                        <span className="font-mono text-[10px] text-[var(--text-tertiary)]">
+                          {item.courseCode}
+                        </span>
+                      )}
+                    </div>
                     <h4 className="text-sm font-bold text-[var(--text-primary)]">
                       {item.subjectName}
                     </h4>
                   </div>
                   <div className="flex items-center justify-between pt-2 border-t border-[var(--border-secondary)]">
                     <span className="text-xs text-[var(--text-secondary)]">Score</span>
-                    <span className="text-sm font-extrabold text-[var(--text-primary)]">
-                      {item.marksObtained} / {item.maxMarks}
-                    </span>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-base font-extrabold text-[var(--text-primary)]">
+                        {item.marksObtained}
+                      </span>
+                      <span className="text-xs text-[var(--text-secondary)]">/ {item.maxMarks}</span>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* MODULE 4: TEST & LAB MARKS */}
-      {activeTab === 'assessments' && (
-        <div className="flex flex-col gap-4 animate-appleFadeIn">
-          <div className="flex items-center gap-1.5 p-1 rounded-xl bg-[var(--surface)] border border-[var(--border-primary)] shadow-xs w-fit">
-            {[
-              { id: 'test', label: 'Cycle Tests' },
-              { id: 'assignment', label: 'Assignments' },
-              { id: 'lab', label: 'Lab Practicals' },
-            ].map((cat) => (
-              <button
-                key={cat.id}
-                type="button"
-                onClick={() => setAssessmentCategory(cat.id as any)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  assessmentCategory === cat.id
-                    ? 'bg-black text-white dark:bg-white dark:text-black shadow-xs'
-                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                }`}
-              >
-                {cat.label}
-              </button>
-            ))}
-          </div>
-
-          {filteredAssessments.length === 0 ? (
-            <div className="rounded-3xl bg-[var(--surface)] border border-[var(--border-primary)] p-12 text-center flex flex-col items-center justify-center gap-3">
-              <Award className="w-10 h-10 text-[var(--text-tertiary)] stroke-1" />
-              <h3 className="text-sm font-semibold text-[var(--text-primary)]">
-                No {assessmentCategory} records found
-              </h3>
-              <p className="text-xs text-[var(--text-secondary)] max-w-sm">
-                Specific component marks appear here when uploaded or extracted from official marks statements.
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-              {filteredAssessments.map((item) => (
-                <div
-                  key={item.id}
-                  className="rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] p-4 flex items-center justify-between"
-                >
-                  <div className="flex flex-col">
-                    <span className="font-semibold text-xs text-[var(--text-primary)]">
-                      {item.subjectName}
-                    </span>
-                    <span className="text-[10px] text-[var(--text-secondary)]">{item.assessmentType}</span>
-                  </div>
-                  <span className="text-sm font-bold text-[var(--text-primary)]">
-                    {item.marksObtained} / {item.maxMarks}
-                  </span>
                 </div>
               ))}
             </div>
@@ -1003,64 +1246,90 @@ export const AmsConnectPage: React.FC = () => {
         </div>
       )}
 
-      {/* MODULE 8: ACADEMIC PROFILE */}
-      {activeTab === 'profile' && (
-        <div className="rounded-3xl bg-[var(--surface)] border border-[var(--border-primary)] p-6 sm:p-8 flex flex-col gap-6 animate-appleFadeIn">
-          <div className="flex items-center justify-between pb-4 border-b border-[var(--border-secondary)]">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-lg">
-                <User className="w-6 h-6" />
-              </div>
-              <div className="flex flex-col">
-                <h3 className="text-base font-bold text-[var(--text-primary)]">
-                  {dashboardData.academicProfile.studentName || activeProfile.name}
+      {/* MODULE 8: ACADEMIC REPORTS */}
+      {activeTab === 'reports' && (
+        <div className="flex flex-col gap-5 animate-appleFadeIn">
+          <div className="rounded-3xl bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-950/30 dark:to-purple-950/30 border border-indigo-200/60 dark:border-indigo-800/60 p-6 sm:p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+            <div className="flex flex-col gap-2 max-w-xl">
+              <div className="flex items-center gap-2">
+                <Printer className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                <h3 className="text-base sm:text-lg font-bold text-[var(--text-primary)]">
+                  Official Academic Reports & Print Hub
                 </h3>
-                <span className="text-xs text-[var(--text-secondary)]">
-                  {dashboardData.academicProfile.registerNumber ||
-                    activeProfile.rollNumber ||
-                    'ID Not Linked'}
-                </span>
               </div>
+              <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+                Generate clean, printer-ready institutional academic summaries, grade sheets, attendance compliance
+                records, and credit audit statements formatted specifically for university submissions.
+              </p>
             </div>
+            <Link
+              to="/reports"
+              className="apple-btn-primary h-10 px-5 gap-2 text-xs font-bold shadow-md shrink-0 cursor-pointer"
+            >
+              <Printer className="w-4 h-4" />
+              <span>Open Full Reports Center</span>
+            </Link>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-xs">
-            <div className="flex flex-col gap-1 p-3.5 rounded-xl bg-[var(--bg-tertiary)]/50 border border-[var(--border-secondary)]">
-              <span className="text-[var(--text-secondary)] font-medium">Institution</span>
-              <span className="font-bold text-[var(--text-primary)]">Vel Tech</span>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] p-5 flex flex-col justify-between gap-3 shadow-xs">
+              <div className="flex flex-col gap-1.5">
+                <span className="font-bold text-xs text-[var(--text-primary)]">Full Academic Statement</span>
+                <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
+                  Unified transcript covering attendance, internal marks, semester SGPA/CGPA, and credit progress.
+                </p>
+              </div>
+              <Link
+                to="/reports"
+                className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <span>View & Print</span> →
+              </Link>
             </div>
-            <div className="flex flex-col gap-1 p-3.5 rounded-xl bg-[var(--bg-tertiary)]/50 border border-[var(--border-secondary)]">
-              <span className="text-[var(--text-secondary)] font-medium">Degree</span>
-              <span className="font-bold text-[var(--text-primary)]">
-                {dashboardData.academicProfile.degree || activeProfile.degree || 'B.Tech'}
-              </span>
+
+            <div className="rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] p-5 flex flex-col justify-between gap-3 shadow-xs">
+              <div className="flex flex-col gap-1.5">
+                <span className="font-bold text-xs text-[var(--text-primary)]">Attendance Audit Sheet</span>
+                <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
+                  Per-subject official session counts, present sessions, percentage, and 75% exam eligibility verification.
+                </p>
+              </div>
+              <Link
+                to="/reports"
+                className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <span>View & Print</span> →
+              </Link>
             </div>
-            <div className="flex flex-col gap-1 p-3.5 rounded-xl bg-[var(--bg-tertiary)]/50 border border-[var(--border-secondary)]">
-              <span className="text-[var(--text-secondary)] font-medium">Department</span>
-              <span className="font-bold text-[var(--text-primary)]">
-                {dashboardData.academicProfile.department || activeProfile.department || 'CSE'}
-              </span>
+
+            <div className="rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] p-5 flex flex-col justify-between gap-3 shadow-xs">
+              <div className="flex flex-col gap-1.5">
+                <span className="font-bold text-xs text-[var(--text-primary)]">Credit Audit Statement</span>
+                <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
+                  Category-by-category breakdown of required vs earned credits (Foundation, Core, PE, OE, etc.).
+                </p>
+              </div>
+              <Link
+                to="/reports"
+                className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <span>View & Print</span> →
+              </Link>
             </div>
-            <div className="flex flex-col gap-1 p-3.5 rounded-xl bg-[var(--bg-tertiary)]/50 border border-[var(--border-secondary)]">
-              <span className="text-[var(--text-secondary)] font-medium">Regulation</span>
-              <span className="font-bold text-[var(--text-primary)] font-mono">
-                {dashboardData.academicProfile.regulation || activeProfile.regulation || 'VTR21'}
-              </span>
-            </div>
-            <div className="flex flex-col gap-1 p-3.5 rounded-xl bg-[var(--bg-tertiary)]/50 border border-[var(--border-secondary)]">
-              <span className="text-[var(--text-secondary)] font-medium">Batch / Year</span>
-              <span className="font-bold text-[var(--text-primary)]">
-                {dashboardData.academicProfile.batch || activeProfile.academicYear || '2024-2025'}
-              </span>
-            </div>
-            <div className="flex flex-col gap-1 p-3.5 rounded-xl bg-[var(--bg-tertiary)]/50 border border-[var(--border-secondary)]">
-              <span className="text-[var(--text-secondary)] font-medium">Current Semester</span>
-              <span className="font-bold text-[var(--text-primary)]">
-                Semester{' '}
-                {dashboardData.academicProfile.currentSemester ||
-                  activeProfile.currentSemester ||
-                  1}
-              </span>
+
+            <div className="rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] p-5 flex flex-col justify-between gap-3 shadow-xs">
+              <div className="flex flex-col gap-1.5">
+                <span className="font-bold text-xs text-[var(--text-primary)]">Internal Marks Summary</span>
+                <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
+                  Verified scores across Cycle Tests, Assignments, Model Exams, and Laboratory evaluations.
+                </p>
+              </div>
+              <Link
+                to="/reports"
+                className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <span>View & Print</span> →
+              </Link>
             </div>
           </div>
         </div>
