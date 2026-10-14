@@ -261,3 +261,53 @@ export function reconcileAmsWithCredits(
   safeSetItem(key, JSON.stringify(existing));
   return { added, updated, skipped };
 }
+
+/**
+ * Copies imported AMS subject attendance to the manual Attendance Calculator
+ * without duplicating existing subjects.
+ */
+export function applyAmsToAttendance(profileId: string): { added: number; updated: number } {
+  const ams = getAmsDashboardData(profileId);
+  if (!ams.attendance || ams.attendance.length === 0) {
+    return { added: 0, updated: 0 };
+  }
+
+  const key = `academic_attendance_subjects_${profileId}`;
+  const raw = safeGetItem(key);
+  const existing: any[] = raw ? JSON.parse(raw) : [];
+
+  let added = 0;
+  let updated = 0;
+
+  for (const item of ams.attendance) {
+    const cleanName = sanitizeCourseTitle(item.subjectName);
+    const idx = existing.findIndex((e) => e.name.toLowerCase() === cleanName.toLowerCase());
+
+    if (idx >= 0) {
+      existing[idx] = {
+        ...existing[idx],
+        conducted: item.officialTotalSessions,
+        attended: item.presentSessions,
+        code: item.courseCode || existing[idx].code,
+        source: 'Official AMS (Synced)',
+        isVerified: true,
+      };
+      updated++;
+    } else {
+      existing.push({
+        id: `att-ams-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        name: cleanName,
+        code: item.courseCode,
+        conducted: item.officialTotalSessions,
+        attended: item.presentSessions,
+        source: 'Official AMS (Synced)',
+        isVerified: true,
+      });
+      added++;
+    }
+  }
+
+  safeSetItem(key, JSON.stringify(existing));
+  return { added, updated };
+}
+

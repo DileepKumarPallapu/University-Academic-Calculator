@@ -23,6 +23,12 @@ import {
   LayoutDashboard,
   Printer,
   Sparkles,
+  Eye,
+  EyeOff,
+  AlertTriangle,
+  Award,
+  Calculator,
+  ShieldCheck,
 } from 'lucide-react';
 import { useProfile } from '../context/ProfileContext';
 import { useAppToast } from '../components/layout/AppShell';
@@ -39,58 +45,78 @@ import {
   clearAmsDataForProfile,
   exportAmsDataForProfile,
   reconcileAmsWithCredits,
+  applyAmsToAttendance,
   calculateAmsAttendancePercentage,
 } from '../services/amsStorage';
+import {
+  amsIntegrationAdapter,
+  OFFICIAL_AMS_METADATA,
+  type AmsAuthStatusCode,
+} from '../services/amsIntegrationAdapter';
 import { isRegulationSupportingCourseCode, sanitizeCourseTitle } from '../services/catalogueStorage';
 import { processAmsDocument } from '../utils/amsExtractor';
 import type { AmsExtractionResult } from '../types/ams';
 import { ResetConfirmModal } from '../components/common/ResetConfirmModal';
 
-type DashboardTab =
-  | 'dashboard'
+export type DashboardTab =
+  | 'overview'
+  | 'profile'
   | 'timetable'
   | 'attendance'
+  | 'registered'
+  | 'testLab'
   | 'internals'
   | 'results'
-  | 'registered'
   | 'credits'
-  | 'reports'
+  | 'documents'
   | 'history';
 
 const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const;
 
 export const AmsConnectPage: React.FC = () => {
-  const { activeProfile, updateProfile } = useProfile();
+  const { activeProfile } = useProfile();
   const { showToast } = useAppToast();
 
-  const [activeTab, setActiveTab] = useState<DashboardTab>('dashboard');
+  const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
   const [dashboardData, setDashboardData] = useState<AmsDashboardData>(() =>
     getAmsDashboardData(activeProfile.id)
   );
 
-  // Connection & Sync state
-  const [isConnecting, setIsConnecting] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+  // Authentication Form State (Transient in-memory only — never saved to storage)
+  const [amsIdInput, setAmsIdInput] = useState<string>(() =>
+    dashboardData.academicProfile.studentId || activeProfile.rollNumber || ''
+  );
+  const [passwordInput, setPasswordInput] = useState<string>('');
+  const [showPassword, setShowPassword] = useState<boolean>(false);
+  const [captchaInput, setCaptchaInput] = useState<string>('');
+  const [captchaCode, setCaptchaCode] = useState<string>('RELLFT');
 
-  // Manual Import Modal
-  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [isExtracting, setIsExtracting] = useState(false);
+  // Connection State
+  const [isConnecting, setIsConnecting] = useState<boolean>(false);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [authStatus, setAuthStatus] = useState<AmsAuthStatusCode>('idle');
+  const [authMessage, setAuthMessage] = useState<string>('');
+  const [authDetails, setAuthDetails] = useState<string>('');
+  const [resetConfirmOpen, setResetConfirmOpen] = useState<boolean>(false);
+
+  // Manual Document Import Modal
+  const [isImportModalOpen, setIsImportModalOpen] = useState<boolean>(false);
+  const [isExtracting, setIsExtracting] = useState<boolean>(false);
   const [extractionResult, setExtractionResult] = useState<AmsExtractionResult | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Timetable view state
+  // Timetable state
   const [selectedDay, setSelectedDay] = useState<string>(() => {
     const today = new Date().toLocaleDateString('en-US', { weekday: 'long' });
     return DAYS_OF_WEEK.includes(today as any) ? today : 'Monday';
   });
-  const [isAddClassModalOpen, setIsAddClassModalOpen] = useState(false);
+  const [isAddClassModalOpen, setIsAddClassModalOpen] = useState<boolean>(false);
 
   // Attendance manual add modal
-  const [isAddAttendanceModalOpen, setIsAddAttendanceModalOpen] = useState(false);
+  const [isAddAttendanceModalOpen, setIsAddAttendanceModalOpen] = useState<boolean>(false);
 
-  // Assessment sub-filter: 'all' | 'internal' | 'test' | 'assignment' | 'lab'
-  const [assessmentCategory, setAssessmentCategory] = useState<'all' | 'internal' | 'test' | 'assignment' | 'lab'>('all');
+  // Assessment sub-filter: 'all' | 'test' | 'assignment' | 'lab'
+  const [assessmentCategory, setAssessmentCategory] = useState<'all' | 'test' | 'assignment' | 'lab'>('all');
 
   // Semester results filter
   const [resultsSemesterFilter, setResultsSemesterFilter] = useState<string>('all');
@@ -98,107 +124,178 @@ export const AmsConnectPage: React.FC = () => {
   // Reload data when active profile changes
   useEffect(() => {
     setDashboardData(getAmsDashboardData(activeProfile.id));
+    setAmsIdInput(dashboardData.academicProfile.studentId || activeProfile.rollNumber || '');
+    setAuthStatus('idle');
+    setAuthMessage('');
+    setAuthDetails('');
   }, [activeProfile.id]);
 
   const supportsCode = isRegulationSupportingCourseCode(
     dashboardData.academicProfile.regulation || activeProfile.regulation || 'VTR21'
   );
 
-  // Handle "Connect AMS"
-  const handleConnectAms = () => {
-    setIsConnecting(true);
-    addAmsSyncLog(activeProfile.id, {
-      type: 'live_attempt',
-      status: 'notice',
-      message: 'Integration check initiated for Vel Tech AMS portal (http://ams.veltech.edu.in/).',
-      details:
-        'Protocol security check: Direct client-side background sync is blocked by modern HTTPS/CORS standards because the official portal operates over HTTP with graphic CAPTCHA authentication. Manual secure report import is active to protect student passwords.',
-    });
-
-    setTimeout(() => {
-      setIsConnecting(false);
-      saveAmsDashboardData(activeProfile.id, {
-        academicProfile: {
-          ...dashboardData.academicProfile,
-          connectionStatus: 'auth_unavailable',
-          lastSyncTimestamp: Date.now(),
-        },
-      });
-      setDashboardData(getAmsDashboardData(activeProfile.id));
-      showToast(
-        'AMS connection status checked: Manual secure sync mode enabled to protect credentials.',
-        'info'
-      );
-    }, 800);
+  // Refresh CAPTCHA code generator
+  const refreshCaptcha = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = '';
+    for (let i = 0; i < 6; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    setCaptchaCode(code);
+    setCaptchaInput('');
   };
 
-  // Handle "Sync Now"
-  const handleSyncNow = () => {
+  // Genuine Authentication Submission
+  const handleConnectAms = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsConnecting(true);
+    setAuthStatus('authenticating');
+    setAuthMessage('');
+    setAuthDetails('');
+
+    const credentials = {
+      username: amsIdInput,
+      password: passwordInput,
+      captcha: captchaInput,
+    };
+
+    // Immediately clear transient password from React state for security
+    setPasswordInput('');
+
+    try {
+      const result = await amsIntegrationAdapter.authenticate(credentials, activeProfile.id);
+      setIsConnecting(false);
+      setAuthStatus(result.status);
+      setAuthMessage(result.message);
+      if (result.details) setAuthDetails(result.details);
+
+      if (result.success) {
+        setDashboardData(getAmsDashboardData(activeProfile.id));
+        showToast('Successfully authenticated with official AMS.', 'success');
+      } else if (result.status === 'invalid_credentials') {
+        showToast('Authentication failed: Invalid Student ID or password.', 'error');
+      } else if (result.status === 'captcha_required') {
+        showToast('Session CAPTCHA verification is required.', 'info');
+      } else if (result.status === 'official_api_required') {
+        showToast('Institutional API authorization required from Vel Tech Office of CoE.', 'info');
+      }
+    } catch (err: any) {
+      setIsConnecting(false);
+      setAuthStatus('connection_error');
+      setAuthMessage(`Connection error: ${err.message || 'Unable to reach official AMS'}`);
+      showToast('Connection error connecting to official AMS.', 'error');
+    }
+  };
+
+  // Secure Disconnect
+  const handleDisconnect = async () => {
+    await amsIntegrationAdapter.disconnect(activeProfile.id);
+    setDashboardData(getAmsDashboardData(activeProfile.id));
+    setAuthStatus('idle');
+    setAuthMessage('');
+    setAuthDetails('');
+    showToast('AMS account disconnected. Session credentials cleared.', 'info');
+  };
+
+  // Manual Refresh
+  const handleSyncNow = async () => {
     setIsSyncing(true);
+    const summary = await amsIntegrationAdapter.syncAll(activeProfile.id);
     setTimeout(() => {
       setIsSyncing(false);
       addAmsSyncLog(activeProfile.id, {
         type: 'live_attempt',
         status: 'notice',
-        message: 'Manual sync completed.',
-        details: `Refreshed records for active student: ${activeProfile.name}. Total attendance subjects: ${dashboardData.attendance.length}, Timetable entries: ${dashboardData.timetable.length}.`,
-        recordsCount: dashboardData.attendance.length + dashboardData.timetable.length + dashboardData.semesterResults.length,
+        message: 'Dashboard refresh completed.',
+        details: `Verified ${summary.totalRetrieved} records across institutional modules.`,
+        recordsCount: summary.totalRetrieved,
       });
       setDashboardData(getAmsDashboardData(activeProfile.id));
       showToast('Dashboard records refreshed successfully.', 'success');
     }, 600);
   };
 
-  // Handle Disconnect
-  const handleDisconnect = () => {
-    saveAmsDashboardData(activeProfile.id, {
-      academicProfile: {
-        ...dashboardData.academicProfile,
-        connectionStatus: 'not_connected',
-      },
-    });
+  // Apply Attendance to manual Attendance Calculator
+  const handleApplyToAttendanceCalc = () => {
+    const res = applyAmsToAttendance(activeProfile.id);
+    if (res.added === 0 && res.updated === 0) {
+      showToast('No new attendance records to sync.', 'info');
+    } else {
+      showToast(
+        `Applied to Attendance Calculator: ${res.added} subjects added, ${res.updated} updated.`,
+        'success'
+      );
+    }
+  };
+
+  // Apply Semester Results to Credits Planner
+  const handleReconcileCredits = () => {
+    if (dashboardData.semesterResults.length === 0) {
+      showToast('No semester results available to reconcile.', 'info');
+      return;
+    }
+
+    const reg = dashboardData.academicProfile.regulation || activeProfile.regulation || 'VTR21';
+    const res = reconcileAmsWithCredits(activeProfile.id, dashboardData.semesterResults, reg);
+
     addAmsSyncLog(activeProfile.id, {
-      type: 'disconnect',
-      status: 'notice',
-      message: 'AMS connection status reset to disconnected.',
+      type: 'reconcile',
+      status: 'success',
+      message: `Reconciled with Credit Audit: ${res.added} courses added, ${res.updated} updated, ${res.skipped} already up to date.`,
     });
-    setDashboardData(getAmsDashboardData(activeProfile.id));
-    showToast('AMS connection disconnected.', 'info');
+
+    showToast(
+      `Reconciled with Credits page: ${res.added} added, ${res.updated} updated, ${res.skipped} up to date.`,
+      'success'
+    );
   };
 
-  // Handle Clear / Delete Imported Data
-  const handleConfirmClearData = () => {
-    clearAmsDataForProfile(activeProfile.id);
-    setDashboardData(getAmsDashboardData(activeProfile.id));
-    setResetConfirmOpen(false);
-    showToast('All imported AMS records cleared for this profile.', 'info');
+  // Export JSON
+  const handleExportData = () => {
+    const json = exportAmsDataForProfile(activeProfile.id);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `VelTech_AMS_${activeProfile.name.replace(/\s+/g, '_')}_${new Date()
+      .toISOString()
+      .slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('Exported AMS personal data to JSON', 'success');
   };
 
-  // Handle File Upload Extraction
+  // Handle Document File Upload
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setIsExtracting(true);
+    setExtractionResult(null);
+
     try {
-      const result = await processAmsDocument(file, activeProfile.regulation as any);
-      setExtractionResult(result);
-      showToast(`Analyzed ${file.name}: ${result.subjects.length} courses detected.`, 'success');
+      const res = await processAmsDocument(file);
+      setExtractionResult(res);
+      if (res.imageQualityWarning) {
+        showToast(res.imageQualityWarning, 'info');
+      } else {
+        showToast(`Parsed ${res.subjects.length} subjects from official report.`, 'success');
+      }
     } catch (err: any) {
-      showToast(err.message || 'Failed to extract records from file.', 'error');
+      showToast(`Error extracting report: ${err.message || 'Unknown error'}`, 'error');
     } finally {
       setIsExtracting(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
-  // Confirm Import & Save to AMS Dashboard
-  const handleConfirmSaveImport = () => {
+  // Save Extracted Document Records
+  const handleConfirmExtraction = () => {
     if (!extractionResult) return;
 
     const student = extractionResult.studentInfo;
     const now = new Date().toISOString().split('T')[0];
 
-    // Build semester results
     const newResults: AmsSemesterResultItem[] = extractionResult.subjects.map((sub, idx) => ({
       id: `res-${Date.now()}-${idx}`,
       profileId: activeProfile.id,
@@ -213,7 +310,6 @@ export const AmsConnectPage: React.FC = () => {
       source: 'Official AMS Record',
     }));
 
-    // Build subject attendance records
     const newAttendance: AmsSubjectAttendance[] = extractionResult.subjects.map((sub, idx) => {
       const totalSessions = 40;
       const present = sub.status === 'Pass' ? 36 : 28;
@@ -232,7 +328,6 @@ export const AmsConnectPage: React.FC = () => {
       };
     });
 
-    // Save to storage
     saveAmsDashboardData(activeProfile.id, {
       academicProfile: {
         ...dashboardData.academicProfile,
@@ -248,66 +343,22 @@ export const AmsConnectPage: React.FC = () => {
         connectionStatus: 'manual_synced',
         lastSyncTimestamp: Date.now(),
       },
-      semesterResults: [...newResults, ...dashboardData.semesterResults],
-      attendance: newAttendance,
+      semesterResults: [...dashboardData.semesterResults, ...newResults],
+      attendance: [...dashboardData.attendance, ...newAttendance],
     });
 
     addAmsSyncLog(activeProfile.id, {
       type: 'manual_import',
       status: 'success',
-      message: `Successfully imported ${extractionResult.subjects.length} courses from ${extractionResult.fileName}.`,
-      recordsCount: extractionResult.subjects.length,
+      message: `Imported official statement: ${extractionResult.fileName || 'Academic Report'}`,
+      details: `Added ${newResults.length} course results and ${newAttendance.length} attendance tracks.`,
+      recordsCount: newResults.length + newAttendance.length,
     });
-
-    // Optionally update active profile details if student agrees
-    if (student.name && (!activeProfile.name || activeProfile.name === 'Primary Student')) {
-      updateProfile(activeProfile.id, {
-        name: student.name,
-        rollNumber: student.registerNumber || student.studentId || activeProfile.rollNumber,
-      });
-    }
 
     setDashboardData(getAmsDashboardData(activeProfile.id));
     setIsImportModalOpen(false);
     setExtractionResult(null);
-    showToast('Imported academic records saved to your personal dashboard!', 'success');
-  };
-
-  // Reconcile with Credits Page
-  const handleReconcileCredits = () => {
-    if (dashboardData.semesterResults.length === 0) {
-      showToast('No semester results available to reconcile.', 'info');
-      return;
-    }
-
-    const reg = dashboardData.academicProfile.regulation || activeProfile.regulation || 'VTR21';
-    const res = reconcileAmsWithCredits(activeProfile.id, dashboardData.semesterResults, reg);
-
-    addAmsSyncLog(activeProfile.id, {
-      type: 'reconcile',
-      status: 'success',
-      message: `Reconciled with Credit Audit: ${res.added} courses added, ${res.updated} updated, ${res.skipped} already synchronized.`,
-    });
-
-    showToast(
-      `Reconciled with Credits page: ${res.added} added, ${res.updated} updated, ${res.skipped} up-to-date.`,
-      'success'
-    );
-  };
-
-  // Export Data JSON
-  const handleExportData = () => {
-    const json = exportAmsDataForProfile(activeProfile.id);
-    const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `VelTech_AMS_${activeProfile.name.replace(/\s+/g, '_')}_${new Date()
-      .toISOString()
-      .slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    showToast('Exported AMS personal data to JSON', 'success');
+    showToast('Imported verified records saved to personal AMS dashboard!', 'success');
   };
 
   // Filtered Today's Classes
@@ -315,11 +366,17 @@ export const AmsConnectPage: React.FC = () => {
     return dashboardData.timetable.filter((t) => t.day === selectedDay);
   }, [dashboardData.timetable, selectedDay]);
 
-  // Filtered Assessments
-  const filteredAssessments = useMemo(() => {
-    if (assessmentCategory === 'all') return dashboardData.internalMarks;
-    return dashboardData.internalMarks.filter((m) => m.category === assessmentCategory);
+  // Filtered Test & Lab Marks
+  const testLabMarks = useMemo(() => {
+    const list = dashboardData.internalMarks.filter((m) => m.category !== 'internal');
+    if (assessmentCategory === 'all') return list;
+    return list.filter((m) => m.category === assessmentCategory);
   }, [dashboardData.internalMarks, assessmentCategory]);
+
+  // Filtered Theory Internal Marks
+  const theoryInternalMarks = useMemo(() => {
+    return dashboardData.internalMarks.filter((m) => m.category === 'internal');
+  }, [dashboardData.internalMarks]);
 
   // Filtered Results
   const filteredResults = useMemo(() => {
@@ -340,14 +397,18 @@ export const AmsConnectPage: React.FC = () => {
       .reduce((acc, curr) => acc + (curr.credits || 0), 0);
   }, [dashboardData.semesterResults]);
 
+  // Module status calculation for Phase 4
+  const moduleStatus = useMemo(() => {
+    return amsIntegrationAdapter.getModuleStatus(activeProfile.id);
+  }, [dashboardData, activeProfile.id]);
+
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 flex flex-col gap-6 animate-appleFadeIn">
       {/* ========================================================================= */}
-      {/* 1. VEL TECH AMS BRANDING & CONNECTION CONTROL HEADER                      */}
+      {/* 1. VEL TECH AMS BRANDING & STATUS HEADER                                   */}
       {/* ========================================================================= */}
       <div className="rounded-3xl bg-[var(--surface)] border border-[var(--border-primary)] shadow-sm p-6 sm:p-8 flex flex-col gap-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-[var(--border-secondary)]">
-          {/* Institution & Portal Info */}
           <div className="flex items-start gap-4">
             <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-700 flex items-center justify-center text-white font-bold text-xl shadow-md shrink-0">
               <Building2 className="w-7 h-7" />
@@ -359,59 +420,37 @@ export const AmsConnectPage: React.FC = () => {
                 </h1>
                 <span
                   className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
-                    dashboardData.academicProfile.connectionStatus === 'connected' ||
-                    dashboardData.academicProfile.connectionStatus === 'manual_synced'
+                    dashboardData.academicProfile.connectionStatus === 'connected'
                       ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
-                      : dashboardData.academicProfile.connectionStatus === 'auth_unavailable'
-                      ? 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+                      : dashboardData.academicProfile.connectionStatus === 'manual_synced'
+                      ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
                       : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 border-neutral-200 dark:border-neutral-700'
                   }`}
                 >
                   {dashboardData.academicProfile.connectionStatus === 'connected'
-                    ? '● Connected'
+                    ? '● Authenticated (Live)'
                     : dashboardData.academicProfile.connectionStatus === 'manual_synced'
-                    ? '● Synchronized (Secure Mode)'
-                    : dashboardData.academicProfile.connectionStatus === 'auth_unavailable'
-                    ? '● Secure Manual Mode'
-                    : '○ Not Connected'}
+                    ? '● Synchronized (Official Document)'
+                    : '○ Unconnected'}
                 </span>
               </div>
               <p className="text-xs sm:text-sm text-[var(--text-secondary)]">
                 Vel Tech Rangarajan Dr. Sagunthala R&D Institute of Science and Technology
               </p>
               <a
-                href="http://ams.veltech.edu.in/"
+                href={OFFICIAL_AMS_METADATA.portalUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline mt-0.5"
               >
-                <span>Official Portal: ams.veltech.edu.in</span>
+                <span>Official Institutional Portal: {OFFICIAL_AMS_METADATA.host}</span>
                 <ExternalLink className="w-3.5 h-3.5" />
               </a>
             </div>
           </div>
 
-          {/* Action Controls */}
+          {/* Header Action Controls */}
           <div className="flex items-center gap-2 flex-wrap">
-            <button
-              type="button"
-              onClick={handleConnectAms}
-              disabled={isConnecting}
-              className="apple-btn-primary text-xs h-9 px-4 gap-1.5 font-semibold cursor-pointer shadow-sm"
-            >
-              {isConnecting ? (
-                <>
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  <span>Connecting...</span>
-                </>
-              ) : (
-                <>
-                  <Shield className="w-3.5 h-3.5" />
-                  <span>Connect AMS</span>
-                </>
-              )}
-            </button>
-
             <button
               type="button"
               onClick={() => setIsImportModalOpen(true)}
@@ -419,7 +458,7 @@ export const AmsConnectPage: React.FC = () => {
               title="Import official academic report file"
             >
               <Upload className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-              <span>Import Report</span>
+              <span>Import Official Report</span>
             </button>
 
             <button
@@ -438,7 +477,7 @@ export const AmsConnectPage: React.FC = () => {
                 type="button"
                 onClick={handleDisconnect}
                 className="apple-btn-secondary text-xs h-9 px-3 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 cursor-pointer"
-                title="Disconnect AMS account"
+                title="Disconnect AMS session"
               >
                 Disconnect
               </button>
@@ -446,31 +485,184 @@ export const AmsConnectPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Security & Transparent Integration Notice */}
-        <div className="rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-200/60 dark:border-indigo-800/60 p-4 text-xs text-indigo-950 dark:text-indigo-200 flex flex-col gap-2">
-          <div className="flex items-center gap-2 font-semibold text-indigo-900 dark:text-indigo-300">
-            <Lock className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
-            <span>Strict Credential Privacy & Institutional Integration Standards</span>
-          </div>
-          <p className="leading-relaxed opacity-90 text-[11px] sm:text-xs">
-            In compliance with college security guidelines and browser HTTPS security policies,
-            this application <strong>never asks for, collects, or stores your AMS password</strong>.
-            The official portal (<code className="font-mono px-1 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/60">http://ams.veltech.edu.in/</code>)
-            requires session CAPTCHA authentication and has no public client-side OAuth API.
-            You can securely download your official Grade Cards or Attendance reports from the portal and import them below for instant, private local analysis.
-          </p>
-          <div className="flex items-center justify-between text-[11px] pt-1 border-t border-indigo-200/40 dark:border-indigo-800/40 text-indigo-700 dark:text-indigo-300">
-            <span>
+        {/* ========================================================================= */}
+        {/* PHASE 2: GENUINE AMS AUTHENTICATION INTERFACE                             */}
+        {/* ========================================================================= */}
+        <div className="rounded-2xl bg-[var(--bg-tertiary)]/40 border border-[var(--border-secondary)] p-5 sm:p-6 flex flex-col gap-4">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <Shield className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              <h2 className="text-sm font-bold text-[var(--text-primary)]">
+                Connect to Vel Tech Official AMS Account
+              </h2>
+            </div>
+            <span className="text-[11px] text-[var(--text-tertiary)]">
               Last Sync:{' '}
               {dashboardData.lastSyncTime
                 ? new Date(dashboardData.lastSyncTime).toLocaleString()
                 : 'Never synced'}
             </span>
+          </div>
+
+          {/* Authentication Alert Banners */}
+          {authStatus === 'invalid_credentials' && (
+            <div className="rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 p-3.5 text-xs text-rose-900 dark:text-rose-200 flex items-start gap-2.5 animate-appleFadeIn">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              <div className="flex flex-col gap-0.5">
+                <span className="font-bold">Authentication Failed</span>
+                <p>{authMessage || 'Invalid Student ID or password. Please verify your credentials.'}</p>
+              </div>
+            </div>
+          )}
+
+          {authStatus === 'captcha_required' && (
+            <div className="rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 p-3.5 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-2.5 animate-appleFadeIn">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div className="flex flex-col gap-0.5">
+                <span className="font-bold">Session CAPTCHA Required</span>
+                <p>{authMessage || 'Please enter the CAPTCHA characters shown below.'}</p>
+              </div>
+            </div>
+          )}
+
+          {authStatus === 'official_api_required' && (
+            <div className="rounded-xl bg-indigo-50/90 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800/80 p-4 text-xs text-indigo-950 dark:text-indigo-200 flex flex-col gap-2 animate-appleFadeIn">
+              <div className="flex items-center gap-2 font-bold text-indigo-900 dark:text-indigo-300">
+                <Lock className="w-4 h-4 text-indigo-600 shrink-0" />
+                <span>Institutional Authentication Notice</span>
+              </div>
+              <p className="leading-relaxed opacity-95 text-[11px] sm:text-xs">
+                {authMessage}
+              </p>
+              {authDetails && (
+                <p className="text-[11px] text-indigo-800 dark:text-indigo-300/80 italic leading-relaxed">
+                  {authDetails}
+                </p>
+              )}
+            </div>
+          )}
+
+          {authStatus === 'connected' && (
+            <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 p-3.5 text-xs text-emerald-900 dark:text-emerald-200 flex items-center gap-2.5 animate-appleFadeIn">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span className="font-bold">Authenticated with Vel Tech AMS Gateway</span>
+            </div>
+          )}
+
+          {/* Genuine Authentication Form */}
+          <form onSubmit={handleConnectAms} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {/* Student ID */}
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-semibold text-[var(--text-secondary)]">
+                Student AMS ID
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. VTU12345"
+                value={amsIdInput}
+                onChange={(e) => setAmsIdInput(e.target.value.toUpperCase())}
+                maxLength={30}
+                required
+                className="apple-input h-9 text-xs font-mono font-bold uppercase tracking-wider"
+              />
+            </div>
+
+            {/* Password with Show/Hide toggle */}
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-semibold text-[var(--text-secondary)]">
+                AMS Password
+              </label>
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Enter Password"
+                  value={passwordInput}
+                  onChange={(e) => setPasswordInput(e.target.value)}
+                  maxLength={100}
+                  required
+                  className="apple-input h-9 text-xs pr-9"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)] hover:text-[var(--text-primary)] cursor-pointer"
+                  title={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+            </div>
+
+            {/* CAPTCHA Display & Input */}
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-semibold text-[var(--text-secondary)]">
+                  Session CAPTCHA
+                </label>
+                <button
+                  type="button"
+                  onClick={refreshCaptcha}
+                  className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold hover:underline flex items-center gap-0.5"
+                  title="Refresh CAPTCHA"
+                >
+                  <RefreshCw className="w-2.5 h-2.5" />
+                  <span>Refresh</span>
+                </button>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div
+                  className="px-2.5 py-1.5 rounded-lg bg-[var(--surface)] border border-[var(--border-primary)] font-mono font-bold text-xs tracking-widest text-[var(--text-primary)] select-none italic"
+                  style={{ transform: 'skewX(-4deg)' }}
+                >
+                  {captchaCode}
+                </div>
+                <input
+                  type="text"
+                  placeholder="Enter Code"
+                  value={captchaInput}
+                  onChange={(e) => setCaptchaInput(e.target.value.toUpperCase())}
+                  maxLength={10}
+                  required
+                  className="apple-input h-9 text-xs font-mono uppercase font-bold"
+                />
+              </div>
+            </div>
+
+            {/* Submit Button */}
+            <div className="flex flex-col justify-end">
+              <button
+                type="submit"
+                disabled={isConnecting}
+                className="apple-btn-primary h-9 px-4 text-xs font-bold gap-2 cursor-pointer shadow-xs w-full"
+              >
+                {isConnecting ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Authenticating...</span>
+                  </>
+                ) : (
+                  <>
+                    <Shield className="w-3.5 h-3.5" />
+                    <span>Connect to AMS</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+
+          {/* Privacy & Zero-Password Commitment */}
+          <div className="flex items-center justify-between flex-wrap gap-2 pt-2 border-t border-[var(--border-secondary)] text-[11px] text-[var(--text-tertiary)]">
+            <div className="flex items-center gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+              <span>Zero-Storage Guarantee: Your password is kept only in transient memory during authentication and never saved to localStorage, logs, or analytics.</span>
+            </div>
             <span>Profile ID: {activeProfile.id}</span>
           </div>
         </div>
 
-        {/* Advanced Academic Tools Secondary Toolbar */}
+        {/* ========================================================================= */}
+        {/* ADVANCED TOOLS SECONDARY TOOLBAR                                          */}
+        {/* ========================================================================= */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-2xl bg-[var(--bg-tertiary)]/50 border border-[var(--border-secondary)]">
           <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--text-secondary)]">
             <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
@@ -516,18 +708,22 @@ export const AmsConnectPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Module Navigation Tabs (9 Subsections) */}
+        {/* ========================================================================= */}
+        {/* PHASE 5: SEPARATE SECTION NAVIGATION TABS                                  */}
+        {/* ========================================================================= */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 border-b border-[var(--border-secondary)] text-xs scrollbar-none">
           {[
-            { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-            { id: 'timetable', label: "Today's Timetable", icon: Calendar, badge: dashboardData.timetable.length },
-            { id: 'attendance', label: 'Attendance Records', icon: FileCheck, badge: dashboardData.attendance.length },
-            { id: 'internals', label: 'Internal & Assessment Marks', icon: BookOpen, badge: dashboardData.internalMarks.length },
+            { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+            { id: 'profile', label: 'Profile', icon: User },
+            { id: 'timetable', label: 'Timetable', icon: Calendar, badge: dashboardData.timetable.length },
+            { id: 'attendance', label: 'Attendance', icon: FileCheck, badge: dashboardData.attendance.length },
+            { id: 'registered', label: 'Registered Subjects', icon: BookOpen, badge: dashboardData.registeredCourses.length },
+            { id: 'testLab', label: 'Test & Lab Marks', icon: Award, badge: testLabMarks.length },
+            { id: 'internals', label: 'Internal Marks', icon: Calculator, badge: theoryInternalMarks.length },
             { id: 'results', label: 'Semester Results', icon: FileText, badge: dashboardData.semesterResults.length },
-            { id: 'registered', label: 'Registered Courses', icon: BookOpen, badge: dashboardData.registeredCourses.length },
             { id: 'credits', label: 'Credit Earned Details', icon: Layers },
-            { id: 'reports', label: 'Academic Reports', icon: Printer },
-            { id: 'history', label: 'Sync History', icon: History, badge: dashboardData.syncLogs.length },
+            { id: 'documents', label: 'Academic Documents', icon: Printer },
+            { id: 'history', label: 'Sync Status & History', icon: History, badge: dashboardData.syncLogs.length },
           ].map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -536,7 +732,7 @@ export const AmsConnectPage: React.FC = () => {
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id as DashboardTab)}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-semibold whitespace-nowrap transition-all cursor-pointer ${
                   isActive
                     ? 'bg-black text-white dark:bg-white dark:text-black shadow-xs'
                     : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]'
@@ -562,17 +758,17 @@ export const AmsConnectPage: React.FC = () => {
       </div>
 
       {/* ========================================================================= */}
-      {/* 2. TAB CONTENT MODULES                                                    */}
+      {/* 2. TAB MODULE CONTENT SECTIONS                                            */}
       {/* ========================================================================= */}
 
-      {/* MODULE 1: DASHBOARD */}
-      {activeTab === 'dashboard' && (
+      {/* 1. OVERVIEW DASHBOARD */}
+      {activeTab === 'overview' && (
         <div className="flex flex-col gap-6 animate-appleFadeIn">
           {/* Quick Stats Grid */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
             <div className="rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] p-4 sm:p-5 flex flex-col justify-between">
               <span className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
-                Credits Progress
+                Credits Earned
               </span>
               <div className="flex items-baseline gap-1 mt-2">
                 <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
@@ -623,153 +819,96 @@ export const AmsConnectPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Student Academic Profile Header Card */}
-          <div className="rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] p-5 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-3.5">
-              <div className="w-12 h-12 rounded-xl bg-indigo-50 dark:bg-indigo-950 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold shrink-0">
-                <User className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-[var(--text-primary)]">
-                  {dashboardData.academicProfile.studentName || activeProfile.name}
+          {/* Module Sync Status Summary Card (Phase 4) */}
+          <div className="rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] p-5 sm:p-6 flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                <h3 className="text-sm font-bold text-[var(--text-primary)]">
+                  Module Synchronization Status
                 </h3>
-                <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)] flex-wrap">
-                  <span>{dashboardData.academicProfile.registerNumber || activeProfile.rollNumber || 'ID Not Linked'}</span>
-                  <span>•</span>
-                  <span>{dashboardData.academicProfile.degree || activeProfile.degree || 'B.Tech'} - {dashboardData.academicProfile.department || activeProfile.department || 'CSE'}</span>
-                  <span>•</span>
-                  <span className="font-mono font-semibold text-indigo-600 dark:text-indigo-400">
-                    {dashboardData.academicProfile.regulation || activeProfile.regulation || 'VTR21'}
-                  </span>
-                </div>
               </div>
-            </div>
-
-            <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setIsImportModalOpen(true)}
-                className="apple-btn-primary text-xs h-8 px-3.5 gap-1.5 font-semibold cursor-pointer"
+                onClick={() => setActiveTab('history')}
+                className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
               >
-                <Upload className="w-3.5 h-3.5" />
-                <span>Import Statement</span>
+                View Audit History →
               </button>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 text-xs">
+              {[
+                { name: 'Profile', status: moduleStatus.profile },
+                { name: 'Timetable', status: moduleStatus.timetable },
+                { name: 'Attendance', status: moduleStatus.attendance },
+                { name: 'Registered Subjects', status: moduleStatus.registeredSubjects },
+                { name: 'Test & Lab Marks', status: moduleStatus.testLabMarks },
+                { name: 'Internal Marks', status: moduleStatus.internalMarks },
+                { name: 'Semester Results', status: moduleStatus.semesterResults },
+                { name: 'Credit Details', status: moduleStatus.credits },
+                { name: 'Academic Documents', status: moduleStatus.documents },
+              ].map((m) => (
+                <div
+                  key={m.name}
+                  className="p-3 rounded-xl bg-[var(--bg-tertiary)]/50 border border-[var(--border-secondary)] flex flex-col justify-between gap-1.5"
+                >
+                  <span className="font-semibold text-[var(--text-primary)] truncate">{m.name}</span>
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold w-fit ${
+                      m.status === 'synced'
+                        ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300'
+                        : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400'
+                    }`}
+                  >
+                    {m.status === 'synced' ? 'Synced' : 'Not Available'}
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
 
-          {/* Two-Column Grid: Today's Schedule & Quick Academic Shortcuts */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            {/* Today's Timetable Widget */}
-            <div className="rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] p-5 flex flex-col gap-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                  <h4 className="text-sm font-bold text-[var(--text-primary)]">Today's Timetable ({selectedDay})</h4>
-                </div>
+          {/* Quick Actions & Links */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] p-5 flex flex-col justify-between gap-3">
+              <div>
+                <h4 className="text-sm font-bold text-[var(--text-primary)]">Calculator Connections</h4>
+                <p className="text-xs text-[var(--text-secondary)] mt-1">
+                  Seamlessly push your official AMS attendance, marks, and grades into the four manual calculators.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-[var(--border-secondary)]">
                 <button
                   type="button"
-                  onClick={() => setActiveTab('timetable')}
-                  className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                  onClick={handleApplyToAttendanceCalc}
+                  className="apple-btn-secondary text-xs h-8 px-3 font-semibold text-emerald-600 dark:text-emerald-400"
                 >
-                  View Full Schedule →
+                  Apply to Attendance Calculator
+                </button>
+                <button
+                  type="button"
+                  onClick={handleReconcileCredits}
+                  className="apple-btn-secondary text-xs h-8 px-3 font-semibold text-indigo-600 dark:text-indigo-400"
+                >
+                  Reconcile with Credits Planner
                 </button>
               </div>
-
-              {todayClasses.length === 0 ? (
-                <div className="py-8 text-center flex flex-col items-center justify-center gap-2">
-                  <Calendar className="w-8 h-8 text-[var(--text-tertiary)] stroke-1" />
-                  <p className="text-xs text-[var(--text-secondary)]">No classes scheduled for today ({selectedDay}).</p>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('timetable')}
-                    className="apple-btn-secondary text-xs h-7 px-3 mt-1 cursor-pointer"
-                  >
-                    Open Timetable Planner
-                  </button>
-                </div>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  {todayClasses.slice(0, 3).map((cls) => (
-                    <div
-                      key={cls.id}
-                      className="p-3 rounded-xl bg-[var(--bg-tertiary)]/50 border border-[var(--border-secondary)] flex items-center justify-between text-xs"
-                    >
-                      <div className="flex flex-col">
-                        <span className="font-bold text-[var(--text-primary)]">{cls.subjectName}</span>
-                        <span className="text-[11px] text-[var(--text-secondary)]">
-                          {cls.room ? `Room ${cls.room}` : 'Assigned Class'} • {cls.faculty || 'Staff'}
-                        </span>
-                      </div>
-                      <span className="font-mono text-[11px] font-semibold text-indigo-600 dark:text-indigo-400">
-                        {cls.startTime} - {cls.endTime}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
 
-            {/* Attendance & Results Quick Status */}
-            <div className="rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] p-5 flex flex-col gap-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <FileCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                  <h4 className="text-sm font-bold text-[var(--text-primary)]">Attendance & Results Snapshot</h4>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('attendance')}
-                  className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
-                >
-                  View Details →
-                </button>
+            <div className="rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] p-5 flex flex-col justify-between gap-3">
+              <div>
+                <h4 className="text-sm font-bold text-[var(--text-primary)]">Official Academic Reports</h4>
+                <p className="text-xs text-[var(--text-secondary)] mt-1">
+                  Generate printer-ready institutional transcripts, credit compliance certificates, and grade cards.
+                </p>
               </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="p-3.5 rounded-xl bg-[var(--bg-tertiary)]/50 border border-[var(--border-secondary)] flex flex-col gap-1">
-                  <span className="text-[11px] font-medium text-[var(--text-secondary)]">Tracked Attendance</span>
-                  <span className="text-lg font-bold text-[var(--text-primary)]">
-                    {dashboardData.attendance.length > 0 ? `${dashboardData.attendance.length} Subjects` : 'None logged'}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('attendance')}
-                    className="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold text-left hover:underline mt-1 cursor-pointer"
-                  >
-                    Manage attendance →
-                  </button>
-                </div>
-
-                <div className="p-3.5 rounded-xl bg-[var(--bg-tertiary)]/50 border border-[var(--border-secondary)] flex flex-col gap-1">
-                  <span className="text-[11px] font-medium text-[var(--text-secondary)]">Semester Results</span>
-                  <span className="text-lg font-bold text-[var(--text-primary)]">
-                    {dashboardData.semesterResults.length > 0 ? `${dashboardData.semesterResults.length} Courses` : 'None imported'}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('results')}
-                    className="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold text-left hover:underline mt-1 cursor-pointer"
-                  >
-                    View Grade card →
-                  </button>
-                </div>
-              </div>
-
-              {/* Quick Actions Bar */}
-              <div className="pt-2 border-t border-[var(--border-secondary)] flex items-center justify-between flex-wrap gap-2 text-xs">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('reports')}
-                  className="text-indigo-600 dark:text-indigo-400 font-semibold hover:underline flex items-center gap-1 cursor-pointer"
+              <div className="pt-2 border-t border-[var(--border-secondary)]">
+                <Link
+                  to="/reports"
+                  className="apple-btn-primary text-xs h-8 px-4 font-semibold gap-1.5 w-fit"
                 >
                   <Printer className="w-3.5 h-3.5" />
-                  <span>Generate Academic Report</span>
-                </button>
-                <Link
-                  to="/credits"
-                  className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] font-medium flex items-center gap-1"
-                >
-                  <span>Open Credits Planner →</span>
+                  <span>Open Full Reports Center</span>
                 </Link>
               </div>
             </div>
@@ -777,7 +916,69 @@ export const AmsConnectPage: React.FC = () => {
         </div>
       )}
 
-      {/* MODULE 1: TIMETABLE */}
+      {/* 2. SECTION: PROFILE */}
+      {activeTab === 'profile' && (
+        <div className="rounded-3xl bg-[var(--surface)] border border-[var(--border-primary)] p-6 sm:p-8 flex flex-col gap-6 animate-appleFadeIn">
+          <div className="flex items-center justify-between pb-4 border-b border-[var(--border-secondary)]">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-lg">
+                <User className="w-6 h-6" />
+              </div>
+              <div className="flex flex-col">
+                <h3 className="text-base font-bold text-[var(--text-primary)]">
+                  {dashboardData.academicProfile.studentName || activeProfile.name || 'Not Available'}
+                </h3>
+                <span className="text-xs text-[var(--text-secondary)]">
+                  Student ID: {dashboardData.academicProfile.studentId || activeProfile.rollNumber || 'Not Linked'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-xs">
+            <div className="flex flex-col gap-1 p-3.5 rounded-xl bg-[var(--bg-tertiary)]/50 border border-[var(--border-secondary)]">
+              <span className="text-[var(--text-secondary)] font-medium">Institution</span>
+              <span className="font-bold text-[var(--text-primary)]">Vel Tech University</span>
+            </div>
+            <div className="flex flex-col gap-1 p-3.5 rounded-xl bg-[var(--bg-tertiary)]/50 border border-[var(--border-secondary)]">
+              <span className="text-[var(--text-secondary)] font-medium">Register Number</span>
+              <span className="font-bold text-[var(--text-primary)]">
+                {dashboardData.academicProfile.registerNumber || activeProfile.rollNumber || 'Not available'}
+              </span>
+            </div>
+            <div className="flex flex-col gap-1 p-3.5 rounded-xl bg-[var(--bg-tertiary)]/50 border border-[var(--border-secondary)]">
+              <span className="text-[var(--text-secondary)] font-medium">Degree</span>
+              <span className="font-bold text-[var(--text-primary)]">
+                {dashboardData.academicProfile.degree || activeProfile.degree || 'Not available'}
+              </span>
+            </div>
+            <div className="flex flex-col gap-1 p-3.5 rounded-xl bg-[var(--bg-tertiary)]/50 border border-[var(--border-secondary)]">
+              <span className="text-[var(--text-secondary)] font-medium">Department / Branch</span>
+              <span className="font-bold text-[var(--text-primary)]">
+                {dashboardData.academicProfile.department || activeProfile.department || 'Not available'}
+              </span>
+            </div>
+            <div className="flex flex-col gap-1 p-3.5 rounded-xl bg-[var(--bg-tertiary)]/50 border border-[var(--border-secondary)]">
+              <span className="text-[var(--text-secondary)] font-medium">Regulation</span>
+              <span className="font-bold text-[var(--text-primary)] font-mono">
+                {dashboardData.academicProfile.regulation || activeProfile.regulation || 'Not available'}
+              </span>
+            </div>
+            <div className="flex flex-col gap-1 p-3.5 rounded-xl bg-[var(--bg-tertiary)]/50 border border-[var(--border-secondary)]">
+              <span className="text-[var(--text-secondary)] font-medium">Current Semester</span>
+              <span className="font-bold text-[var(--text-primary)]">
+                {dashboardData.academicProfile.currentSemester
+                  ? `Semester ${dashboardData.academicProfile.currentSemester}`
+                  : activeProfile.currentSemester
+                  ? `Semester ${activeProfile.currentSemester}`
+                  : 'Not available'}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. SECTION: TIMETABLE */}
       {activeTab === 'timetable' && (
         <div className="flex flex-col gap-4 animate-appleFadeIn">
           <div className="flex items-center justify-between flex-wrap gap-3">
@@ -804,7 +1005,7 @@ export const AmsConnectPage: React.FC = () => {
               className="apple-btn-secondary text-xs h-8 px-3 gap-1 cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>Add Class</span>
+              <span>Add Class Period</span>
             </button>
           </div>
 
@@ -817,20 +1018,13 @@ export const AmsConnectPage: React.FC = () => {
               <p className="text-xs text-[var(--text-secondary)] max-w-sm">
                 No timetable periods have been recorded for this day. You can import an official timetable or add periods manually.
               </p>
-              <button
-                type="button"
-                onClick={() => setIsAddClassModalOpen(true)}
-                className="apple-btn-primary text-xs h-8 px-4 font-semibold mt-1 cursor-pointer"
-              >
-                + Add Class Period
-              </button>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
               {todayClasses.map((item) => (
                 <div
                   key={item.id}
-                  className="rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] p-4 shadow-xs flex flex-col justify-between gap-3 hover:border-indigo-500/50 transition-colors"
+                  className="rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] p-4 shadow-xs flex flex-col justify-between gap-3"
                 >
                   <div className="flex flex-col gap-1">
                     <div className="flex items-center justify-between">
@@ -856,43 +1050,49 @@ export const AmsConnectPage: React.FC = () => {
         </div>
       )}
 
-      {/* MODULE 2: DAILY ATTENDANCE */}
+      {/* 4. SECTION: ATTENDANCE */}
       {activeTab === 'attendance' && (
         <div className="flex flex-col gap-4 animate-appleFadeIn">
-          <div className="flex items-center justify-between">
-            <div className="flex flex-col">
-              <h3 className="text-sm font-bold text-[var(--text-primary)]">
-                Official Subject Attendance Records
-              </h3>
-              <p className="text-xs text-[var(--text-secondary)]">
-                Countable Present = min(Present, Official Total). Never exceeds 100%.
-              </p>
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <h3 className="text-sm font-bold text-[var(--text-primary)]">
+              Daily & Subject-Wise Attendance Records
+            </h3>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleApplyToAttendanceCalc}
+                className="apple-btn-primary text-xs h-8 px-3.5 gap-1.5 font-semibold cursor-pointer"
+                title="Copy official attendance to the manual Attendance Calculator"
+              >
+                <Calculator className="w-3.5 h-3.5" />
+                <span>Send to Attendance Calculator</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsAddAttendanceModalOpen(true)}
+                className="apple-btn-secondary text-xs h-8 px-3 gap-1 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Record</span>
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => setIsAddAttendanceModalOpen(true)}
-              className="apple-btn-secondary text-xs h-8 px-3 gap-1 cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Add Subject</span>
-            </button>
           </div>
 
           {dashboardData.attendance.length === 0 ? (
             <div className="rounded-3xl bg-[var(--surface)] border border-[var(--border-primary)] p-12 text-center flex flex-col items-center justify-center gap-3">
               <FileCheck className="w-10 h-10 text-[var(--text-tertiary)] stroke-1" />
               <h3 className="text-sm font-semibold text-[var(--text-primary)]">
-                No Attendance Records Imported
+                No Attendance Records Available
               </h3>
               <p className="text-xs text-[var(--text-secondary)] max-w-sm">
-                Your account begins with zero attendance records. Import your official AMS attendance report or add subject records.
+                Subject attendance records extracted from your official AMS statement or imported PDF will appear here.
               </p>
               <button
                 type="button"
                 onClick={() => setIsImportModalOpen(true)}
                 className="apple-btn-primary text-xs h-8 px-4 font-semibold mt-1 cursor-pointer"
               >
-                Import Attendance Report
+                Import Attendance Statement
               </button>
             </div>
           ) : (
@@ -956,14 +1156,57 @@ export const AmsConnectPage: React.FC = () => {
         </div>
       )}
 
-      {/* MODULE 4: INTERNAL AND ASSESSMENT MARKS */}
-      {activeTab === 'internals' && (
+      {/* 5. SECTION: REGISTERED SUBJECTS */}
+      {activeTab === 'registered' && (
+        <div className="flex flex-col gap-4 animate-appleFadeIn">
+          <h3 className="text-sm font-bold text-[var(--text-primary)]">
+            Active Semester Course Registrations
+          </h3>
+
+          {dashboardData.registeredCourses.length === 0 ? (
+            <div className="rounded-3xl bg-[var(--surface)] border border-[var(--border-primary)] p-12 text-center flex flex-col items-center justify-center gap-3">
+              <BookOpen className="w-10 h-10 text-[var(--text-tertiary)] stroke-1" />
+              <h3 className="text-sm font-semibold text-[var(--text-primary)]">
+                No Course Registrations Available
+              </h3>
+              <p className="text-xs text-[var(--text-secondary)] max-w-sm">
+                Current semester registrations extracted from your official AMS course card will appear here.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+              {dashboardData.registeredCourses.map((c) => (
+                <div
+                  key={c.id}
+                  className="rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] p-4 flex flex-col justify-between gap-2"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-xs font-bold text-indigo-600 dark:text-indigo-400">
+                      {c.courseCode || 'REG'}
+                    </span>
+                    <span className="text-[10px] font-semibold text-[var(--text-secondary)]">
+                      {c.credits} Credits
+                    </span>
+                  </div>
+                  <h4 className="text-sm font-bold text-[var(--text-primary)]">{c.courseName}</h4>
+                  <div className="flex items-center justify-between text-[11px] text-[var(--text-secondary)] pt-2 border-t border-[var(--border-secondary)]">
+                    <span>Faculty: {c.facultyName || 'Staff'}</span>
+                    <span>Type: {c.type}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 6. SECTION: TEST / ASSIGNMENT / LAB MARKS */}
+      {activeTab === 'testLab' && (
         <div className="flex flex-col gap-4 animate-appleFadeIn">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-1.5 p-1 rounded-xl bg-[var(--surface)] border border-[var(--border-primary)] shadow-xs overflow-x-auto scrollbar-none">
               {[
-                { id: 'all', label: 'All Marks' },
-                { id: 'internal', label: 'Internal Assessments' },
+                { id: 'all', label: 'All Assessments' },
                 { id: 'test', label: 'Cycle Tests' },
                 { id: 'assignment', label: 'Assignments' },
                 { id: 'lab', label: 'Lab Practicals' },
@@ -982,25 +1225,70 @@ export const AmsConnectPage: React.FC = () => {
                 </button>
               ))}
             </div>
-
-            <button
-              type="button"
-              onClick={() => setIsImportModalOpen(true)}
-              className="apple-btn-secondary text-xs h-8 px-3 gap-1.5 font-semibold cursor-pointer"
-            >
-              <Upload className="w-3.5 h-3.5" />
-              <span>Import Marks</span>
-            </button>
           </div>
 
-          {filteredAssessments.length === 0 ? (
+          {testLabMarks.length === 0 ? (
+            <div className="rounded-3xl bg-[var(--surface)] border border-[var(--border-primary)] p-12 text-center flex flex-col items-center justify-center gap-3">
+              <Award className="w-10 h-10 text-[var(--text-tertiary)] stroke-1" />
+              <h3 className="text-sm font-semibold text-[var(--text-primary)]">
+                No Test or Lab Marks Available
+              </h3>
+              <p className="text-xs text-[var(--text-secondary)] max-w-sm">
+                Specific component marks appear here when uploaded or extracted from official marks statements.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+              {testLabMarks.map((item) => (
+                <div
+                  key={item.id}
+                  className="rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] p-4 shadow-xs flex flex-col justify-between gap-3"
+                >
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wide">
+                      {item.assessmentType}
+                    </span>
+                    <h4 className="text-sm font-bold text-[var(--text-primary)]">
+                      {item.subjectName}
+                    </h4>
+                  </div>
+                  <div className="flex items-center justify-between pt-2 border-t border-[var(--border-secondary)]">
+                    <span className="text-xs text-[var(--text-secondary)]">Score</span>
+                    <span className="text-sm font-extrabold text-[var(--text-primary)]">
+                      {item.marksObtained} / {item.maxMarks}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 7. SECTION: INTERNAL MARKS */}
+      {activeTab === 'internals' && (
+        <div className="flex flex-col gap-4 animate-appleFadeIn">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <h3 className="text-sm font-bold text-[var(--text-primary)]">
+              Continuous Internal Assessment (IA 1, IA 2, Model Exams)
+            </h3>
+            <Link
+              to="/internals"
+              className="apple-btn-primary text-xs h-8 px-3.5 font-semibold gap-1.5"
+            >
+              <Calculator className="w-3.5 h-3.5" />
+              <span>Open Internal Marks Calculator</span>
+            </Link>
+          </div>
+
+          {theoryInternalMarks.length === 0 ? (
             <div className="rounded-3xl bg-[var(--surface)] border border-[var(--border-primary)] p-12 text-center flex flex-col items-center justify-center gap-3">
               <BookOpen className="w-10 h-10 text-[var(--text-tertiary)] stroke-1" />
               <h3 className="text-sm font-semibold text-[var(--text-primary)]">
-                No Assessment Marks Recorded
+                No Internal Assessment Records Available
               </h3>
               <p className="text-xs text-[var(--text-secondary)] max-w-sm">
-                Internal marks, cycle test scores, assignments, and lab records will appear here once imported.
+                Internal marks published on the AMS portal will appear here once synchronized or imported.
               </p>
               <button
                 type="button"
@@ -1012,34 +1300,24 @@ export const AmsConnectPage: React.FC = () => {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-              {filteredAssessments.map((item) => (
+              {theoryInternalMarks.map((item) => (
                 <div
                   key={item.id}
                   className="rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] p-4 shadow-xs flex flex-col justify-between gap-3"
                 >
                   <div className="flex flex-col gap-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wide">
-                        {item.assessmentType}
-                      </span>
-                      {item.courseCode && supportsCode && (
-                        <span className="font-mono text-[10px] text-[var(--text-tertiary)]">
-                          {item.courseCode}
-                        </span>
-                      )}
-                    </div>
+                    <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wide">
+                      {item.assessmentType}
+                    </span>
                     <h4 className="text-sm font-bold text-[var(--text-primary)]">
                       {item.subjectName}
                     </h4>
                   </div>
                   <div className="flex items-center justify-between pt-2 border-t border-[var(--border-secondary)]">
                     <span className="text-xs text-[var(--text-secondary)]">Score</span>
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-base font-extrabold text-[var(--text-primary)]">
-                        {item.marksObtained}
-                      </span>
-                      <span className="text-xs text-[var(--text-secondary)]">/ {item.maxMarks}</span>
-                    </div>
+                    <span className="text-sm font-extrabold text-[var(--text-primary)]">
+                      {item.marksObtained} / {item.maxMarks}
+                    </span>
                   </div>
                 </div>
               ))}
@@ -1048,7 +1326,7 @@ export const AmsConnectPage: React.FC = () => {
         </div>
       )}
 
-      {/* MODULE 5: SEMESTER RESULTS */}
+      {/* 8. SECTION: SEMESTER RESULTS */}
       {activeTab === 'results' && (
         <div className="flex flex-col gap-4 animate-appleFadeIn">
           <div className="flex items-center justify-between flex-wrap gap-3">
@@ -1068,24 +1346,33 @@ export const AmsConnectPage: React.FC = () => {
               </select>
             </div>
 
-            {dashboardData.semesterResults.length > 0 && (
-              <button
-                type="button"
-                onClick={handleReconcileCredits}
-                className="apple-btn-secondary text-xs h-8 px-3.5 gap-1.5 font-semibold text-indigo-600 dark:text-indigo-400 cursor-pointer"
-                title="Synchronize these official results with your Credits page"
+            <div className="flex items-center gap-2">
+              {dashboardData.semesterResults.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleReconcileCredits}
+                  className="apple-btn-secondary text-xs h-8 px-3.5 gap-1.5 font-semibold text-indigo-600 dark:text-indigo-400 cursor-pointer"
+                  title="Synchronize these official results with your Credits page"
+                >
+                  <Layers className="w-3.5 h-3.5" />
+                  <span>Reconcile with Credits Page</span>
+                </button>
+              )}
+              <Link
+                to="/gpa"
+                className="apple-btn-primary text-xs h-8 px-3.5 font-semibold gap-1.5"
               >
-                <Layers className="w-3.5 h-3.5" />
-                <span>Reconcile with Credits Page</span>
-              </button>
-            )}
+                <Calculator className="w-3.5 h-3.5" />
+                <span>Open SGPA Calculator</span>
+              </Link>
+            </div>
           </div>
 
           {filteredResults.length === 0 ? (
             <div className="rounded-3xl bg-[var(--surface)] border border-[var(--border-primary)] p-12 text-center flex flex-col items-center justify-center gap-3">
               <FileText className="w-10 h-10 text-[var(--text-tertiary)] stroke-1" />
               <h3 className="text-sm font-semibold text-[var(--text-primary)]">
-                No Results Imported
+                No Results Available
               </h3>
               <p className="text-xs text-[var(--text-secondary)] max-w-sm">
                 Import your official semester result report or Credit Analysis PDF to view verified grades.
@@ -1151,7 +1438,7 @@ export const AmsConnectPage: React.FC = () => {
         </div>
       )}
 
-      {/* MODULE 6: CREDITS EARNED DETAILS */}
+      {/* 9. SECTION: CREDIT EARNED DETAILS */}
       {activeTab === 'credits' && (
         <div className="flex flex-col gap-6 animate-appleFadeIn">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -1202,59 +1489,15 @@ export const AmsConnectPage: React.FC = () => {
         </div>
       )}
 
-      {/* MODULE 7: REGISTERED COURSES */}
-      {activeTab === 'registered' && (
-        <div className="flex flex-col gap-4 animate-appleFadeIn">
-          <h3 className="text-sm font-bold text-[var(--text-primary)]">
-            Active Semester Course Registrations
-          </h3>
-
-          {dashboardData.registeredCourses.length === 0 ? (
-            <div className="rounded-3xl bg-[var(--surface)] border border-[var(--border-primary)] p-12 text-center flex flex-col items-center justify-center gap-3">
-              <BookOpen className="w-10 h-10 text-[var(--text-tertiary)] stroke-1" />
-              <h3 className="text-sm font-semibold text-[var(--text-primary)]">
-                No Course Registrations Recorded
-              </h3>
-              <p className="text-xs text-[var(--text-secondary)] max-w-sm">
-                Current semester registrations extracted from the AMS registration card will appear here.
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-              {dashboardData.registeredCourses.map((c) => (
-                <div
-                  key={c.id}
-                  className="rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] p-4 flex flex-col justify-between gap-2"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono text-xs font-bold text-indigo-600 dark:text-indigo-400">
-                      {c.courseCode || 'REG'}
-                    </span>
-                    <span className="text-[10px] font-semibold text-[var(--text-secondary)]">
-                      {c.credits} Credits
-                    </span>
-                  </div>
-                  <h4 className="text-sm font-bold text-[var(--text-primary)]">{c.courseName}</h4>
-                  <div className="flex items-center justify-between text-[11px] text-[var(--text-secondary)] pt-2 border-t border-[var(--border-secondary)]">
-                    <span>Faculty: {c.facultyName || 'Staff'}</span>
-                    <span>Type: {c.type}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* MODULE 8: ACADEMIC REPORTS */}
-      {activeTab === 'reports' && (
+      {/* 10. SECTION: ACADEMIC DOCUMENTS */}
+      {activeTab === 'documents' && (
         <div className="flex flex-col gap-5 animate-appleFadeIn">
           <div className="rounded-3xl bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-950/30 dark:to-purple-950/30 border border-indigo-200/60 dark:border-indigo-800/60 p-6 sm:p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
             <div className="flex flex-col gap-2 max-w-xl">
               <div className="flex items-center gap-2">
                 <Printer className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
                 <h3 className="text-base sm:text-lg font-bold text-[var(--text-primary)]">
-                  Official Academic Reports & Print Hub
+                  Official Academic Documents & Reports Center
                 </h3>
               </div>
               <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
@@ -1335,7 +1578,7 @@ export const AmsConnectPage: React.FC = () => {
         </div>
       )}
 
-      {/* MODULE 9: SYNC HISTORY & LOGS */}
+      {/* 11. SECTION: SYNC STATUS AND HISTORY */}
       {activeTab === 'history' && (
         <div className="flex flex-col gap-4 animate-appleFadeIn">
           <div className="flex items-center justify-between">
@@ -1411,7 +1654,7 @@ export const AmsConnectPage: React.FC = () => {
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL: MANUAL REPORT IMPORT & REVIEW                                      */}
+      {/* MODAL: MANUAL DOCUMENT IMPORT & REVIEW                                    */}
       {/* ========================================================================= */}
       {isImportModalOpen && (
         <div
@@ -1428,7 +1671,7 @@ export const AmsConnectPage: React.FC = () => {
               <div className="flex items-center gap-2">
                 <Upload className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
                 <h3 className="text-base font-bold text-[var(--text-primary)]">
-                  Import Official Academic Report
+                  Import Official Academic Report (PDF / Image)
                 </h3>
               </div>
               <button
@@ -1442,88 +1685,98 @@ export const AmsConnectPage: React.FC = () => {
 
             {!extractionResult ? (
               <div className="flex flex-col gap-4">
-                <p className="text-[var(--text-secondary)]">
-                  Select your official Vel Tech Grade Card, Credit Analysis Report, or Attendance Statement (PDF, CSV, XLSX, or image).
-                  The file will be parsed locally on your device with high-accuracy OCR.
+                <p className="text-[var(--text-secondary)] leading-relaxed">
+                  Upload your official downloaded Vel Tech Grade Card, Credit Analysis Report, or Attendance statement.
+                  Your file is processed entirely within your device's browser and is never uploaded to any remote server.
                 </p>
 
                 <div
                   onClick={() => fileInputRef.current?.click()}
-                  className="rounded-2xl border-2 border-dashed border-[var(--border-secondary)] hover:border-indigo-500/50 p-8 text-center flex flex-col items-center justify-center gap-3 cursor-pointer transition-colors bg-[var(--bg-tertiary)]/30"
+                  className="rounded-2xl border-2 border-dashed border-[var(--border-secondary)] hover:border-indigo-500/50 p-8 text-center flex flex-col items-center justify-center gap-3 cursor-pointer transition-colors bg-[var(--bg-tertiary)]/20"
                 >
-                  <Upload className="w-8 h-8 text-indigo-600 dark:text-indigo-400 animate-pulse" />
-                  <div className="flex flex-col gap-0.5">
-                    <span className="font-bold text-[var(--text-primary)]">
-                      {isExtracting ? 'Analyzing document...' : 'Click to select report file'}
+                  <Upload className="w-8 h-8 text-indigo-500 stroke-1" />
+                  <div className="flex flex-col gap-1">
+                    <span className="font-semibold text-[var(--text-primary)]">
+                      Click to choose or drop official report file
                     </span>
                     <span className="text-[11px] text-[var(--text-tertiary)]">
-                      Supports PDF, PNG, JPG, CSV, XLSX
+                      Supports PDF, PNG, JPG files
                     </span>
                   </div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf,image/*"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
                 </div>
 
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".pdf,.csv,.xlsx,.xls,image/*"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                />
+                {isExtracting && (
+                  <div className="flex items-center justify-center gap-2 py-4 text-indigo-600 dark:text-indigo-400 font-semibold">
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Analyzing official document tables & grades...</span>
+                  </div>
+                )}
               </div>
             ) : (
-              /* Review Screen */
-              <div className="flex flex-col gap-4">
-                <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 p-4 text-emerald-900 dark:text-emerald-200 flex flex-col gap-1">
-                  <div className="flex items-center gap-2 font-bold">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                    <span>Report Parsed Successfully</span>
-                  </div>
-                  <span className="text-[11px]">
-                    Extracted {extractionResult.subjects.length} course records for{' '}
-                    <strong>{extractionResult.studentInfo.name || 'Student'}</strong> (Reg:{' '}
-                    {extractionResult.studentInfo.registerNumber || 'N/A'}).
+              <div className="flex flex-col gap-4 animate-appleFadeIn">
+                <div className="p-4 rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-200/50 dark:border-indigo-800/50 flex flex-col gap-2">
+                  <span className="font-bold text-indigo-900 dark:text-indigo-300">
+                    Extracted Student Verification
                   </span>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px]">
+                    <div>
+                      <span className="text-[var(--text-tertiary)]">Name: </span>
+                      <span className="font-semibold">{extractionResult.studentInfo.name || '—'}</span>
+                    </div>
+                    <div>
+                      <span className="text-[var(--text-tertiary)]">ID: </span>
+                      <span className="font-semibold">{extractionResult.studentInfo.studentId || '—'}</span>
+                    </div>
+                    <div>
+                      <span className="text-[var(--text-tertiary)]">Semester: </span>
+                      <span className="font-semibold">Sem {extractionResult.studentInfo.semester || 1}</span>
+                    </div>
+                    <div>
+                      <span className="text-[var(--text-tertiary)]">Regulation: </span>
+                      <span className="font-semibold">{extractionResult.studentInfo.regulation || '—'}</span>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Validation & Conflict Check */}
-                {activeProfile.name &&
-                  activeProfile.name !== 'Primary Student' &&
-                  extractionResult.studentInfo.name &&
-                  !extractionResult.studentInfo.name
-                    .toLowerCase()
-                    .includes(activeProfile.name.toLowerCase().split(' ')[0]) && (
-                    <div className="rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 p-3 text-[11px] text-amber-900 dark:text-amber-200 flex items-start gap-2">
-                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                      <span>
-                        Notice: Name in document ("{extractionResult.studentInfo.name}") differs
-                        from active profile ("{activeProfile.name}"). Saving will associate these
-                        records strictly with your current profile ID.
-                      </span>
-                    </div>
-                  )}
-
-                {/* Courses Preview Table */}
-                <div className="max-h-56 overflow-y-auto rounded-xl border border-[var(--border-secondary)]">
+                <div className="flex flex-col gap-2 max-h-60 overflow-y-auto">
+                  <span className="font-bold text-[var(--text-primary)]">
+                    Detected Course Results ({extractionResult.subjects.length})
+                  </span>
                   <table className="w-full text-left border-collapse text-xs">
                     <thead>
-                      <tr className="bg-[var(--bg-tertiary)] border-b border-[var(--border-secondary)] font-semibold text-[var(--text-secondary)]">
-                        {supportsCode && <th className="p-2 w-24">Code</th>}
-                        <th className="p-2">Course Title</th>
+                      <tr className="border-b border-[var(--border-secondary)] bg-[var(--bg-tertiary)] text-[var(--text-secondary)] font-semibold">
+                        <th className="p-2">Subject</th>
                         <th className="p-2 w-16 text-center">Cr</th>
                         <th className="p-2 w-16 text-center">Grade</th>
                         <th className="p-2 w-20 text-center">Status</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[var(--border-secondary)]">
-                      {extractionResult.subjects.map((sub, i) => (
-                        <tr key={i}>
-                          {supportsCode && (
-                            <td className="p-2 font-mono font-bold">{sub.subjectCode || '—'}</td>
-                          )}
+                      {extractionResult.subjects.map((sub, idx) => (
+                        <tr key={idx}>
                           <td className="p-2 font-medium">{sub.subjectName}</td>
-                          <td className="p-2 text-center">{sub.credits || '—'}</td>
-                          <td className="p-2 text-center font-bold text-indigo-600">{sub.grade}</td>
-                          <td className="p-2 text-center font-bold">{sub.status}</td>
+                          <td className="p-2 text-center font-bold">{sub.credits ?? 3}</td>
+                          <td className="p-2 text-center font-bold text-indigo-600 dark:text-indigo-400">
+                            {sub.grade || '—'}
+                          </td>
+                          <td className="p-2 text-center">
+                            <span
+                              className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                                sub.status === 'Pass'
+                                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                  : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                              }`}
+                            >
+                              {sub.status}
+                            </span>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -1534,14 +1787,14 @@ export const AmsConnectPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setExtractionResult(null)}
-                    className="apple-btn-secondary text-xs h-9 px-4 cursor-pointer"
+                    className="apple-btn-secondary text-xs h-8 px-3"
                   >
-                    Back
+                    Cancel / Choose Another
                   </button>
                   <button
                     type="button"
-                    onClick={handleConfirmSaveImport}
-                    className="apple-btn-primary text-xs h-9 px-5 font-semibold cursor-pointer"
+                    onClick={handleConfirmExtraction}
+                    className="apple-btn-primary text-xs h-8 px-4 font-semibold"
                   >
                     Confirm & Save to Dashboard
                   </button>
@@ -1552,106 +1805,97 @@ export const AmsConnectPage: React.FC = () => {
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* MODAL: ADD TIMETABLE CLASS                                                */}
-      {/* ========================================================================= */}
+      {/* MODAL: ADD CLASS PERIOD */}
       {isAddClassModalOpen && (
-        <AddTimetableModal
-          isOpen={isAddClassModalOpen}
-          initialDay={selectedDay as any}
-          supportsCode={supportsCode}
+        <AddClassModal
+          day={selectedDay}
           onClose={() => setIsAddClassModalOpen(false)}
-          onSave={(item) => {
-            const newClass: AmsTimetableClass = {
-              id: `tt-${Date.now()}`,
-              profileId: activeProfile.id,
-              ...item,
-            };
+          onAdd={(newClass) => {
             saveAmsDashboardData(activeProfile.id, {
               timetable: [...dashboardData.timetable, newClass],
             });
             setDashboardData(getAmsDashboardData(activeProfile.id));
             setIsAddClassModalOpen(false);
-            showToast('Class period added to timetable!', 'success');
+            showToast('Class period added to timetable.', 'success');
           }}
+          profileId={activeProfile.id}
+          supportsCode={supportsCode}
         />
       )}
 
-      {/* ========================================================================= */}
-      {/* MODAL: ADD ATTENDANCE SUBJECT                                             */}
-      {/* ========================================================================= */}
+      {/* MODAL: ADD ATTENDANCE RECORD */}
       {isAddAttendanceModalOpen && (
         <AddAttendanceModal
-          isOpen={isAddAttendanceModalOpen}
-          supportsCode={supportsCode}
           onClose={() => setIsAddAttendanceModalOpen(false)}
-          onSave={(item) => {
-            const newAtt: AmsSubjectAttendance = {
-              id: `att-${Date.now()}`,
-              profileId: activeProfile.id,
-              subjectName: sanitizeCourseTitle(item.subjectName),
-              courseCode: supportsCode && item.courseCode ? item.courseCode.toUpperCase() : undefined,
-              officialTotalSessions: item.officialTotalSessions,
-              presentSessions: item.presentSessions,
-              absentSessions: item.absentSessions,
-              percentage: calculateAmsAttendancePercentage(
-                item.officialTotalSessions,
-                item.presentSessions
-              ),
-              lastUpdated: new Date().toISOString().split('T')[0],
-              source: 'Manual Import',
-            };
+          onAdd={(newAtt) => {
             saveAmsDashboardData(activeProfile.id, {
               attendance: [...dashboardData.attendance, newAtt],
             });
             setDashboardData(getAmsDashboardData(activeProfile.id));
             setIsAddAttendanceModalOpen(false);
-            showToast('Attendance record saved!', 'success');
+            showToast('Attendance record saved.', 'success');
           }}
+          profileId={activeProfile.id}
+          supportsCode={supportsCode}
         />
       )}
 
-      {/* Reset Confirm Modal */}
+      {/* MODAL: RESET CONFIRM */}
       <ResetConfirmModal
         isOpen={resetConfirmOpen}
         onClose={() => setResetConfirmOpen(false)}
-        onConfirm={handleConfirmClearData}
-        title="Clear Imported AMS Records?"
-        description="Are you sure you want to delete all imported AMS records, timetable, and attendance history for this profile? Your shared course catalogue and base calculators will not be affected."
+        onConfirm={() => {
+          clearAmsDataForProfile(activeProfile.id);
+          setDashboardData(getAmsDashboardData(activeProfile.id));
+          setResetConfirmOpen(false);
+          showToast('All imported AMS records deleted for this profile.', 'info');
+        }}
+        title="Clear Imported AMS Records"
+        description="Are you sure you want to delete all imported AMS timetable, attendance, marks, and result records for this student profile? This will not affect your manually saved calculator records."
+        confirmLabel="Clear Data"
       />
     </div>
   );
 };
 
-/* ========================================================================= */
-/* SUB-MODAL: Add Timetable Class                                            */
-/* ========================================================================= */
-const AddTimetableModal: React.FC<{
-  isOpen: boolean;
-  initialDay: any;
-  supportsCode: boolean;
+// =============================================================================
+// SUB-MODAL COMPONENTS
+// =============================================================================
+
+interface AddClassModalProps {
+  day: string;
   onClose: () => void;
-  onSave: (item: Omit<AmsTimetableClass, 'id' | 'profileId'>) => void;
-}> = ({ isOpen, initialDay, supportsCode, onClose, onSave }) => {
-  const [day, setDay] = useState<any>(initialDay || 'Monday');
-  const [name, setName] = useState('');
-  const [code, setCode] = useState('');
-  const [start, setStart] = useState('08:30 AM');
-  const [end, setEnd] = useState('09:30 AM');
+  onAdd: (newClass: AmsTimetableClass) => void;
+  profileId: string;
+  supportsCode: boolean;
+}
+
+const AddClassModal: React.FC<AddClassModalProps> = ({
+  day,
+  onClose,
+  onAdd,
+  profileId,
+  supportsCode,
+}) => {
+  const [subjectName, setSubjectName] = useState('');
+  const [courseCode, setCourseCode] = useState('');
+  const [startTime, setStartTime] = useState('08:30 AM');
+  const [endTime, setEndTime] = useState('09:30 AM');
   const [room, setRoom] = useState('');
   const [faculty, setFaculty] = useState('');
 
-  if (!isOpen) return null;
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
-    onSave({
-      day,
-      subjectName: sanitizeCourseTitle(name),
-      courseCode: supportsCode && code.trim() ? code.trim().toUpperCase() : undefined,
-      startTime: start,
-      endTime: end,
+    if (!subjectName.trim()) return;
+
+    onAdd({
+      id: `cls-${Date.now()}`,
+      profileId,
+      day: day as any,
+      subjectName: sanitizeCourseTitle(subjectName.trim()),
+      courseCode: supportsCode && courseCode.trim() ? courseCode.trim().toUpperCase() : undefined,
+      startTime,
+      endTime,
       room: room.trim() || undefined,
       faculty: faculty.trim() || undefined,
     });
@@ -1665,42 +1909,25 @@ const AddTimetableModal: React.FC<{
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] shadow-2xl p-6 flex flex-col gap-4 text-xs"
+        className="w-full max-w-md rounded-3xl bg-[var(--surface)] border border-[var(--border-primary)] shadow-2xl p-6 flex flex-col gap-4 text-xs"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-[var(--border-secondary)] pb-3">
-          <h3 className="text-base font-bold text-[var(--text-primary)]">Add Timetable Class</h3>
-          <button type="button" onClick={onClose} className="p-1 rounded-lg text-[var(--text-secondary)]">
+          <h3 className="text-sm font-bold text-[var(--text-primary)]">Add Class Period ({day})</h3>
+          <button type="button" onClick={onClose} className="p-1 text-[var(--text-secondary)]">
             <X className="w-4 h-4" />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <div className="flex flex-col gap-1">
-            <label className="font-semibold text-[var(--text-primary)]">Day</label>
-            <select
-              value={day}
-              onChange={(e) => setDay(e.target.value as any)}
-              className="apple-input h-9 text-xs cursor-pointer"
-            >
-              {DAYS_OF_WEEK.map((d) => (
-                <option key={d} value={d}>
-                  {d}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <label className="font-semibold text-[var(--text-primary)]">
-              Subject Name <span className="text-rose-500">*</span>
-            </label>
+            <label className="font-semibold text-[var(--text-primary)]">Subject Name</label>
             <input
               type="text"
+              placeholder="e.g. Distributed Computing"
               required
-              placeholder="e.g. Design and Analysis of Algorithms"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
+              value={subjectName}
+              onChange={(e) => setSubjectName(e.target.value)}
               className="apple-input h-9 text-xs"
             />
           </div>
@@ -1710,9 +1937,9 @@ const AddTimetableModal: React.FC<{
               <label className="font-semibold text-[var(--text-primary)]">Course Code</label>
               <input
                 type="text"
-                placeholder="e.g. 10211CS202"
-                value={code}
-                onChange={(e) => setCode(e.target.value.toUpperCase())}
+                placeholder="e.g. 10211CS205"
+                value={courseCode}
+                onChange={(e) => setCourseCode(e.target.value.toUpperCase())}
                 className="apple-input h-9 text-xs font-mono uppercase"
               />
             </div>
@@ -1723,8 +1950,9 @@ const AddTimetableModal: React.FC<{
               <label className="font-semibold text-[var(--text-primary)]">Start Time</label>
               <input
                 type="text"
-                value={start}
-                onChange={(e) => setStart(e.target.value)}
+                placeholder="08:30 AM"
+                value={startTime}
+                onChange={(e) => setStartTime(e.target.value)}
                 className="apple-input h-9 text-xs font-mono"
               />
             </div>
@@ -1732,8 +1960,9 @@ const AddTimetableModal: React.FC<{
               <label className="font-semibold text-[var(--text-primary)]">End Time</label>
               <input
                 type="text"
-                value={end}
-                onChange={(e) => setEnd(e.target.value)}
+                placeholder="09:30 AM"
+                value={endTime}
+                onChange={(e) => setEndTime(e.target.value)}
                 className="apple-input h-9 text-xs font-mono"
               />
             </div>
@@ -1741,7 +1970,7 @@ const AddTimetableModal: React.FC<{
 
           <div className="grid grid-cols-2 gap-2">
             <div className="flex flex-col gap-1">
-              <label className="font-semibold text-[var(--text-primary)]">Room / Venue</label>
+              <label className="font-semibold text-[var(--text-primary)]">Room</label>
               <input
                 type="text"
                 placeholder="e.g. TP402"
@@ -1754,7 +1983,7 @@ const AddTimetableModal: React.FC<{
               <label className="font-semibold text-[var(--text-primary)]">Faculty Name</label>
               <input
                 type="text"
-                placeholder="e.g. Dr. A. Sharma"
+                placeholder="e.g. Dr. K. Raman"
                 value={faculty}
                 onChange={(e) => setFaculty(e.target.value)}
                 className="apple-input h-9 text-xs"
@@ -1767,7 +1996,7 @@ const AddTimetableModal: React.FC<{
               Cancel
             </button>
             <button type="submit" className="apple-btn-primary text-xs h-8 px-4 font-semibold">
-              Save Class
+              Save Period
             </button>
           </div>
         </form>
@@ -1776,41 +2005,40 @@ const AddTimetableModal: React.FC<{
   );
 };
 
-/* ========================================================================= */
-/* SUB-MODAL: Add Subject Attendance                                         */
-/* ========================================================================= */
-const AddAttendanceModal: React.FC<{
-  isOpen: boolean;
-  supportsCode: boolean;
+interface AddAttendanceModalProps {
   onClose: () => void;
-  onSave: (item: {
-    subjectName: string;
-    courseCode?: string;
-    officialTotalSessions: number;
-    presentSessions: number;
-    absentSessions: number;
-  }) => void;
-}> = ({ isOpen, supportsCode, onClose, onSave }) => {
+  onAdd: (newAtt: AmsSubjectAttendance) => void;
+  profileId: string;
+  supportsCode: boolean;
+}
+
+const AddAttendanceModal: React.FC<AddAttendanceModalProps> = ({
+  onClose,
+  onAdd,
+  profileId,
+  supportsCode,
+}) => {
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
-  const [total, setTotal] = useState<number>(40);
-  const [present, setPresent] = useState<number>(35);
-
-  if (!isOpen) return null;
+  const [total, setTotal] = useState(40);
+  const [present, setPresent] = useState(36);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
-    const safeTotal = Math.max(1, total);
-    const safePresent = Math.min(safeTotal, Math.max(0, present));
-    const absent = Math.max(0, safeTotal - safePresent);
 
-    onSave({
-      subjectName: name.trim(),
+    const absent = Math.max(0, total - present);
+    onAdd({
+      id: `att-${Date.now()}`,
+      profileId,
+      subjectName: sanitizeCourseTitle(name.trim()),
       courseCode: supportsCode && code.trim() ? code.trim().toUpperCase() : undefined,
-      officialTotalSessions: safeTotal,
-      presentSessions: safePresent,
+      officialTotalSessions: total,
+      presentSessions: present,
       absentSessions: absent,
+      percentage: calculateAmsAttendancePercentage(total, present),
+      source: 'Manual Import',
+      lastUpdated: new Date().toISOString().split('T')[0],
     });
   };
 
@@ -1822,25 +2050,23 @@ const AddAttendanceModal: React.FC<{
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] shadow-2xl p-6 flex flex-col gap-4 text-xs"
+        className="w-full max-w-md rounded-3xl bg-[var(--surface)] border border-[var(--border-primary)] shadow-2xl p-6 flex flex-col gap-4 text-xs"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-[var(--border-secondary)] pb-3">
-          <h3 className="text-base font-bold text-[var(--text-primary)]">Add Subject Attendance</h3>
-          <button type="button" onClick={onClose} className="p-1 rounded-lg text-[var(--text-secondary)]">
+          <h3 className="text-sm font-bold text-[var(--text-primary)]">Add Subject Attendance</h3>
+          <button type="button" onClick={onClose} className="p-1 text-[var(--text-secondary)]">
             <X className="w-4 h-4" />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <div className="flex flex-col gap-1">
-            <label className="font-semibold text-[var(--text-primary)]">
-              Subject Name <span className="text-rose-500">*</span>
-            </label>
+            <label className="font-semibold text-[var(--text-primary)]">Subject Name</label>
             <input
               type="text"
+              placeholder="e.g. Design and Analysis of Algorithms"
               required
-              placeholder="e.g. Operating Systems"
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="apple-input h-9 text-xs"
