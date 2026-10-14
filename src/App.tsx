@@ -13,6 +13,7 @@ import { CGPACalculatorPage } from './pages/CGPACalculatorPage';
 import { AttendancePage } from './pages/AttendancePage';
 import { CreditsPlannerPage } from './pages/CreditsPlannerPage';
 import { ProfilePage } from './pages/ProfilePage';
+import { AmsConnectPage } from './pages/AmsConnectPage';
 import { AmsImportPage } from './pages/AmsImportPage';
 
 export function App() {
@@ -38,7 +39,9 @@ export function App() {
                 <Route path="/credits" element={<CreditsPlannerPage />} />
                 <Route path="/catalogue" element={<Navigate to="/credits?tab=catalogue" replace />} />
                 <Route path="/profile" element={<ProfilePage />} />
-                <Route path="/ams" element={<AmsImportPage />} />
+                <Route path="/ams-connect" element={<AmsConnectPage />} />
+                <Route path="/ams" element={<AmsConnectPage />} />
+                <Route path="/ams-import" element={<AmsImportPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>
             </Routes>

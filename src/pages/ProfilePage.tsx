@@ -14,12 +14,15 @@ import {
   GraduationCap,
   Percent,
   ChevronRight,
+  Building2,
+  Shield,
 } from 'lucide-react';
 import { useProfile } from '../context/ProfileContext';
 import { useAppToast } from '../components/layout/AppShell';
 import { ResetConfirmModal } from '../components/common/ResetConfirmModal';
 import { REGULATIONS, type RegulationId } from '../config/university';
 import type { StudentProfile, SavedCalculation, CalculationType } from '../types/profile';
+import { getAmsDashboardData } from '../services/amsStorage';
 
 export const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
@@ -46,6 +49,13 @@ export const ProfilePage: React.FC = () => {
   const [calculations, setCalculations] = useState<SavedCalculation[]>([]);
   const [filterType, setFilterType] = useState<string>('all');
   const [filterFavorites, setFilterFavorites] = useState<boolean>(false);
+
+  // College AMS state
+  const [amsData, setAmsData] = useState(() => getAmsDashboardData(activeProfile.id));
+
+  useEffect(() => {
+    setAmsData(getAmsDashboardData(activeProfile.id));
+  }, [activeProfile.id]);
 
   // Modals & form state
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -402,6 +412,15 @@ export const ProfilePage: React.FC = () => {
               <Percent className="w-3.5 h-3.5" />
               <span>Attendance Planner</span>
             </button>
+
+            <button
+              type="button"
+              onClick={() => navigate('/ams-connect')}
+              className="apple-btn-secondary text-xs h-9 px-3 gap-1.5 font-medium text-blue-600 dark:text-blue-400 border-blue-500/20"
+            >
+              <Building2 className="w-3.5 h-3.5" />
+              <span>College AMS</span>
+            </button>
           </div>
         </div>
 
@@ -455,6 +474,56 @@ export const ProfilePage: React.FC = () => {
           >
             <Download className="w-3.5 h-3.5" />
             <span>Export Profile Data (JSON)</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 2.5 College AMS Connection Card */}
+      <div className="rounded-2xl bg-gradient-to-r from-blue-50/60 via-[var(--surface)] to-indigo-50/40 dark:from-blue-950/20 dark:via-[var(--surface)] dark:to-indigo-950/20 border border-[var(--border-primary)] p-6 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+        <div className="flex items-start gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+            <Building2 className="w-6 h-6" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-base font-bold text-[var(--text-primary)]">
+                Vel Tech AMS Integration
+              </h3>
+              <span
+                className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${
+                  amsData.academicProfile.connectionStatus === 'connected'
+                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                    : amsData.academicProfile.connectionStatus === 'connecting'
+                    ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                    : 'bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border-zinc-500/30'
+                }`}
+              >
+                {amsData.academicProfile.connectionStatus === 'connected'
+                  ? 'Connected & Synced'
+                  : amsData.academicProfile.connectionStatus === 'connecting'
+                  ? 'Connecting'
+                  : 'Not Connected'}
+              </span>
+            </div>
+            <p className="text-xs text-[var(--text-secondary)] max-w-xl leading-relaxed">
+              Connect your official Vel Tech Academic Management System (AMS) account to sync timetable, subject attendance, internal marks, assessments, and semester results locally.
+            </p>
+            {amsData.lastSyncTime && (
+              <span className="text-[11px] text-[var(--text-tertiary)]">
+                Last synced: {new Date(amsData.lastSyncTime).toLocaleString()}
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 shrink-0 w-full md:w-auto">
+          <button
+            type="button"
+            onClick={() => navigate('/ams-connect')}
+            className="apple-btn-primary text-xs h-10 px-4 gap-2 font-medium w-full md:w-auto"
+          >
+            <Shield className="w-4 h-4" />
+            <span>{amsData.academicProfile.connectionStatus === 'connected' ? 'Open AMS Dashboard' : 'Connect College AMS'}</span>
           </button>
         </div>
       </div>
