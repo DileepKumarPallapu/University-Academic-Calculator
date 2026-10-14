@@ -44,6 +44,7 @@ import type { CatalogueCourse } from '../types/catalogue';
 import {
   getCatalogueForRegulation,
   isRegulationSupportingCourseCode,
+  sanitizeCourseTitle,
 } from '../services/catalogueStorage';
 import {
   COLLEGE_CHART_TEMPLATE,
@@ -89,7 +90,15 @@ export const CreditsPlannerPage: React.FC = () => {
   const [subjects, setSubjects] = useState<CreditSubjectItem[]>(() => {
     try {
       const saved = localStorage.getItem(`academic_credits_subjects_${activeProfile.id}`);
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed: CreditSubjectItem[] = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.map((s) => ({
+            ...s,
+            name: sanitizeCourseTitle(s.name),
+          }));
+        }
+      }
     } catch {}
     return [];
   });
@@ -193,12 +202,28 @@ export const CreditsPlannerPage: React.FC = () => {
   useEffect(() => {
     try {
       const savedSub = localStorage.getItem(`academic_credits_subjects_${activeProfile.id}`);
-      setSubjects(savedSub ? JSON.parse(savedSub) : []);
+      if (savedSub) {
+        const parsed: CreditSubjectItem[] = JSON.parse(savedSub);
+        if (Array.isArray(parsed)) {
+          setSubjects(
+            parsed.map((s) => ({
+              ...s,
+              name: sanitizeCourseTitle(s.name),
+            }))
+          );
+        } else {
+          setSubjects([]);
+        }
+      } else {
+        setSubjects([]);
+      }
       const savedRules = localStorage.getItem(
         `academic_credits_nptel_rules_${activeProfile.id}`
       );
       setNptelRules(savedRules ? JSON.parse(savedRules) : DEFAULT_NPTEL_RULES);
-    } catch {}
+    } catch {
+      setSubjects([]);
+    }
   }, [activeProfile.id]);
 
   // Load from Profile Context if calcIdParam is provided
@@ -304,9 +329,10 @@ export const CreditsPlannerPage: React.FC = () => {
   // Add / Edit Subject Save Handler
   const handleSaveSubject = (data: Partial<CreditSubjectItem>) => {
     const isNptel = data.courseType === 'nptel';
-    const courseTitle = isNptel
+    const rawTitle = isNptel
       ? (data.nptelDetails?.courseName || data.name || '').trim()
       : (data.name || '').trim();
+    const courseTitle = sanitizeCourseTitle(rawTitle);
 
     if (!courseTitle) {
       showToast('Course name is required', 'error');
@@ -325,7 +351,7 @@ export const CreditsPlannerPage: React.FC = () => {
       ? data.nptelDetails?.categoryTarget || data.category || 'programme_elective'
       : data.category || 'programme_core';
 
-    let status = data.status || 'Passed';
+    let status = data.status || 'Pending';
     let isVerified = data.isVerified !== undefined ? data.isVerified : true;
 
     if (isNptel && data.nptelDetails) {
@@ -344,65 +370,89 @@ export const CreditsPlannerPage: React.FC = () => {
       }
     }
 
+    const now = Date.now();
+    let updatedList: CreditSubjectItem[];
+
     if (editingSubject && editingSubject.id) {
-      setSubjects((prev) =>
-        prev.map((s) =>
-          s.id === editingSubject.id
-            ? {
-                ...s,
-                ...data,
-                name: courseTitle,
-                category: cat,
-                credits: cr,
-                registeredCredits: data.registeredCredits !== undefined ? data.registeredCredits : cr,
-                earnedCredits: data.earnedCredits !== undefined ? data.earnedCredits : (status === 'Passed' ? cr : 0),
-                semester: sem,
-                status,
-                isVerified,
-                regulation: data.regulation || s.regulation,
-                catalogueCourseId: data.catalogueCourseId || s.catalogueCourseId,
-                courseType: data.courseType || 'regular',
-                nptelDetails: data.nptelDetails,
-              }
-            : s
-        )
+      updatedList = subjects.map((s) =>
+        s.id === editingSubject.id
+          ? {
+              ...s,
+              ...data,
+              profileId: activeProfile.id,
+              updatedAt: now,
+              name: courseTitle,
+              category: cat,
+              credits: cr,
+              registeredCredits: data.registeredCredits !== undefined ? data.registeredCredits : cr,
+              earnedCredits: data.earnedCredits !== undefined ? data.earnedCredits : (status === 'Passed' ? cr : 0),
+              semester: sem,
+              status,
+              isVerified,
+              regulation: data.regulation || s.regulation,
+              catalogueCourseId: data.catalogueCourseId || s.catalogueCourseId,
+              courseType: data.courseType || 'regular',
+              nptelDetails: data.nptelDetails,
+            }
+          : s
       );
-      showToast(`Updated course: ${courseTitle}`, 'success');
     } else {
+      const reg = data.regulation || activeProfile.regulation || 'VTR21';
+      const supportsCode = isRegulationSupportingCourseCode(reg);
       const newSubject: CreditSubjectItem = {
         id: `sub-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        profileId: activeProfile.id,
+        createdAt: now,
+        updatedAt: now,
         name: courseTitle,
-        code: data.code ? data.code.trim().toUpperCase() : (isNptel ? (data.nptelDetails?.courseIdOrUrl || 'NPTEL').toUpperCase() : undefined),
+        code: supportsCode && data.code
+          ? data.code.trim().toUpperCase()
+          : (isNptel ? (data.nptelDetails?.courseIdOrUrl || 'NPTEL').toUpperCase() : undefined),
         category: cat,
         semester: sem,
         credits: cr,
         registeredCredits: data.registeredCredits !== undefined ? data.registeredCredits : cr,
         earnedCredits: data.earnedCredits !== undefined ? data.earnedCredits : (status === 'Passed' ? cr : 0),
-        grade: data.grade || (isNptel ? 'Elite' : 'A'),
+        grade: data.grade || (isNptel ? 'Elite' : '—'),
         status,
         isVerified,
         source: data.source || 'Manual',
-        regulation: data.regulation,
+        regulation: reg,
         catalogueCourseId: data.catalogueCourseId,
         isRetake: data.isRetake,
         notes: data.notes?.trim() || data.nptelDetails?.notes?.trim(),
         courseType: data.courseType || 'regular',
         nptelDetails: data.nptelDetails,
       };
-      setSubjects((prev) => [...prev, newSubject]);
-      showToast(`Added course: ${newSubject.name}`, 'success');
+      updatedList = [...subjects, newSubject];
     }
 
-    setSubjectModalOpen(false);
-    setEditingSubject(null);
+    try {
+      localStorage.setItem(
+        `academic_credits_subjects_${activeProfile.id}`,
+        JSON.stringify(updatedList)
+      );
+      setSubjects(updatedList);
+      showToast(
+        editingSubject && editingSubject.id
+          ? `Updated course: ${courseTitle}`
+          : `Saved course: ${courseTitle}`,
+        'success'
+      );
+      setSubjectModalOpen(false);
+      setEditingSubject(null);
+    } catch {
+      showToast('Failed to persist course to device storage. Please retry.', 'error');
+    }
   };
 
-  // Add course directly from Catalogue Hub
+  // Add course directly from Catalogue Hub (AUTOCOMPLETE / PREFILL ONLY)
   const handleAddCourseFromCatalogue = (course: CatalogueCourse) => {
+    const supportsCode = isRegulationSupportingCourseCode(course.regulation);
     setEditingSubject({
       id: '',
-      name: course.name,
-      code: course.code,
+      name: sanitizeCourseTitle(course.name),
+      code: supportsCode ? course.code : undefined,
       category: course.category,
       semester: course.defaultSemester || 1,
       credits: course.verifiedCredits !== undefined ? course.verifiedCredits : 0,
@@ -414,7 +464,7 @@ export const CreditsPlannerPage: React.FC = () => {
       source: 'Catalogue',
       regulation: course.regulation,
       catalogueCourseId: course.id,
-      notes: course.notes || course.discrepancyNote || '',
+      notes: course.notes ? sanitizeCourseTitle(course.notes) : '',
     });
     setSubjectModalInitialCourseType('regular');
     setSubjectModalOpen(true);
@@ -1098,10 +1148,10 @@ export const CreditsPlannerPage: React.FC = () => {
                             </div>
                             <div className="flex flex-col gap-1">
                               <span className="font-bold text-sm text-[var(--text-primary)]">
-                                Zero Registered Courses
+                                No courses added yet
                               </span>
                               <span className="text-xs text-[var(--text-secondary)]">
-                                Your academic records are set to zero defaults. Add your courses manually or register them directly from the official Course Catalogue.
+                                Select a course from the catalogue or add one manually.
                               </span>
                             </div>
                             <div className="flex items-center gap-2 pt-2">
@@ -2780,7 +2830,7 @@ const SubjectFormModal: React.FC<{
   }, [regulation, category, catalogueSearch, supportsCode]);
 
   const handleSelectCatalogueCourse = (course: CatalogueCourse) => {
-    setName(course.name);
+    setName(sanitizeCourseTitle(course.name));
     if (isRegulationSupportingCourseCode(regulation)) {
       setCode(course.code || '');
     } else {
@@ -2798,7 +2848,7 @@ const SubjectFormModal: React.FC<{
     } else {
       setCredits('');
       setRegisteredCredits('');
-      setEarnedCredits('');
+      setEarnedCredits(0);
       setIsVerified(false);
       setCreditNotice('⚠️ Credit value unassigned in catalogue. Please enter credits from your curriculum syllabus.');
     }
@@ -2891,7 +2941,7 @@ const SubjectFormModal: React.FC<{
         notes: nptelNotes.trim(),
       });
     } else {
-      const title = name.trim();
+      const title = sanitizeCourseTitle(name);
       if (!title) return;
 
       const safeCredits = typeof credits === 'number' ? credits : parseFloat(String(credits)) || 0;
@@ -3596,7 +3646,7 @@ const BulkEntryModal: React.FC<{
         result.push({
           id: `bulk-${Date.now()}-${i}-${Math.random().toString(36).substring(2, 5)}`,
           code: parts[0].toUpperCase(),
-          name: parts[1],
+          name: sanitizeCourseTitle(parts[1]),
           credits: Math.max(0, parseFloat(parts[2]) || 3),
           semester: parseInt(parts[3]) || 1,
           grade: parts[4] || 'A',

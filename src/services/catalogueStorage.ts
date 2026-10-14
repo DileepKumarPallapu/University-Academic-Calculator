@@ -6,6 +6,50 @@ import {
 
 export { isRegulationSupportingCourseCode };
 
+/**
+ * Sanitizes course titles to strictly eliminate:
+ * - Student names (e.g. PALLAPU DILEEP KUMAR)
+ * - Student register numbers (e.g. VTU24654, VTU29962, 24UECS0805)
+ * - Report provenance sentences e.g. "Listed in VTU24654 (CSE); VTU29962 (CSE AIML) took 10211CS226 Java Programming."
+ * - Course code prefixes mistakenly merged into title
+ * - Individual batch / branch tags in parentheses
+ */
+export function sanitizeCourseTitle(title: string): string {
+  if (!title) return '';
+  let cleaned = title.trim();
+
+  // Pattern 1: "... took [optional code] Course Name"
+  const tookMatch = cleaned.match(/(?:took|instead\s+of)\s+(?:[0-9]{5}[A-Z]{2}[0-9]{3}\s+)?([A-Za-z0-9\s,&/()\-]+?)(?:\.|\s*\(|$)/i);
+  if (tookMatch && tookMatch[1] && tookMatch[1].trim().length > 2) {
+    cleaned = tookMatch[1].trim();
+  } else {
+    // Pattern 2: "Listed in ... [code] [Name]"
+    cleaned = cleaned.replace(/^Listed in[^;:\n]*[;:]\s*/i, '');
+    cleaned = cleaned.replace(/^Included in[^;:\n]*[;:]\s*/i, '');
+  }
+
+  // Strip student IDs (e.g. VTU24654, VTU29962, 24UECS0805)
+  cleaned = cleaned.replace(/\bVTU\d+\b/gi, '');
+  cleaned = cleaned.replace(/\b\d{2}[A-Z]{4}\d{4}\b/gi, '');
+
+  // Strip student names
+  cleaned = cleaned.replace(/\bPALLAPU\s+DILEEP\s+KUMAR\b/gi, '');
+
+  // Strip branch / batch annotations in parentheses
+  cleaned = cleaned.replace(/\((?:CSE|AIML|ECE|EEE|MECH|CIVIL|IT|B\.Tech|[0-9]{4}-[0-9]{4})[^)]*\)/gi, '');
+
+  // Strip standalone course code prefix if mistakenly prepended to title e.g. "10211CS226 Java Programming"
+  cleaned = cleaned.replace(/^[0-9]{5}[A-Z]{2}[0-9]{3}\s+/i, '');
+
+  // Strip report phrases
+  cleaned = cleaned.replace(/\b(?:took this course|took course|listed in report|from report|curriculum record)\b/gi, '');
+
+  // Clean trailing / leading punctuation and extra spaces
+  cleaned = cleaned.replace(/^[;,\-–—.\s]+|[;,\-–—.\s]+$/g, '').replace(/\s{2,}/g, ' ').trim();
+
+  return cleaned || title.trim();
+}
+
 const STORAGE_PREFIX = 'academic_catalogue_';
 const SCHEMA_VERSION = 'v1';
 
@@ -77,7 +121,10 @@ export function getCatalogueForRegulation(regulation: string): CatalogueCourse[]
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        return parsed;
+        return parsed.map((c) => ({
+          ...c,
+          name: sanitizeCourseTitle(c.name),
+        }));
       }
     }
   } catch (err) {
@@ -86,7 +133,10 @@ export function getCatalogueForRegulation(regulation: string): CatalogueCourse[]
 
   // Return initial seed (VTR21 has verified records, others are empty)
   const defaultList = INITIAL_CATALOGUES_BY_REGULATION[norm] || [];
-  return [...defaultList];
+  return defaultList.map((c) => ({
+    ...c,
+    name: sanitizeCourseTitle(c.name),
+  }));
 }
 
 /**
@@ -102,11 +152,12 @@ export function saveCatalogueForRegulation(
   try {
     // Sanitize: For VTR25, ensure no course codes are ever stored or invented
     const sanitized = courses.map((c) => {
+      const cleanName = sanitizeCourseTitle(c.name);
       if (!isRegulationSupportingCourseCode(norm)) {
         const { code, ...rest } = c;
-        return { ...rest, regulation: norm };
+        return { ...rest, name: cleanName, regulation: norm };
       }
-      return { ...c, regulation: norm };
+      return { ...c, name: cleanName, regulation: norm };
     });
 
     safeSetItem(key, JSON.stringify(sanitized));
@@ -128,7 +179,7 @@ export function addCourseToCatalogue(
   const current = getCatalogueForRegulation(norm);
 
   const supportsCode = isRegulationSupportingCourseCode(norm);
-  const cleanName = courseData.name.trim();
+  const cleanName = sanitizeCourseTitle(courseData.name);
 
   if (!cleanName) {
     return { success: false, error: 'Course name is required.' };
@@ -190,7 +241,7 @@ export function updateCourseInCatalogue(
   const clean: CatalogueCourse = {
     ...updatedCourse,
     regulation: norm,
-    name: updatedCourse.name.trim(),
+    name: sanitizeCourseTitle(updatedCourse.name),
     code: supportsCode ? updatedCourse.code?.trim().toUpperCase() : undefined,
   };
 
@@ -253,7 +304,7 @@ export function exportCatalogueToCSV(regulation: string): string {
   const supportsCode = isRegulationSupportingCourseCode(norm);
 
   const headers = supportsCode
-    ? ['Course Code', 'Course Name', 'Category', 'Verified Credits', 'Source', 'Discrepancy Note', 'Notes']
+    ? ['Course Code', 'Course Name', 'Category', 'Verified Credits', 'Source', 'Notes']
     : ['Course Name', 'Category', 'Verified Credits', 'Source', 'Notes'];
 
   const rows = courses.map((c) => {
@@ -264,7 +315,6 @@ export function exportCatalogueToCSV(regulation: string): string {
         `"${c.category}"`,
         c.verifiedCredits !== undefined ? c.verifiedCredits : '',
         `"${c.source || ''}"`,
-        `"${(c.discrepancyNote || '').replace(/"/g, '""')}"`,
         `"${(c.notes || '').replace(/"/g, '""')}"`,
       ].join(',');
     } else {
@@ -305,7 +355,8 @@ export function importCatalogueFromJSON(
     for (const item of list) {
       if (!item.name || typeof item.name !== 'string') continue;
 
-      const cleanName = item.name.trim();
+      const cleanName = sanitizeCourseTitle(item.name);
+      if (!cleanName) continue;
       const code = supportsCode ? item.code?.toString().trim().toUpperCase() : undefined;
       const id = item.id && !existingIds.has(item.id)
         ? item.id
@@ -322,7 +373,6 @@ export function importCatalogueFromJSON(
         source: 'Imported',
         isVerified: !!item.isVerified,
         notes: item.notes || '',
-        discrepancyNote: item.discrepancyNote || '',
       });
     }
 

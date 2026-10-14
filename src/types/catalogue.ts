@@ -1,9 +1,8 @@
 export type RegulationCode = 'VTR15' | 'VTR18' | 'VTR21' | 'VTR25' | string;
 
 export type CatalogueSourceType =
-  | 'Official VTRUGE2021 Report (VTU24654)'
-  | 'Official VTRUGE2021 Report (VTU29962)'
-  | 'Both Reports (Consensus)'
+  | 'Official VTR21 Curriculum'
+  | 'Official Curriculum Syllabus'
   | 'Manual'
   | 'Imported';
 
@@ -20,11 +19,8 @@ export interface CatalogueCourse {
   /** Suggested semester if officially verified */
   defaultSemester?: number;
   source: CatalogueSourceType;
-  sourceBatch?: string; // e.g. '2023-2024 (CSE)' or '2024-2025 (CSE AIML)'
   isVerified: boolean;
-  hasDiscrepancy?: boolean;
-  discrepancyNote?: string;
-  department?: string; // e.g. 'CSE', 'CSE (AIML)', 'Common'
+  department?: string; // e.g. 'CSE', 'Common'
   notes?: string;
 }
 

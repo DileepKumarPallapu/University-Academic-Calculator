@@ -6,7 +6,6 @@ import {
   Download,
   Upload,
   RotateCcw,
-  AlertTriangle,
   Edit3,
   Trash2,
   Info,
@@ -562,7 +561,7 @@ export const CourseCatalogueHub: React.FC<CourseCatalogueHubProps> = ({
                   <th className="p-3">Course Name</th>
                   <th className="p-3 w-36">Category</th>
                   <th className="p-3 w-28 text-center">Verified Credits</th>
-                  <th className="p-3 w-32">Source / Batch</th>
+                  <th className="p-3 w-32">Source</th>
                   <th className="p-3 w-32">My Status</th>
                   <th className="p-3 w-40 text-right">Actions</th>
                 </tr>
@@ -602,12 +601,6 @@ export const CourseCatalogueHub: React.FC<CourseCatalogueHubProps> = ({
                               Dept: {course.department}
                             </span>
                           )}
-                          {course.hasDiscrepancy && (
-                            <div className="flex items-center gap-1 text-[10px] text-amber-700 dark:text-amber-400 font-medium mt-0.5">
-                              <AlertTriangle className="w-3 h-3 shrink-0" />
-                              <span>{course.discrepancyNote}</span>
-                            </div>
-                          )}
                           {course.notes && (
                             <span className="text-[10px] text-[var(--text-secondary)] italic">
                               {course.notes}
@@ -640,18 +633,11 @@ export const CourseCatalogueHub: React.FC<CourseCatalogueHubProps> = ({
                         )}
                       </td>
 
-                      {/* Source & Verification */}
+                      {/* Source */}
                       <td className="p-3">
-                        <div className="flex flex-col gap-0.5">
-                          <span className="text-[10px] font-medium text-[var(--text-secondary)] truncate max-w-[120px]" title={course.source}>
-                            {course.source.replace('Official VTRUGE2021 Report ', '')}
-                          </span>
-                          {course.sourceBatch && (
-                            <span className="text-[9px] text-[var(--text-tertiary)]">
-                              {course.sourceBatch}
-                            </span>
-                          )}
-                        </div>
+                        <span className="text-[10px] font-medium text-[var(--text-secondary)] truncate max-w-[140px] block" title={course.source}>
+                          {course.source}
+                        </span>
                       </td>
 
                       {/* Student's Personal Completion Status */}

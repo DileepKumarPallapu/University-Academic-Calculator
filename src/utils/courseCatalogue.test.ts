@@ -13,6 +13,9 @@ import {
   exportCatalogueToJSON,
   importCatalogueFromJSON,
   clearCatalogueStorage,
+  sanitizeCourseTitle,
+  safeGetItem,
+  safeSetItem,
 } from '../services/catalogueStorage';
 
 describe('Regulation-Wise Course Catalogue', () => {
@@ -66,31 +69,29 @@ describe('Regulation-Wise Course Catalogue', () => {
     });
   });
 
-  describe('3. Discrepancy Preservation (No Silent Overwrite)', () => {
-    it('preserves both ME104 (VTU24654) and ME103 (VTU29962) with discrepancy flags', () => {
+  describe('3. Distinct Courses & Clean Title Verification', () => {
+    it('preserves both ME104 and ME103 as distinct courses with clean titles', () => {
       const vtr21 = getCatalogueForRegulation('VTR21');
       const me104 = vtr21.find((c) => c.code === '10210ME104');
       const me103 = vtr21.find((c) => c.code === '10210ME103');
 
       expect(me104).toBeDefined();
-      expect(me104?.hasDiscrepancy).toBe(true);
       expect(me104?.name).toBe('Project Management and Finance');
 
       expect(me103).toBeDefined();
-      expect(me103?.hasDiscrepancy).toBe(true);
       expect(me103?.name).toBe('Innovation and Entrepreneurship');
     });
 
-    it('preserves branch-specific differences (CS204 OOP Java vs CS226 Java Programming)', () => {
+    it('preserves branch-specific differences (CS204 OOP Java vs CS226 Java Programming) with clean titles', () => {
       const vtr21 = getCatalogueForRegulation('VTR21');
       const cs204 = vtr21.find((c) => c.code === '10211CS204');
       const cs226 = vtr21.find((c) => c.code === '10211CS226');
 
       expect(cs204).toBeDefined();
-      expect(cs204?.hasDiscrepancy).toBe(true);
+      expect(cs204?.name).toBe('Object Oriented Programming using Java');
 
       expect(cs226).toBeDefined();
-      expect(cs226?.hasDiscrepancy).toBe(true);
+      expect(cs226?.name).toBe('Java Programming');
     });
   });
 
@@ -197,6 +198,90 @@ describe('Regulation-Wise Course Catalogue', () => {
       expect(impRes.success).toBe(true);
       expect(impRes.count).toBe(INITIAL_VTR21_CATALOGUE.length);
       expect(getCatalogueForRegulation('VTR21').length).toBe(INITIAL_VTR21_CATALOGUE.length);
+    });
+  });
+
+  describe('7. Title Sanitization & Data Quality (Scenarios B, F, G)', () => {
+    it('removes report sentences and student IDs from course titles', () => {
+      const dirty = 'Listed in VTU24654 (CSE); VTU29962 (CSE AIML) took 10211CS226 Java Programming.';
+      expect(sanitizeCourseTitle(dirty)).toBe('Java Programming');
+
+      const dirty2 = '10211CS204 Object Oriented Programming using Java';
+      expect(sanitizeCourseTitle(dirty2)).toBe('Object Oriented Programming using Java');
+
+      const clean = 'Java Programming';
+      expect(sanitizeCourseTitle(clean)).toBe('Java Programming');
+    });
+
+    it('Scenario B: Autocomplete does not populate personal student records', () => {
+      const vtr21 = getCatalogueForRegulation('VTR21');
+      const java = vtr21.find((c) => c.code === '10211CS226');
+      expect(java).toBeDefined();
+      expect(java?.name).toBe('Java Programming');
+      expect(java?.code).toBe('10211CS226');
+      expect(java?.verifiedCredits).toBe(3);
+
+      // In autocomplete, selecting this gives prefilled data, but student personal storage remains untouched
+      const profileKey = 'academic_credits_subjects_student_test';
+      expect(safeGetItem(profileKey)).toBeNull();
+    });
+
+    it('Scenario C & D: Explicit save isolates data between separate profiles', () => {
+      const profileA = 'student_A';
+      const profileB = 'student_B';
+
+      const courseA = {
+        id: 'sub-1',
+        profileId: profileA,
+        name: 'Java Programming',
+        code: '10211CS226',
+        category: 'programme_core',
+        semester: 3,
+        credits: 3,
+        registeredCredits: 3,
+        earnedCredits: 3,
+        status: 'Passed' as const,
+        isVerified: true,
+        source: 'Catalogue' as const,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+
+      // Save for Student A
+      safeSetItem(`academic_credits_subjects_${profileA}`, JSON.stringify([courseA]));
+
+      // Student B storage must be empty
+      const rawB = safeGetItem(`academic_credits_subjects_${profileB}`);
+      const studentBCourses = rawB ? JSON.parse(rawB) : [];
+      expect(studentBCourses).toHaveLength(0);
+
+      // Student A storage still has 1 course
+      const rawA = safeGetItem(`academic_credits_subjects_${profileA}`);
+      const studentACourses = JSON.parse(rawA!);
+      expect(studentACourses).toHaveLength(1);
+      expect(studentACourses[0].name).toBe('Java Programming');
+    });
+
+    it('Scenario F: Regulation code display behavior', () => {
+      expect(isRegulationSupportingCourseCode('VTR21')).toBe(true);
+      expect(isRegulationSupportingCourseCode('VTR18')).toBe(true);
+      expect(isRegulationSupportingCourseCode('VTR15')).toBe(true);
+      expect(isRegulationSupportingCourseCode('VTR25')).toBe(false);
+
+      // Missing/unseeded catalogues are empty and do not fabricate courses
+      expect(getCatalogueForRegulation('VTR15')).toHaveLength(0);
+      expect(getCatalogueForRegulation('VTR18')).toHaveLength(0);
+      expect(getCatalogueForRegulation('VTR25')).toHaveLength(0);
+    });
+
+    it('Scenario G: Verified seed catalogue does not have student names in course titles', () => {
+      const vtr21 = getCatalogueForRegulation('VTR21');
+      for (const course of vtr21) {
+        expect(course.name).not.toMatch(/VTU\d+/);
+        expect(course.name).not.toMatch(/Listed in/i);
+        expect(course.name).not.toMatch(/took/i);
+        expect(course.name).not.toMatch(/PALLAPU/i);
+      }
     });
   });
 });

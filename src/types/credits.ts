@@ -90,6 +90,11 @@ export interface CreditSubjectItem {
   courseType?: CourseType;
   nptelDetails?: NptelDetails;
   catalogueCourseId?: string;
+
+  // Strict personal data isolation & audit timestamps
+  profileId?: string;
+  createdAt?: number;
+  updatedAt?: number;
 }
 
 export interface CreditCategoryConfig {

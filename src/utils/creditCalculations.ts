@@ -9,6 +9,7 @@ import type {
   NptelCollegeRulesConfig,
   NptelDashboardStats,
 } from '../types/credits';
+import { sanitizeCourseTitle } from '../services/catalogueStorage';
 
 /**
  * Supplied College Credit Structure Template
@@ -888,7 +889,8 @@ export function parseCreditsFromCSV(csvText: string): CreditSubjectItem[] {
     tokens.push(current.trim());
 
     const code = tokens[0]?.replace(/^"|"$/g, '') || '';
-    const name = tokens[1]?.replace(/^"|"$/g, '') || `Course ${i}`;
+    const rawName = tokens[1]?.replace(/^"|"$/g, '') || `Course ${i}`;
+    const name = sanitizeCourseTitle(rawName) || `Course ${i}`;
     const category = tokens[2]?.replace(/^"|"$/g, '') || 'programme_core';
     const semester = parseInt(tokens[3]) || 1;
     const credits = Math.max(0, parseFloat(tokens[4]) || 0);
