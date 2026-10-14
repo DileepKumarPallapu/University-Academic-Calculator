@@ -15,6 +15,9 @@ import { CreditsPlannerPage } from './pages/CreditsPlannerPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { AmsConnectPage } from './pages/AmsConnectPage';
 import { AmsImportPage } from './pages/AmsImportPage';
+import { SemesterPlannerPage } from './pages/SemesterPlannerPage';
+import { MarksForecasterPage } from './pages/MarksForecasterPage';
+import { AcademicReportsPage } from './pages/AcademicReportsPage';
 
 export function App() {
   useEffect(() => {
@@ -37,6 +40,9 @@ export function App() {
                 <Route path="/cgpa" element={<CGPACalculatorPage />} />
                 <Route path="/attendance" element={<AttendancePage />} />
                 <Route path="/credits" element={<CreditsPlannerPage />} />
+                <Route path="/planner" element={<SemesterPlannerPage />} />
+                <Route path="/forecaster" element={<MarksForecasterPage />} />
+                <Route path="/reports" element={<AcademicReportsPage />} />
                 <Route path="/catalogue" element={<Navigate to="/credits?tab=catalogue" replace />} />
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/ams-connect" element={<AmsConnectPage />} />

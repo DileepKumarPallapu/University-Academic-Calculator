@@ -17,6 +17,9 @@ export const Navbar: React.FC = () => {
     { to: '/cgpa', label: 'CGPA' },
     { to: '/attendance', label: 'Attendance' },
     { to: '/credits', label: 'Credits' },
+    { to: '/planner', label: 'Planner' },
+    { to: '/forecaster', label: 'Forecaster' },
+    { to: '/reports', label: 'Reports' },
   ];
 
   const themeOptions: { value: ThemeMode; label: string; icon: React.ReactNode }[] = [
