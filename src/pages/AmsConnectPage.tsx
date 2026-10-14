@@ -45,7 +45,6 @@ import {
   clearAmsDataForProfile,
   exportAmsDataForProfile,
   reconcileAmsWithCredits,
-  applyAmsToAttendance,
   calculateAmsAttendancePercentage,
 } from '../services/amsStorage';
 import {
@@ -53,6 +52,8 @@ import {
   OFFICIAL_AMS_METADATA,
   type AmsAuthStatusCode,
 } from '../services/amsIntegrationAdapter';
+import { amsSyncEngine, type SyncCenterState } from '../services/amsSyncEngine';
+import { type ValidationSeverity } from '../services/amsValidationEngine';
 import { isRegulationSupportingCourseCode, sanitizeCourseTitle } from '../services/catalogueStorage';
 import { processAmsDocument } from '../utils/amsExtractor';
 import type { AmsExtractionResult } from '../types/ams';
@@ -60,6 +61,7 @@ import { ResetConfirmModal } from '../components/common/ResetConfirmModal';
 
 export type DashboardTab =
   | 'overview'
+  | 'syncCenter'
   | 'profile'
   | 'timetable'
   | 'attendance'
@@ -99,6 +101,12 @@ export const AmsConnectPage: React.FC = () => {
   const [authDetails, setAuthDetails] = useState<string>('');
   const [resetConfirmOpen, setResetConfirmOpen] = useState<boolean>(false);
 
+  // Sync Center & Validation State
+  const [validationFilter, setValidationFilter] = useState<'all' | ValidationSeverity>('all');
+  const [confirmTransferAttendanceOpen, setConfirmTransferAttendanceOpen] = useState<boolean>(false);
+  const [confirmTransferSgpaOpen, setConfirmTransferSgpaOpen] = useState<boolean>(false);
+  const [selectedSgpaSemester, setSelectedSgpaSemester] = useState<number>(1);
+
   // Manual Document Import Modal
   const [isImportModalOpen, setIsImportModalOpen] = useState<boolean>(false);
   const [isExtracting, setIsExtracting] = useState<boolean>(false);
@@ -133,6 +141,17 @@ export const AmsConnectPage: React.FC = () => {
   const supportsCode = isRegulationSupportingCourseCode(
     dashboardData.academicProfile.regulation || activeProfile.regulation || 'VTR21'
   );
+
+  // Live Sync Center state computation
+  const syncCenterState: SyncCenterState = useMemo(() => {
+    return amsSyncEngine.getSyncCenterState(activeProfile.id);
+  }, [dashboardData, activeProfile.id]);
+
+  // Filtered Validation Issues
+  const filteredValidationIssues = useMemo(() => {
+    if (validationFilter === 'all') return syncCenterState.validationReport.issues;
+    return syncCenterState.validationReport.issues.filter((i) => i.severity === validationFilter);
+  }, [syncCenterState.validationReport.issues, validationFilter]);
 
   // Refresh CAPTCHA code generator
   const refreshCaptcha = () => {
@@ -207,7 +226,7 @@ export const AmsConnectPage: React.FC = () => {
         type: 'live_attempt',
         status: 'notice',
         message: 'Dashboard refresh completed.',
-        details: `Verified ${summary.totalRetrieved} records across institutional modules.`,
+        details: `Verified ${summary.totalRetrieved} records across institutional modules. Flagged issues: ${syncCenterState.validationReport.issues.length}.`,
         recordsCount: summary.totalRetrieved,
       });
       setDashboardData(getAmsDashboardData(activeProfile.id));
@@ -215,20 +234,29 @@ export const AmsConnectPage: React.FC = () => {
     }, 600);
   };
 
-  // Apply Attendance to manual Attendance Calculator
-  const handleApplyToAttendanceCalc = () => {
-    const res = applyAmsToAttendance(activeProfile.id);
-    if (res.added === 0 && res.updated === 0) {
-      showToast('No new attendance records to sync.', 'info');
-    } else {
+  // Calculator Transfer Handlers with Explicit Confirmation
+  const handleExecuteTransferAttendance = () => {
+    const res = amsSyncEngine.transferToAttendanceCalculator(activeProfile.id);
+    setConfirmTransferAttendanceOpen(false);
+    showToast(
+      `Attendance Calculator updated: ${res.added} added, ${res.updated} updated, ${res.unchanged} unchanged.`,
+      'success'
+    );
+  };
+
+  const handleExecuteTransferSgpa = () => {
+    const res = amsSyncEngine.transferToSgpaCalculator(activeProfile.id, selectedSgpaSemester);
+    setConfirmTransferSgpaOpen(false);
+    if (res.coursesCount > 0) {
       showToast(
-        `Applied to Attendance Calculator: ${res.added} subjects added, ${res.updated} updated.`,
+        `Exported ${res.coursesCount} Semester ${selectedSgpaSemester} courses to SGPA Calculator.`,
         'success'
       );
+    } else {
+      showToast(`No results found for Semester ${selectedSgpaSemester}.`, 'info');
     }
   };
 
-  // Apply Semester Results to Credits Planner
   const handleReconcileCredits = () => {
     if (dashboardData.semesterResults.length === 0) {
       showToast('No semester results available to reconcile.', 'info');
@@ -397,11 +425,6 @@ export const AmsConnectPage: React.FC = () => {
       .reduce((acc, curr) => acc + (curr.credits || 0), 0);
   }, [dashboardData.semesterResults]);
 
-  // Module status calculation for Phase 4
-  const moduleStatus = useMemo(() => {
-    return amsIntegrationAdapter.getModuleStatus(activeProfile.id);
-  }, [dashboardData, activeProfile.id]);
-
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 flex flex-col gap-6 animate-appleFadeIn">
       {/* ========================================================================= */}
@@ -416,7 +439,7 @@ export const AmsConnectPage: React.FC = () => {
             <div className="flex flex-col gap-1">
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[var(--text-primary)]">
-                  Vel Tech AMS Connection
+                  Vel Tech AMS Connection & Sync Center
                 </h1>
                 <span
                   className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
@@ -431,7 +454,7 @@ export const AmsConnectPage: React.FC = () => {
                     ? '● Authenticated (Live)'
                     : dashboardData.academicProfile.connectionStatus === 'manual_synced'
                     ? '● Synchronized (Official Document)'
-                    : '○ Unconnected'}
+                    : '○ Unconnected (API Pending)'}
                 </span>
               </div>
               <p className="text-xs sm:text-sm text-[var(--text-secondary)]">
@@ -469,7 +492,7 @@ export const AmsConnectPage: React.FC = () => {
               title="Refresh local dashboard data"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-              <span className="hidden sm:inline">Refresh</span>
+              <span className="hidden sm:inline">Refresh Sync</span>
             </button>
 
             {dashboardData.academicProfile.connectionStatus !== 'not_connected' && (
@@ -486,7 +509,7 @@ export const AmsConnectPage: React.FC = () => {
         </div>
 
         {/* ========================================================================= */}
-        {/* PHASE 2: GENUINE AMS AUTHENTICATION INTERFACE                             */}
+        {/* AUTHENTICATION FORM & INSTITUTIONAL NOTICE                                */}
         {/* ========================================================================= */}
         <div className="rounded-2xl bg-[var(--bg-tertiary)]/40 border border-[var(--border-secondary)] p-5 sm:p-6 flex flex-col gap-4">
           <div className="flex items-center justify-between flex-wrap gap-2">
@@ -709,11 +732,19 @@ export const AmsConnectPage: React.FC = () => {
         </div>
 
         {/* ========================================================================= */}
-        {/* PHASE 5: SEPARATE SECTION NAVIGATION TABS                                  */}
+        {/* NAVIGATION TABS (INCLUDING SYNC CENTER)                                   */}
         {/* ========================================================================= */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 border-b border-[var(--border-secondary)] text-xs scrollbar-none">
           {[
             { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+            {
+              id: 'syncCenter',
+              label: 'Sync Center',
+              icon: RefreshCw,
+              badge: syncCenterState.validationReport.issues.length > 0
+                ? `${syncCenterState.validationReport.issues.length} Issues`
+                : undefined,
+            },
             { id: 'profile', label: 'Profile', icon: User },
             { id: 'timetable', label: 'Timetable', icon: Calendar, badge: dashboardData.timetable.length },
             { id: 'attendance', label: 'Attendance', icon: FileCheck, badge: dashboardData.attendance.length },
@@ -740,7 +771,7 @@ export const AmsConnectPage: React.FC = () => {
               >
                 <Icon className="w-3.5 h-3.5" />
                 <span>{tab.label}</span>
-                {typeof tab.badge === 'number' && tab.badge > 0 && (
+                {tab.badge && (
                   <span
                     className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
                       isActive
@@ -819,53 +850,30 @@ export const AmsConnectPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Module Sync Status Summary Card (Phase 4) */}
-          <div className="rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] p-5 sm:p-6 flex flex-col gap-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                <h3 className="text-sm font-bold text-[var(--text-primary)]">
-                  Module Synchronization Status
-                </h3>
+          {/* Sync Center Banner */}
+          <div className="rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] p-5 sm:p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className="w-11 h-11 rounded-xl bg-indigo-50 dark:bg-indigo-950 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0">
+                <RefreshCw className="w-5 h-5" />
               </div>
-              <button
-                type="button"
-                onClick={() => setActiveTab('history')}
-                className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
-              >
-                View Audit History →
-              </button>
+              <div>
+                <h3 className="text-sm font-bold text-[var(--text-primary)]">
+                  AMS Data Synchronization & Validation Engine
+                </h3>
+                <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                  {syncCenterState.validationReport.issues.length === 0
+                    ? 'All imported records verified. No schema or calculation issues detected.'
+                    : `${syncCenterState.validationReport.issues.length} questionable records detected across academic modules.`}
+                </p>
+              </div>
             </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 text-xs">
-              {[
-                { name: 'Profile', status: moduleStatus.profile },
-                { name: 'Timetable', status: moduleStatus.timetable },
-                { name: 'Attendance', status: moduleStatus.attendance },
-                { name: 'Registered Subjects', status: moduleStatus.registeredSubjects },
-                { name: 'Test & Lab Marks', status: moduleStatus.testLabMarks },
-                { name: 'Internal Marks', status: moduleStatus.internalMarks },
-                { name: 'Semester Results', status: moduleStatus.semesterResults },
-                { name: 'Credit Details', status: moduleStatus.credits },
-                { name: 'Academic Documents', status: moduleStatus.documents },
-              ].map((m) => (
-                <div
-                  key={m.name}
-                  className="p-3 rounded-xl bg-[var(--bg-tertiary)]/50 border border-[var(--border-secondary)] flex flex-col justify-between gap-1.5"
-                >
-                  <span className="font-semibold text-[var(--text-primary)] truncate">{m.name}</span>
-                  <span
-                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold w-fit ${
-                      m.status === 'synced'
-                        ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300'
-                        : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400'
-                    }`}
-                  >
-                    {m.status === 'synced' ? 'Synced' : 'Not Available'}
-                  </span>
-                </div>
-              ))}
-            </div>
+            <button
+              type="button"
+              onClick={() => setActiveTab('syncCenter')}
+              className="apple-btn-primary text-xs h-8 px-4 font-bold shrink-0 cursor-pointer"
+            >
+              Open Sync Center →
+            </button>
           </div>
 
           {/* Quick Actions & Links */}
@@ -880,15 +888,22 @@ export const AmsConnectPage: React.FC = () => {
               <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-[var(--border-secondary)]">
                 <button
                   type="button"
-                  onClick={handleApplyToAttendanceCalc}
-                  className="apple-btn-secondary text-xs h-8 px-3 font-semibold text-emerald-600 dark:text-emerald-400"
+                  onClick={() => setConfirmTransferAttendanceOpen(true)}
+                  className="apple-btn-secondary text-xs h-8 px-3 font-semibold text-emerald-600 dark:text-emerald-400 cursor-pointer"
                 >
                   Apply to Attendance Calculator
                 </button>
                 <button
                   type="button"
+                  onClick={() => setConfirmTransferSgpaOpen(true)}
+                  className="apple-btn-secondary text-xs h-8 px-3 font-semibold text-indigo-600 dark:text-indigo-400 cursor-pointer"
+                >
+                  Apply to SGPA Calculator
+                </button>
+                <button
+                  type="button"
                   onClick={handleReconcileCredits}
-                  className="apple-btn-secondary text-xs h-8 px-3 font-semibold text-indigo-600 dark:text-indigo-400"
+                  className="apple-btn-secondary text-xs h-8 px-3 font-semibold text-indigo-600 dark:text-indigo-400 cursor-pointer"
                 >
                   Reconcile with Credits Planner
                 </button>
@@ -916,7 +931,283 @@ export const AmsConnectPage: React.FC = () => {
         </div>
       )}
 
-      {/* 2. SECTION: PROFILE */}
+      {/* ========================================================================= */}
+      {/* 2. SYNC CENTER & VALIDATION ENGINE TAB (PHASE 4 & 6)                      */}
+      {/* ========================================================================= */}
+      {activeTab === 'syncCenter' && (
+        <div className="flex flex-col gap-6 animate-appleFadeIn">
+          {/* Synchronization Overview Card */}
+          <div className="rounded-3xl bg-[var(--surface)] border border-[var(--border-primary)] p-6 sm:p-8 flex flex-col gap-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[var(--border-secondary)]">
+              <div>
+                <h3 className="text-base font-bold text-[var(--text-primary)]">
+                  AMS Synchronization & Verification Hub
+                </h3>
+                <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                  Live audit and synchronization status across institutional student modules.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleSyncNow}
+                disabled={isSyncing}
+                className="apple-btn-primary text-xs h-8 px-4 font-bold gap-1.5 cursor-pointer self-start sm:self-auto"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                <span>Run Synchronization Audit</span>
+              </button>
+            </div>
+
+            {/* Metrics Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
+              <div className="p-3.5 rounded-2xl bg-[var(--bg-tertiary)]/50 border border-[var(--border-secondary)] flex flex-col gap-1">
+                <span className="text-[var(--text-secondary)] font-medium">Retrieved</span>
+                <span className="text-xl font-black text-[var(--text-primary)]">
+                  {syncCenterState.metrics.retrieved}
+                </span>
+                <span className="text-[10px] text-[var(--text-tertiary)]">Total source records</span>
+              </div>
+              <div className="p-3.5 rounded-2xl bg-[var(--bg-tertiary)]/50 border border-[var(--border-secondary)] flex flex-col gap-1">
+                <span className="text-[var(--text-secondary)] font-medium">Added</span>
+                <span className="text-xl font-black text-emerald-600 dark:text-emerald-400">
+                  {syncCenterState.metrics.added}
+                </span>
+                <span className="text-[10px] text-[var(--text-tertiary)]">New verified items</span>
+              </div>
+              <div className="p-3.5 rounded-2xl bg-[var(--bg-tertiary)]/50 border border-[var(--border-secondary)] flex flex-col gap-1">
+                <span className="text-[var(--text-secondary)] font-medium">Updated</span>
+                <span className="text-xl font-black text-indigo-600 dark:text-indigo-400">
+                  {syncCenterState.metrics.updated}
+                </span>
+                <span className="text-[10px] text-[var(--text-tertiary)]">Refreshed data</span>
+              </div>
+              <div className="p-3.5 rounded-2xl bg-[var(--bg-tertiary)]/50 border border-[var(--border-secondary)] flex flex-col gap-1">
+                <span className="text-[var(--text-secondary)] font-medium">Unchanged</span>
+                <span className="text-xl font-black text-[var(--text-primary)]">
+                  {syncCenterState.metrics.unchanged}
+                </span>
+                <span className="text-[10px] text-[var(--text-tertiary)]">Already synced</span>
+              </div>
+              <div className="p-3.5 rounded-2xl bg-[var(--bg-tertiary)]/50 border border-[var(--border-secondary)] flex flex-col gap-1">
+                <span className="text-[var(--text-secondary)] font-medium">Flagged Issues</span>
+                <span className="text-xl font-black text-amber-600 dark:text-amber-400">
+                  {syncCenterState.validationReport.issues.length}
+                </span>
+                <span className="text-[10px] text-[var(--text-tertiary)]">Questionable records</span>
+              </div>
+              <div className="p-3.5 rounded-2xl bg-[var(--bg-tertiary)]/50 border border-[var(--border-secondary)] flex flex-col gap-1">
+                <span className="text-[var(--text-secondary)] font-medium">Errors</span>
+                <span className="text-xl font-black text-rose-600 dark:text-rose-400">
+                  {syncCenterState.validationReport.errorCount}
+                </span>
+                <span className="text-[10px] text-[var(--text-tertiary)]">Critical issues</span>
+              </div>
+            </div>
+
+            {/* Per-Module Status Breakdown */}
+            <div className="flex flex-col gap-3">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+                Per-Module Integration Status
+              </h4>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 text-xs">
+                {Object.entries(syncCenterState.perModuleStatus).map(([key, st]) => (
+                  <div
+                    key={key}
+                    className="p-3 rounded-xl bg-[var(--bg-tertiary)]/50 border border-[var(--border-secondary)] flex flex-col justify-between gap-1.5"
+                  >
+                    <span className="font-semibold text-[var(--text-primary)] capitalize">
+                      {key.replace(/([A-Z])/g, ' $1')}
+                    </span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold w-fit ${
+                        st === 'synced'
+                          ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300'
+                          : st === 'flagged'
+                          ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300'
+                          : st === 'failed'
+                          ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300'
+                          : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400'
+                      }`}
+                    >
+                      {st === 'synced'
+                        ? 'Synced'
+                        : st === 'flagged'
+                        ? 'Flagged Issues'
+                        : st === 'failed'
+                        ? 'Failed'
+                        : 'Not Available'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Validation Engine Inspector */}
+          <div className="rounded-3xl bg-[var(--surface)] border border-[var(--border-primary)] p-6 sm:p-8 flex flex-col gap-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[var(--border-secondary)]">
+              <div>
+                <h3 className="text-base font-bold text-[var(--text-primary)]">
+                  Data Validation & Anomaly Detection Engine
+                </h3>
+                <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                  Validates credit values, semester assignments, duplicate subjects, marks limits, and attendance denominators.
+                </p>
+              </div>
+
+              {/* Filter Pills */}
+              <div className="flex items-center gap-1.5 p-1 rounded-xl bg-[var(--bg-tertiary)] text-xs">
+                {(['all', 'error', 'warning', 'info'] as const).map((filter) => (
+                  <button
+                    key={filter}
+                    type="button"
+                    onClick={() => setValidationFilter(filter)}
+                    className={`px-2.5 py-1 rounded-lg font-bold transition-all capitalize cursor-pointer ${
+                      validationFilter === filter
+                        ? 'bg-black text-white dark:bg-white dark:text-black shadow-xs'
+                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                    }`}
+                  >
+                    {filter === 'all'
+                      ? `All (${syncCenterState.validationReport.issues.length})`
+                      : filter === 'error'
+                      ? `Errors (${syncCenterState.validationReport.errorCount})`
+                      : filter === 'warning'
+                      ? `Warnings (${syncCenterState.validationReport.warningCount})`
+                      : `Info (${syncCenterState.validationReport.infoCount})`}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {filteredValidationIssues.length === 0 ? (
+              <div className="rounded-2xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-800/60 p-8 text-center flex flex-col items-center justify-center gap-2">
+                <CheckCircle2 className="w-8 h-8 text-emerald-600 dark:text-emerald-400" />
+                <h4 className="text-sm font-bold text-emerald-900 dark:text-emerald-300">
+                  All Records Passed Validation
+                </h4>
+                <p className="text-xs text-emerald-800/80 dark:text-emerald-400/80 max-w-md">
+                  No missing titles, credit inconsistencies, duplicate courses, or attendance denominator anomalies detected in this profile.
+                </p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2.5 max-h-96 overflow-y-auto">
+                {filteredValidationIssues.map((issue) => (
+                  <div
+                    key={issue.id}
+                    className={`p-3.5 rounded-xl border text-xs flex flex-col gap-1.5 transition-colors ${
+                      issue.severity === 'error'
+                        ? 'bg-rose-50/50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-900/50'
+                        : issue.severity === 'warning'
+                        ? 'bg-amber-50/50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/50'
+                        : 'bg-indigo-50/50 dark:bg-indigo-950/30 border-indigo-200 dark:border-indigo-900/50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                            issue.severity === 'error'
+                              ? 'bg-rose-600 text-white'
+                              : issue.severity === 'warning'
+                              ? 'bg-amber-500 text-black'
+                              : 'bg-indigo-600 text-white'
+                          }`}
+                        >
+                          {issue.severity}
+                        </span>
+                        <span className="font-bold text-[var(--text-primary)]">
+                          {issue.recordTitle || issue.module}
+                        </span>
+                        <span className="font-mono text-[11px] text-[var(--text-tertiary)]">
+                          [{issue.field}]
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-bold text-[var(--text-tertiary)] uppercase">
+                        {issue.code}
+                      </span>
+                    </div>
+
+                    <p className="text-[var(--text-secondary)] leading-relaxed">
+                      {issue.message}
+                    </p>
+
+                    {issue.suggestedFix && (
+                      <div className="flex items-center gap-1.5 text-[11px] font-medium text-indigo-700 dark:text-indigo-300 pt-1 border-t border-[var(--border-secondary)]">
+                        <span className="font-bold">Suggested Fix:</span>
+                        <span>{issue.suggestedFix}</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Calculator Connections Hub */}
+          <div className="rounded-3xl bg-[var(--surface)] border border-[var(--border-primary)] p-6 sm:p-8 flex flex-col gap-5">
+            <h3 className="text-base font-bold text-[var(--text-primary)]">
+              Calculator Connection Hub (With Explicit Confirmation)
+            </h3>
+            <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+              Export verified institutional attendance, semester grades, and credits directly to your calculators.
+              Manual calculations are never overwritten without your explicit consent.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 text-xs">
+              <div className="p-4 rounded-2xl bg-[var(--bg-tertiary)]/50 border border-[var(--border-secondary)] flex flex-col justify-between gap-3">
+                <div className="flex flex-col gap-1">
+                  <span className="font-bold text-[var(--text-primary)]">Attendance Calculator</span>
+                  <p className="text-[11px] text-[var(--text-secondary)]">
+                    Transfers {dashboardData.attendance.length} verified attendance tracks with conducted/present sessions.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setConfirmTransferAttendanceOpen(true)}
+                  className="apple-btn-primary text-xs h-8 px-3 font-semibold cursor-pointer"
+                >
+                  Apply to Attendance Calculator
+                </button>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-[var(--bg-tertiary)]/50 border border-[var(--border-secondary)] flex flex-col justify-between gap-3">
+                <div className="flex flex-col gap-1">
+                  <span className="font-bold text-[var(--text-primary)]">SGPA Calculator</span>
+                  <p className="text-[11px] text-[var(--text-secondary)]">
+                    Loads verified course credits and letter grades into SGPA calculation draft.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setConfirmTransferSgpaOpen(true)}
+                  className="apple-btn-primary text-xs h-8 px-3 font-semibold cursor-pointer"
+                >
+                  Apply to SGPA Calculator
+                </button>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-[var(--bg-tertiary)]/50 border border-[var(--border-secondary)] flex flex-col justify-between gap-3">
+                <div className="flex flex-col gap-1">
+                  <span className="font-bold text-[var(--text-primary)]">Credits Planner</span>
+                  <p className="text-[11px] text-[var(--text-secondary)]">
+                    Reconciles {dashboardData.semesterResults.length} course results without duplicate counting.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleReconcileCredits}
+                  className="apple-btn-primary text-xs h-8 px-3 font-semibold cursor-pointer"
+                >
+                  Reconcile with Credits Planner
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. SECTION: PROFILE */}
       {activeTab === 'profile' && (
         <div className="rounded-3xl bg-[var(--surface)] border border-[var(--border-primary)] p-6 sm:p-8 flex flex-col gap-6 animate-appleFadeIn">
           <div className="flex items-center justify-between pb-4 border-b border-[var(--border-secondary)]">
@@ -978,7 +1269,7 @@ export const AmsConnectPage: React.FC = () => {
         </div>
       )}
 
-      {/* 3. SECTION: TIMETABLE */}
+      {/* 4. SECTION: TIMETABLE */}
       {activeTab === 'timetable' && (
         <div className="flex flex-col gap-4 animate-appleFadeIn">
           <div className="flex items-center justify-between flex-wrap gap-3">
@@ -1050,7 +1341,7 @@ export const AmsConnectPage: React.FC = () => {
         </div>
       )}
 
-      {/* 4. SECTION: ATTENDANCE */}
+      {/* 5. SECTION: ATTENDANCE */}
       {activeTab === 'attendance' && (
         <div className="flex flex-col gap-4 animate-appleFadeIn">
           <div className="flex items-center justify-between flex-wrap gap-3">
@@ -1060,7 +1351,7 @@ export const AmsConnectPage: React.FC = () => {
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={handleApplyToAttendanceCalc}
+                onClick={() => setConfirmTransferAttendanceOpen(true)}
                 className="apple-btn-primary text-xs h-8 px-3.5 gap-1.5 font-semibold cursor-pointer"
                 title="Copy official attendance to the manual Attendance Calculator"
               >
@@ -1156,7 +1447,7 @@ export const AmsConnectPage: React.FC = () => {
         </div>
       )}
 
-      {/* 5. SECTION: REGISTERED SUBJECTS */}
+      {/* 6. SECTION: REGISTERED SUBJECTS */}
       {activeTab === 'registered' && (
         <div className="flex flex-col gap-4 animate-appleFadeIn">
           <h3 className="text-sm font-bold text-[var(--text-primary)]">
@@ -1200,7 +1491,7 @@ export const AmsConnectPage: React.FC = () => {
         </div>
       )}
 
-      {/* 6. SECTION: TEST / ASSIGNMENT / LAB MARKS */}
+      {/* 7. SECTION: TEST / ASSIGNMENT / LAB MARKS */}
       {activeTab === 'testLab' && (
         <div className="flex flex-col gap-4 animate-appleFadeIn">
           <div className="flex items-center justify-between flex-wrap gap-3">
@@ -1265,7 +1556,7 @@ export const AmsConnectPage: React.FC = () => {
         </div>
       )}
 
-      {/* 7. SECTION: INTERNAL MARKS */}
+      {/* 8. SECTION: INTERNAL MARKS */}
       {activeTab === 'internals' && (
         <div className="flex flex-col gap-4 animate-appleFadeIn">
           <div className="flex items-center justify-between flex-wrap gap-3">
@@ -1326,7 +1617,7 @@ export const AmsConnectPage: React.FC = () => {
         </div>
       )}
 
-      {/* 8. SECTION: SEMESTER RESULTS */}
+      {/* 9. SECTION: SEMESTER RESULTS */}
       {activeTab === 'results' && (
         <div className="flex flex-col gap-4 animate-appleFadeIn">
           <div className="flex items-center justify-between flex-wrap gap-3">
@@ -1358,13 +1649,14 @@ export const AmsConnectPage: React.FC = () => {
                   <span>Reconcile with Credits Page</span>
                 </button>
               )}
-              <Link
-                to="/gpa"
-                className="apple-btn-primary text-xs h-8 px-3.5 font-semibold gap-1.5"
+              <button
+                type="button"
+                onClick={() => setConfirmTransferSgpaOpen(true)}
+                className="apple-btn-primary text-xs h-8 px-3.5 font-semibold gap-1.5 cursor-pointer"
               >
                 <Calculator className="w-3.5 h-3.5" />
-                <span>Open SGPA Calculator</span>
-              </Link>
+                <span>Send to SGPA Calculator</span>
+              </button>
             </div>
           </div>
 
@@ -1438,7 +1730,7 @@ export const AmsConnectPage: React.FC = () => {
         </div>
       )}
 
-      {/* 9. SECTION: CREDIT EARNED DETAILS */}
+      {/* 10. SECTION: CREDIT EARNED DETAILS */}
       {activeTab === 'credits' && (
         <div className="flex flex-col gap-6 animate-appleFadeIn">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -1489,7 +1781,7 @@ export const AmsConnectPage: React.FC = () => {
         </div>
       )}
 
-      {/* 10. SECTION: ACADEMIC DOCUMENTS */}
+      {/* 11. SECTION: ACADEMIC DOCUMENTS */}
       {activeTab === 'documents' && (
         <div className="flex flex-col gap-5 animate-appleFadeIn">
           <div className="rounded-3xl bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-950/30 dark:to-purple-950/30 border border-indigo-200/60 dark:border-indigo-800/60 p-6 sm:p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
@@ -1578,7 +1870,7 @@ export const AmsConnectPage: React.FC = () => {
         </div>
       )}
 
-      {/* 11. SECTION: SYNC STATUS AND HISTORY */}
+      {/* 12. SECTION: SYNC STATUS AND HISTORY */}
       {activeTab === 'history' && (
         <div className="flex flex-col gap-4 animate-appleFadeIn">
           <div className="flex items-center justify-between">
@@ -1838,6 +2130,103 @@ export const AmsConnectPage: React.FC = () => {
           profileId={activeProfile.id}
           supportsCode={supportsCode}
         />
+      )}
+
+      {/* MODAL: CONFIRM TRANSFER TO ATTENDANCE CALCULATOR */}
+      {confirmTransferAttendanceOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 dark:bg-black/60 backdrop-blur-sm animate-appleFadeIn"
+          onClick={() => setConfirmTransferAttendanceOpen(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-3xl bg-[var(--surface)] border border-[var(--border-primary)] shadow-2xl p-6 flex flex-col gap-4 text-xs"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-2">
+              <Calculator className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+              <h3 className="text-sm font-bold text-[var(--text-primary)]">
+                Export to Attendance Calculator
+              </h3>
+            </div>
+            <p className="text-[var(--text-secondary)] leading-relaxed">
+              This will transfer {dashboardData.attendance.length} verified subject attendance records into your manual Attendance Calculator.
+              Existing subjects matching names will be safely updated with official session counts without duplicating your records.
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border-secondary)]">
+              <button
+                type="button"
+                onClick={() => setConfirmTransferAttendanceOpen(false)}
+                className="apple-btn-secondary text-xs h-8 px-3 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteTransferAttendance}
+                className="apple-btn-primary text-xs h-8 px-4 font-semibold cursor-pointer"
+              >
+                Confirm Export
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CONFIRM TRANSFER TO SGPA CALCULATOR */}
+      {confirmTransferSgpaOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 dark:bg-black/60 backdrop-blur-sm animate-appleFadeIn"
+          onClick={() => setConfirmTransferSgpaOpen(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-3xl bg-[var(--surface)] border border-[var(--border-primary)] shadow-2xl p-6 flex flex-col gap-4 text-xs"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-2">
+              <Calculator className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+              <h3 className="text-sm font-bold text-[var(--text-primary)]">
+                Export to SGPA Calculator
+              </h3>
+            </div>
+            <p className="text-[var(--text-secondary)] leading-relaxed">
+              Select which semester's verified courses and grades to load into the SGPA Calculator draft:
+            </p>
+            <div className="flex flex-col gap-1.5">
+              <label className="font-semibold text-[var(--text-primary)]">Target Semester</label>
+              <select
+                value={selectedSgpaSemester}
+                onChange={(e) => setSelectedSgpaSemester(parseInt(e.target.value))}
+                className="apple-input h-9 text-xs cursor-pointer font-bold"
+              >
+                {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
+                  <option key={s} value={s}>
+                    Semester {s} ({dashboardData.semesterResults.filter((r) => (r.semester || 1) === s).length} courses)
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border-secondary)]">
+              <button
+                type="button"
+                onClick={() => setConfirmTransferSgpaOpen(false)}
+                className="apple-btn-secondary text-xs h-8 px-3 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteTransferSgpa}
+                className="apple-btn-primary text-xs h-8 px-4 font-semibold cursor-pointer"
+              >
+                Confirm Export
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* MODAL: RESET CONFIRM */}
