@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterAll } from 'vitest';
+import { setAmsFeatureEnabled } from '../config/features';
 import {
   validateSubjectAttendance,
   validateInternalMark,
@@ -34,6 +35,14 @@ if (typeof globalThis.localStorage === 'undefined') {
     },
   };
 }
+
+beforeEach(() => {
+  setAmsFeatureEnabled(true);
+});
+
+afterAll(() => {
+  setAmsFeatureEnabled(false);
+});
 
 function createAttendance(overrides: Partial<AmsSubjectAttendance> = {}): AmsSubjectAttendance {
   return {

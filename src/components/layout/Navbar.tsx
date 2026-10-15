@@ -3,6 +3,7 @@ import { NavLink, Link } from 'react-router-dom';
 import { Menu, X, Sun, Moon, Laptop, User } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import { useProfile } from '../../context/ProfileContext';
+import { AMS_FEATURE_ENABLED } from '../../config/features';
 import type { ThemeMode } from '../../types';
 
 export const Navbar: React.FC = () => {
@@ -16,7 +17,9 @@ export const Navbar: React.FC = () => {
     { to: '/gpa', label: 'SGPA' },
     { to: '/cgpa', label: 'CGPA' },
     { to: '/attendance', label: 'Attendance' },
-    { to: '/ams-portal', label: 'AMS Portal' },
+    ...(AMS_FEATURE_ENABLED
+      ? [{ to: '/ams-portal', label: 'AMS Portal', isComingSoon: false }]
+      : [{ to: '/ams-portal', label: 'AMS Portal', isComingSoon: true }]),
   ];
 
   const themeOptions: { value: ThemeMode; label: string; icon: React.ReactNode }[] = [
@@ -49,14 +52,19 @@ export const Navbar: React.FC = () => {
               to={item.to}
               end={item.to === '/'}
               className={({ isActive }) =>
-                `px-3.5 py-1.5 rounded-full text-[14px] transition-all ${
+                `px-3.5 py-1.5 rounded-full text-[14px] transition-all flex items-center gap-1.5 ${
                   isActive
                     ? 'font-semibold text-[var(--nav-link-active)] bg-[var(--nav-link-active-bg)] border border-[var(--border-primary)] shadow-sm'
                     : 'text-[var(--nav-link)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]'
                 }`
               }
             >
-              {item.label}
+              <span>{item.label}</span>
+              {item.isComingSoon && (
+                <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                  Dev
+                </span>
+              )}
             </NavLink>
           ))}
         </nav>
@@ -128,14 +136,19 @@ export const Navbar: React.FC = () => {
                 end={item.to === '/'}
                 onClick={() => setMobileMenuOpen(false)}
                 className={({ isActive }) =>
-                  `py-2.5 px-3.5 rounded-xl text-base font-medium transition-colors ${
+                  `py-2.5 px-3.5 rounded-xl text-base font-medium transition-colors flex items-center justify-between ${
                     isActive
                       ? 'bg-[var(--nav-link-active-bg)] text-[var(--nav-link-active)] font-semibold'
                       : 'text-[var(--nav-link)] hover:bg-[var(--bg-tertiary)]'
                   }`
                 }
               >
-                {item.label}
+                <span>{item.label}</span>
+                {item.isComingSoon && (
+                  <span className="px-2 py-0.5 text-[10px] font-bold uppercase rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                    Dev
+                  </span>
+                )}
               </NavLink>
             ))}
           </div>

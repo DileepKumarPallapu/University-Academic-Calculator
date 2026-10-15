@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterAll } from 'vitest';
+import { setAmsFeatureEnabled } from '../config/features';
 import {
   amsIntegrationAdapter,
   validateStudentIdFormat,
@@ -33,10 +34,15 @@ if (typeof globalThis.localStorage === 'undefined') {
 
 describe('Real Vel Tech AMS Integration Adapter & Authentication', () => {
   beforeEach(() => {
+    setAmsFeatureEnabled(true);
     if (typeof globalThis.localStorage !== 'undefined') {
       globalThis.localStorage.clear();
     }
     Object.keys(mockStorage).forEach((k) => delete mockStorage[k]);
+  });
+
+  afterAll(() => {
+    setAmsFeatureEnabled(false);
   });
 
   describe('Phase 1: Official AMS Verification & Metadata', () => {

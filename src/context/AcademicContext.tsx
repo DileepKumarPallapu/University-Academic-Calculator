@@ -56,41 +56,7 @@ export const AcademicProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     } catch (e) {
       console.error(e);
     }
-    return [
-      {
-        id: 'sub-1',
-        name: 'Data Structures',
-        code: 'CS2203',
-        type: 'theory',
-        credits: 4,
-        theoryInputs: { test1: 25, test2: 28, test3: 24, attendance: 5, assignment: 4 },
-        internalMark: 34.67,
-        maxMark: 40,
-        percentage: 86.68,
-      },
-      {
-        id: 'sub-2',
-        name: 'Operating Systems',
-        code: 'CS2204',
-        type: 'theory',
-        credits: 3,
-        theoryInputs: { test1: 22, test2: 25, test3: 20, attendance: 5, assignment: 4 },
-        internalMark: 31.33,
-        maxMark: 40,
-        percentage: 78.33,
-      },
-      {
-        id: 'sub-3',
-        name: 'Machine Learning Lab',
-        code: 'CS2215',
-        type: 'integrated',
-        credits: 2,
-        integratedInputs: { mid1: 18, mid2: 17, lab: 19, attendance: 5, assignment: 4 },
-        internalMark: 36.75,
-        maxMark: 40,
-        percentage: 91.88,
-      },
-    ];
+    return [];
   });
 
   // Favorites

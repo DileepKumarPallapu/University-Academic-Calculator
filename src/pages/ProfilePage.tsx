@@ -23,6 +23,7 @@ import { ResetConfirmModal } from '../components/common/ResetConfirmModal';
 import { REGULATIONS, type RegulationId } from '../config/university';
 import type { StudentProfile, SavedCalculation, CalculationType } from '../types/profile';
 import { getAmsDashboardData } from '../services/amsStorage';
+import { AMS_FEATURE_ENABLED } from '../config/features';
 
 export const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
@@ -416,10 +417,14 @@ export const ProfilePage: React.FC = () => {
             <button
               type="button"
               onClick={() => navigate('/ams-connect')}
-              className="apple-btn-secondary text-xs h-9 px-3 gap-1.5 font-medium text-blue-600 dark:text-blue-400 border-blue-500/20"
+              className={`apple-btn-secondary text-xs h-9 px-3 gap-1.5 font-medium ${
+                !AMS_FEATURE_ENABLED
+                  ? 'text-zinc-500 dark:text-zinc-400 border-zinc-500/20'
+                  : 'text-blue-600 dark:text-blue-400 border-blue-500/20'
+              }`}
             >
               <Building2 className="w-3.5 h-3.5" />
-              <span>College AMS</span>
+              <span>College AMS {!AMS_FEATURE_ENABLED && '(Coming Soon)'}</span>
             </button>
           </div>
         </div>
@@ -489,26 +494,34 @@ export const ProfilePage: React.FC = () => {
               <h3 className="text-base font-bold text-[var(--text-primary)]">
                 Vel Tech AMS Integration
               </h3>
-              <span
-                className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${
-                  amsData.academicProfile.connectionStatus === 'connected'
-                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+              {!AMS_FEATURE_ENABLED ? (
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold border bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30">
+                  Coming Soon — Under Development
+                </span>
+              ) : (
+                <span
+                  className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${
+                    amsData.academicProfile.connectionStatus === 'connected'
+                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                      : amsData.academicProfile.connectionStatus === 'connecting'
+                      ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                      : 'bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border-zinc-500/30'
+                  }`}
+                >
+                  {amsData.academicProfile.connectionStatus === 'connected'
+                    ? 'Connected & Synced'
                     : amsData.academicProfile.connectionStatus === 'connecting'
-                    ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30'
-                    : 'bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border-zinc-500/30'
-                }`}
-              >
-                {amsData.academicProfile.connectionStatus === 'connected'
-                  ? 'Connected & Synced'
-                  : amsData.academicProfile.connectionStatus === 'connecting'
-                  ? 'Connecting'
-                  : 'Not Connected'}
-              </span>
+                    ? 'Connecting'
+                    : 'Not Connected'}
+                </span>
+              )}
             </div>
             <p className="text-xs text-[var(--text-secondary)] max-w-xl leading-relaxed">
-              Connect your official Vel Tech Academic Management System (AMS) account to sync timetable, subject attendance, internal marks, assessments, and semester results locally.
+              {!AMS_FEATURE_ENABLED
+                ? 'We are developing the official AMS integration. This feature is temporarily unavailable while in development. Your manual academic calculators are fully ready to use.'
+                : 'Connect your official Vel Tech Academic Management System (AMS) account to sync timetable, subject attendance, internal marks, assessments, and semester results locally.'}
             </p>
-            {amsData.lastSyncTime && (
+            {AMS_FEATURE_ENABLED && amsData.lastSyncTime && (
               <span className="text-[11px] text-[var(--text-tertiary)]">
                 Last synced: {new Date(amsData.lastSyncTime).toLocaleString()}
               </span>
@@ -520,10 +533,18 @@ export const ProfilePage: React.FC = () => {
           <button
             type="button"
             onClick={() => navigate('/ams-connect')}
-            className="apple-btn-primary text-xs h-10 px-4 gap-2 font-medium w-full md:w-auto"
+            className={`apple-btn-primary text-xs h-10 px-4 gap-2 font-medium w-full md:w-auto ${
+              !AMS_FEATURE_ENABLED ? 'opacity-90 bg-zinc-700 dark:bg-zinc-300' : ''
+            }`}
           >
             <Shield className="w-4 h-4" />
-            <span>{amsData.academicProfile.connectionStatus === 'connected' ? 'Open AMS Dashboard' : 'Connect College AMS'}</span>
+            <span>
+              {!AMS_FEATURE_ENABLED
+                ? 'Under Development'
+                : amsData.academicProfile.connectionStatus === 'connected'
+                ? 'Open AMS Dashboard'
+                : 'Connect College AMS'}
+            </span>
           </button>
         </div>
       </div>

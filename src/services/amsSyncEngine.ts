@@ -21,6 +21,7 @@ import {
   type ValidationReport,
 } from './amsValidationEngine';
 import { safeGetItem, safeSetItem, sanitizeCourseTitle } from './catalogueStorage';
+import { AMS_FEATURE_ENABLED } from '../config/features';
 
 export type SyncProvenance =
   | 'OFFICIAL_AMS'
@@ -204,6 +205,10 @@ export class AmsSyncEngine {
     updated: number;
     unchanged: number;
   } {
+    if (!AMS_FEATURE_ENABLED) {
+      return { added: 0, updated: 0, unchanged: 0 };
+    }
+
     const ams = getAmsDashboardData(profileId);
     if (!ams.attendance || ams.attendance.length === 0) {
       return { added: 0, updated: 0, unchanged: 0 };
@@ -278,6 +283,10 @@ export class AmsSyncEngine {
     profileId: string,
     regulation?: string
   ): { added: number; updated: number; skipped: number } {
+    if (!AMS_FEATURE_ENABLED) {
+      return { added: 0, updated: 0, skipped: 0 };
+    }
+
     const ams = getAmsDashboardData(profileId);
     if (!ams.semesterResults || ams.semesterResults.length === 0) {
       return { added: 0, updated: 0, skipped: 0 };
@@ -371,6 +380,10 @@ export class AmsSyncEngine {
     profileId: string,
     targetSemester: number = 1
   ): { coursesCount: number } {
+    if (!AMS_FEATURE_ENABLED) {
+      return { coursesCount: 0 };
+    }
+
     const ams = getAmsDashboardData(profileId);
     const semesterCourses = ams.semesterResults.filter(
       (r) => (r.semester || 1) === targetSemester

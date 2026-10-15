@@ -26,10 +26,16 @@ import type {
 import { useStudentProfile } from '../hooks/useStudentProfile';
 import { useAppToast } from '../components/layout/AppShell';
 import { formatFixed } from '../utils/calculations';
+import { AMS_FEATURE_ENABLED } from '../config/features';
+import { AmsDevelopmentNotice } from '../components/ams/AmsDevelopmentNotice';
 
 type AmsPageMode = 'sgpa' | 'cgpa' | 'history';
 
 export const AmsImportPage: React.FC = () => {
+  if (!AMS_FEATURE_ENABLED) {
+    return <AmsDevelopmentNotice />;
+  }
+
   const { profile } = useStudentProfile();
   const { showToast } = useAppToast();
 

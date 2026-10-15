@@ -21,7 +21,7 @@ import { CalculationStatus } from '../components/common/CalculationStatus';
 
 export const GPACalculatorPage: React.FC = () => {
   const { profile, studentName, setStudentName, updateProfile, nameError, setNameError } = useStudentProfile();
-  const { getCalculation } = useProfile();
+  const { activeProfile, getCalculation } = useProfile();
   const { showToast } = useAppToast();
   const [searchParams] = useSearchParams();
   const calcIdParam = searchParams.get('calcId');
@@ -64,10 +64,10 @@ export const GPACalculatorPage: React.FC = () => {
   const regConfig = REGULATIONS[regulation];
   const gradeOptions = regConfig.grades;
 
-  // Subjects state defaulted to 0 credits or restored from draft
+  // Subjects state defaulted to empty array for fresh profile or restored from draft
   const [subjects, setSubjects] = useState<SubjectItem[]>(() => {
     try {
-      const draft = localStorage.getItem('academic_draft_sgpa');
+      const draft = localStorage.getItem(`academic_draft_sgpa_${activeProfile.id}`) || localStorage.getItem('academic_draft_sgpa');
       if (draft) {
         const parsed = JSON.parse(draft);
         if (Array.isArray(parsed.subjects) && parsed.subjects.length > 0) {
@@ -75,20 +75,12 @@ export const GPACalculatorPage: React.FC = () => {
         }
       }
     } catch {}
-    const defaultGrade = REGULATIONS.VTR21.grades[0];
-    return [
-      { id: 'sub-1', name: 'Subject 1', credits: 0, grade: defaultGrade.grade, gradePoint: defaultGrade.points },
-      { id: 'sub-2', name: 'Subject 2', credits: 0, grade: defaultGrade.grade, gradePoint: defaultGrade.points },
-      { id: 'sub-3', name: 'Subject 3', credits: 0, grade: defaultGrade.grade, gradePoint: defaultGrade.points },
-      { id: 'sub-4', name: 'Subject 4', credits: 0, grade: defaultGrade.grade, gradePoint: defaultGrade.points },
-      { id: 'sub-5', name: 'Subject 5', credits: 0, grade: defaultGrade.grade, gradePoint: defaultGrade.points },
-      { id: 'sub-6', name: 'Subject 6', credits: 0, grade: defaultGrade.grade, gradePoint: defaultGrade.points },
-    ];
+    return [];
   });
 
   const [hasDraft, setHasDraft] = useState<boolean>(() => {
     try {
-      return !!localStorage.getItem('academic_draft_sgpa');
+      return !!(localStorage.getItem(`academic_draft_sgpa_${activeProfile.id}`) || localStorage.getItem('academic_draft_sgpa'));
     } catch {
       return false;
     }
@@ -189,29 +181,19 @@ export const GPACalculatorPage: React.FC = () => {
   };
 
   const handleRemoveSubject = (id: string) => {
-    if (subjects.length <= 1) return;
     setSubjects((prev) => prev.filter((s) => s.id !== id));
   };
 
   const [showResetModal, setShowResetModal] = useState(false);
-  const isDirty =
-    subjects.some((s, idx) => Number(s.credits) > 0 || (s.name && s.name !== `Subject ${idx + 1}`)) ||
-    subjects.length !== 6;
+  const isDirty = subjects.some((s) => Number(s.credits) > 0) || subjects.length > 0;
 
   const handleReset = () => {
     try {
+      localStorage.removeItem(`academic_draft_sgpa_${activeProfile.id}`);
       localStorage.removeItem('academic_draft_sgpa');
       setHasDraft(false);
     } catch {}
-    const defaultGrade = gradeOptions[0];
-    setSubjects([
-      { id: 'sub-1', name: 'Subject 1', credits: 0, grade: defaultGrade.grade, gradePoint: defaultGrade.points },
-      { id: 'sub-2', name: 'Subject 2', credits: 0, grade: defaultGrade.grade, gradePoint: defaultGrade.points },
-      { id: 'sub-3', name: 'Subject 3', credits: 0, grade: defaultGrade.grade, gradePoint: defaultGrade.points },
-      { id: 'sub-4', name: 'Subject 4', credits: 0, grade: defaultGrade.grade, gradePoint: defaultGrade.points },
-      { id: 'sub-5', name: 'Subject 5', credits: 0, grade: defaultGrade.grade, gradePoint: defaultGrade.points },
-      { id: 'sub-6', name: 'Subject 6', credits: 0, grade: defaultGrade.grade, gradePoint: defaultGrade.points },
-    ]);
+    setSubjects([]);
     setNameError(null);
     setShowResetModal(false);
   };
@@ -220,13 +202,13 @@ export const GPACalculatorPage: React.FC = () => {
     if (isDirty) {
       try {
         localStorage.setItem(
-          'academic_draft_sgpa',
+          `academic_draft_sgpa_${activeProfile.id}`,
           JSON.stringify({ subjects, regulation, selectedSemester })
         );
         setHasDraft(true);
       } catch {}
     }
-  }, [subjects, regulation, selectedSemester, isDirty]);
+  }, [subjects, regulation, selectedSemester, isDirty, activeProfile.id]);
 
   const handleClearDraft = () => {
     try {
@@ -505,7 +487,14 @@ export const GPACalculatorPage: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#E5E5EA] dark:divide-[#38383A]">
-                  {subjects.map((s, idx) => {
+                  {subjects.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-sm text-[#86868B] dark:text-[#8E8E93]">
+                        No subjects added yet. Click &quot;+ Add Subject&quot; or use the generator above to begin.
+                      </td>
+                    </tr>
+                  ) : (
+                    subjects.map((s, idx) => {
                     const cred = Number(s.credits) || 0;
                     const pts = s.gradePoint ?? 0;
                     return (
@@ -622,14 +611,19 @@ export const GPACalculatorPage: React.FC = () => {
                         </td>
                       </tr>
                     );
-                  })}
+                  }))}
                 </tbody>
               </table>
             </div>
 
             {/* Mobile Stacked Subject Cards */}
             <div className="md:hidden flex flex-col gap-3.5 w-full">
-              {subjects.map((s, idx) => {
+              {subjects.length === 0 ? (
+                <div className="p-6 rounded-2xl bg-[#FFFFFF] dark:bg-[#1C1C1E] border border-black/[0.08] dark:border-white/[0.12] text-center text-sm text-[#86868B] dark:text-[#8E8E93]">
+                  No subjects added yet. Click &quot;+ Add Subject&quot; or use the generator above to begin.
+                </div>
+              ) : (
+                subjects.map((s, idx) => {
                 const cred = Number(s.credits) || 0;
                 const pts = s.gradePoint ?? 0;
                 return (
@@ -735,7 +729,7 @@ export const GPACalculatorPage: React.FC = () => {
                     </div>
                   </div>
                 );
-              })}
+              }))}
             </div>
 
             {/* Action Buttons: Add Subject, Reset & Calculate SGPA */}

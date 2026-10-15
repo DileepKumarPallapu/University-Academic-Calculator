@@ -48,47 +48,7 @@ export const MarksForecasterPage: React.FC = () => {
   const semester = activeProfile.currentSemester || 5;
 
   const [scenarioTitle, setScenarioTitle] = useState('Semester 5 Target Scenario');
-  const [subjects, setSubjects] = useState<ForecastSubjectItem[]>([
-    {
-      id: 'sub-1',
-      courseName: 'Operating Systems',
-      courseCode: '10211CS301',
-      credits: 4,
-      internalObtained: 36,
-      internalMax: 40,
-      estimatedEndSemMarks: 50,
-      estimatedEndSemMax: 60,
-      projectedTotalMarks: 86,
-      projectedGrade: 'A',
-      projectedGradePoints: 9,
-    },
-    {
-      id: 'sub-2',
-      courseName: 'Database Management Systems',
-      courseCode: '10211CS302',
-      credits: 4,
-      internalObtained: 38,
-      internalMax: 40,
-      estimatedEndSemMarks: 54,
-      estimatedEndSemMax: 60,
-      projectedTotalMarks: 92,
-      projectedGrade: 'S',
-      projectedGradePoints: 10,
-    },
-    {
-      id: 'sub-3',
-      courseName: 'Computer Networks',
-      courseCode: '10211CS303',
-      credits: 3,
-      internalObtained: 32,
-      internalMax: 40,
-      estimatedEndSemMarks: 46,
-      estimatedEndSemMax: 60,
-      projectedTotalMarks: 78,
-      projectedGrade: 'B',
-      projectedGradePoints: 8,
-    },
-  ]);
+  const [subjects, setSubjects] = useState<ForecastSubjectItem[]>([]);
 
   const [targetSgpa, setTargetSgpa] = useState<number>(8.5);
   const [savedScenarios, setSavedScenarios] = useState<MarksForecastScenario[]>([]);
@@ -156,11 +116,7 @@ export const MarksForecasterPage: React.FC = () => {
 
   // Remove row
   const handleRemoveSubject = (id: string) => {
-    if (subjects.length <= 1) {
-      showToast('At least one course is required for SGPA forecasting.', 'info');
-      return;
-    }
-    setSubjects(subjects.filter((s) => s.id !== id));
+    setSubjects((prev) => prev.filter((s) => s.id !== id));
   };
 
   // Computed Projected SGPA
@@ -405,7 +361,17 @@ export const MarksForecasterPage: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--border-secondary)]">
-              {subjects.map((sub) => (
+              {subjects.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-12 text-center text-[var(--text-secondary)]">
+                    <p className="font-semibold text-sm">No courses added yet.</p>
+                    <p className="text-xs text-[var(--text-tertiary)] mt-1">
+                      Click &ldquo;Add Course&rdquo; above to simulate your semester SGPA and grade projections.
+                    </p>
+                  </td>
+                </tr>
+              ) : (
+                subjects.map((sub) => (
                 <tr key={sub.id} className="hover:bg-[var(--bg-tertiary)]/20 transition-colors">
                   <td className="py-2.5 px-4">
                     <input
@@ -514,7 +480,7 @@ export const MarksForecasterPage: React.FC = () => {
                     </button>
                   </td>
                 </tr>
-              ))}
+              )))}
             </tbody>
           </table>
         </div>

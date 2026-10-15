@@ -58,6 +58,8 @@ import { isRegulationSupportingCourseCode, sanitizeCourseTitle } from '../servic
 import { processAmsDocument } from '../utils/amsExtractor';
 import type { AmsExtractionResult } from '../types/ams';
 import { ResetConfirmModal } from '../components/common/ResetConfirmModal';
+import { AMS_FEATURE_ENABLED } from '../config/features';
+import { AmsDevelopmentNotice } from '../components/ams/AmsDevelopmentNotice';
 
 export type DashboardTab =
   | 'overview'
@@ -76,6 +78,10 @@ export type DashboardTab =
 const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const;
 
 export const AmsConnectPage: React.FC = () => {
+  if (!AMS_FEATURE_ENABLED) {
+    return <AmsDevelopmentNotice />;
+  }
+
   const { activeProfile } = useProfile();
   const { showToast } = useAppToast();
 

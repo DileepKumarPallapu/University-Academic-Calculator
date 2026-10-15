@@ -15,6 +15,8 @@ import { CreditsPlannerPage } from './pages/CreditsPlannerPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { AmsConnectPage } from './pages/AmsConnectPage';
 import { AmsImportPage } from './pages/AmsImportPage';
+import { AmsDevelopmentNotice } from './components/ams/AmsDevelopmentNotice';
+import { AMS_FEATURE_ENABLED } from './config/features';
 import { SemesterPlannerPage } from './pages/SemesterPlannerPage';
 import { MarksForecasterPage } from './pages/MarksForecasterPage';
 import { AcademicReportsPage } from './pages/AcademicReportsPage';
@@ -45,10 +47,21 @@ export function App() {
                 <Route path="/reports" element={<AcademicReportsPage />} />
                 <Route path="/catalogue" element={<Navigate to="/credits?tab=catalogue" replace />} />
                 <Route path="/profile" element={<ProfilePage />} />
-                <Route path="/ams-portal" element={<AmsConnectPage />} />
-                <Route path="/ams-connect" element={<AmsConnectPage />} />
-                <Route path="/ams" element={<AmsConnectPage />} />
-                <Route path="/ams-import" element={<AmsImportPage />} />
+                {AMS_FEATURE_ENABLED ? (
+                  <>
+                    <Route path="/ams-portal" element={<AmsConnectPage />} />
+                    <Route path="/ams-connect" element={<AmsConnectPage />} />
+                    <Route path="/ams" element={<AmsConnectPage />} />
+                    <Route path="/ams-import" element={<AmsImportPage />} />
+                  </>
+                ) : (
+                  <>
+                    <Route path="/ams-portal" element={<AmsDevelopmentNotice />} />
+                    <Route path="/ams-connect" element={<AmsDevelopmentNotice />} />
+                    <Route path="/ams" element={<AmsDevelopmentNotice />} />
+                    <Route path="/ams-import" element={<AmsDevelopmentNotice />} />
+                  </>
+                )}
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Route>
             </Routes>

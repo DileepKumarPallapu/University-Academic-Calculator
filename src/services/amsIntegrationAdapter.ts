@@ -10,6 +10,7 @@ import {
   saveAmsDashboardData,
   addAmsSyncLog,
 } from './amsStorage';
+import { AMS_FEATURE_ENABLED } from '../config/features';
 
 export interface AmsCredentials {
   username: string; // e.g. VTU12345
@@ -26,6 +27,7 @@ export type AmsAuthStatusCode =
   | 'captcha_required'
   | 'session_expired'
   | 'official_api_required'
+  | 'auth_unavailable'
   | 'connection_error';
 
 export interface AmsAuthResult {
@@ -129,6 +131,15 @@ export class GenuineAmsIntegrationAdapter implements IAmsIntegrationAdapter {
    * NEVER accepts invalid credentials or simulates fake logins.
    */
   async authenticate(credentials: AmsCredentials, profileId: string): Promise<AmsAuthResult> {
+    if (!AMS_FEATURE_ENABLED) {
+      return {
+        success: false,
+        status: 'auth_unavailable',
+        message: 'AMS Portal is currently under development. This feature is temporarily unavailable.',
+        details: 'The official AMS integration is undergoing development and testing. Manual calculators are ready to use offline.',
+      };
+    }
+
     const username = credentials.username ? credentials.username.trim().toUpperCase() : '';
     const password = credentials.password || '';
 
@@ -217,6 +228,28 @@ export class GenuineAmsIntegrationAdapter implements IAmsIntegrationAdapter {
    * Performs full synchronization across all 9 modules using stable composite keys.
    */
   async syncAll(profileId: string): Promise<AmsSyncSummary> {
+    if (!AMS_FEATURE_ENABLED) {
+      return {
+        timestamp: Date.now(),
+        totalRetrieved: 0,
+        added: 0,
+        updated: 0,
+        unchanged: 0,
+        failed: 0,
+        modules: {
+          profile: 'not_available',
+          timetable: 'not_available',
+          attendance: 'not_available',
+          registeredSubjects: 'not_available',
+          testLabMarks: 'not_available',
+          internalMarks: 'not_available',
+          semesterResults: 'not_available',
+          credits: 'not_available',
+          documents: 'not_available',
+        },
+      };
+    }
+
     const existing = getAmsDashboardData(profileId);
     const now = Date.now();
 
@@ -273,6 +306,20 @@ export class GenuineAmsIntegrationAdapter implements IAmsIntegrationAdapter {
    * Returns per-module sync status
    */
   getModuleStatus(profileId: string): AmsModuleSyncStatus {
+    if (!AMS_FEATURE_ENABLED) {
+      return {
+        profile: 'not_available',
+        timetable: 'not_available',
+        attendance: 'not_available',
+        registeredSubjects: 'not_available',
+        testLabMarks: 'not_available',
+        internalMarks: 'not_available',
+        semesterResults: 'not_available',
+        credits: 'not_available',
+        documents: 'not_available',
+      };
+    }
+
     const existing = getAmsDashboardData(profileId);
     return {
       profile: existing.academicProfile.studentId ? 'synced' : 'not_synced',

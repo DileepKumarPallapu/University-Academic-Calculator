@@ -19,9 +19,11 @@ import { QuickStartPrompt } from '../components/common/QuickStartPrompt';
 import { CalculationStatus } from '../components/common/CalculationStatus';
 import { useAppToast } from '../components/layout/AppShell';
 
+import { AMS_FEATURE_ENABLED } from '../config/features';
+
 export const CGPACalculatorPage: React.FC = () => {
   const { profile, studentName, setStudentName, updateProfile, nameError, setNameError } = useStudentProfile();
-  const { getCalculation } = useProfile();
+  const { activeProfile, getCalculation } = useProfile();
   const { showToast } = useAppToast();
   const [searchParams] = useSearchParams();
   const calcIdParam = searchParams.get('calcId');
@@ -34,7 +36,7 @@ export const CGPACalculatorPage: React.FC = () => {
   // Regulation selection with localStorage persistence or draft
   const [regulation, setRegulation] = useState<RegulationId>(() => {
     try {
-      const draft = localStorage.getItem('academic_draft_cgpa');
+      const draft = localStorage.getItem(`academic_draft_cgpa_${activeProfile.id}`) || localStorage.getItem('academic_draft_cgpa');
       if (draft) {
         const parsed = JSON.parse(draft);
         if (parsed.regulation && REGULATIONS[parsed.regulation as RegulationId]) {
@@ -49,10 +51,10 @@ export const CGPACalculatorPage: React.FC = () => {
   });
 
   const [semestersCountInput, setSemestersCountInput] = useState<number>(5);
-  // Default all semesters to 0 or restore from draft
+  // Default all semesters to empty array for fresh student profile or restore from draft
   const [semesters, setSemesters] = useState<SemesterItem[]>(() => {
     try {
-      const draft = localStorage.getItem('academic_draft_cgpa');
+      const draft = localStorage.getItem(`academic_draft_cgpa_${activeProfile.id}`) || localStorage.getItem('academic_draft_cgpa');
       if (draft) {
         const parsed = JSON.parse(draft);
         if (Array.isArray(parsed.semesters) && parsed.semesters.length > 0) {
@@ -60,18 +62,12 @@ export const CGPACalculatorPage: React.FC = () => {
         }
       }
     } catch {}
-    return [
-      { id: 'sem-1', semesterNumber: 1, gpa: 0, credits: 0 },
-      { id: 'sem-2', semesterNumber: 2, gpa: 0, credits: 0 },
-      { id: 'sem-3', semesterNumber: 3, gpa: 0, credits: 0 },
-      { id: 'sem-4', semesterNumber: 4, gpa: 0, credits: 0 },
-      { id: 'sem-5', semesterNumber: 5, gpa: 0, credits: 0 },
-    ];
+    return [];
   });
 
   const [hasDraft, setHasDraft] = useState<boolean>(() => {
     try {
-      return !!localStorage.getItem('academic_draft_cgpa');
+      return !!(localStorage.getItem(`academic_draft_cgpa_${activeProfile.id}`) || localStorage.getItem('academic_draft_cgpa'));
     } catch {
       return false;
     }
@@ -135,7 +131,7 @@ export const CGPACalculatorPage: React.FC = () => {
   };
 
   const handleAddSemester = () => {
-    const nextNum = semesters.length + 1;
+    const nextNum = semesters.length > 0 ? Math.max(...semesters.map((s) => s.semesterNumber)) + 1 : 1;
     setSemesters((prev) => [
       ...prev,
       {
@@ -148,25 +144,19 @@ export const CGPACalculatorPage: React.FC = () => {
   };
 
   const handleRemoveSemester = (id: string) => {
-    if (semesters.length <= 1) return;
     setSemesters((prev) => prev.filter((s) => s.id !== id));
   };
 
   const [showResetModal, setShowResetModal] = useState(false);
-  const isDirty = semesters.some((s) => Number(s.gpa) > 0 || Number(s.credits) > 0) || semesters.length !== 5;
+  const isDirty = semesters.some((s) => Number(s.gpa) > 0 || Number(s.credits) > 0) || semesters.length > 0;
 
   const handleReset = () => {
     try {
+      localStorage.removeItem(`academic_draft_cgpa_${activeProfile.id}`);
       localStorage.removeItem('academic_draft_cgpa');
       setHasDraft(false);
     } catch {}
-    setSemesters([
-      { id: 'sem-1', semesterNumber: 1, gpa: 0, credits: 0 },
-      { id: 'sem-2', semesterNumber: 2, gpa: 0, credits: 0 },
-      { id: 'sem-3', semesterNumber: 3, gpa: 0, credits: 0 },
-      { id: 'sem-4', semesterNumber: 4, gpa: 0, credits: 0 },
-      { id: 'sem-5', semesterNumber: 5, gpa: 0, credits: 0 },
-    ]);
+    setSemesters([]);
     setShowResetModal(false);
   };
 
@@ -174,13 +164,13 @@ export const CGPACalculatorPage: React.FC = () => {
     if (isDirty) {
       try {
         localStorage.setItem(
-          'academic_draft_cgpa',
+          `academic_draft_cgpa_${activeProfile.id}`,
           JSON.stringify({ semesters, regulation })
         );
         setHasDraft(true);
       } catch {}
     }
-  }, [semesters, regulation, isDirty]);
+  }, [semesters, regulation, isDirty, activeProfile.id]);
 
   const handleClearDraft = () => {
     try {
@@ -217,13 +207,15 @@ export const CGPACalculatorPage: React.FC = () => {
             Calculate your Cumulative Grade Point Average across all completed semesters with exact credit weighting.
           </p>
         </div>
-        <Link
-          to="/ams"
-          className="apple-btn-secondary text-xs h-9 px-3.5 gap-1.5 flex items-center font-medium self-start sm:self-auto shrink-0 border-[var(--accent)]/30 text-[var(--accent)]"
-        >
-          <FileUp className="w-3.5 h-3.5" />
-          <span>Import AMS Transcripts</span>
-        </Link>
+        {AMS_FEATURE_ENABLED && (
+          <Link
+            to="/ams"
+            className="apple-btn-secondary text-xs h-9 px-3.5 gap-1.5 flex items-center font-medium self-start sm:self-auto shrink-0 border-[var(--accent)]/30 text-[var(--accent)]"
+          >
+            <FileUp className="w-3.5 h-3.5" />
+            <span>Import AMS Transcripts</span>
+          </Link>
+        )}
       </div>
 
       {/* Student Name Input */}
@@ -335,45 +327,51 @@ export const CGPACalculatorPage: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {semesters.map((s) => {
-                    const g = typeof s.gpa === 'number' ? s.gpa : (parseFloat(s.gpa as string) || 0);
-                    const c = typeof s.credits === 'number' ? s.credits : (parseFloat(s.credits as string) || 0);
-                    return (
-                      <tr key={s.id} className="bg-[var(--surface)] border-b border-[var(--border-secondary)] hover:bg-[var(--bg-tertiary)] transition-colors">
-                        <td className="py-3.5 px-4 font-semibold text-[15px] text-[var(--text-primary)]">
-                          Semester {s.semesterNumber}
-                        </td>
-                        <td className="py-3 px-3 text-center w-[140px] min-w-[120px]">
-                          <input
-                            type="number"
-                            inputMode="decimal"
-                            min={0}
-                            max={10}
-                            step="0.01"
-                            placeholder="0"
-                            value={s.gpa}
-                            onChange={(e) => handleSemesterChange(s.id, 'gpa', e.target.value)}
-                            className="h-[48px] w-full max-w-[100px] mx-auto rounded-[10px] bg-[var(--surface)] text-[var(--text-primary)] border border-[var(--input-border)] text-center text-[16px] font-semibold placeholder:text-[var(--text-tertiary)] outline-none focus:border-2 focus:border-[var(--text-primary)] focus:ring-2 focus:ring-black/10 dark:focus:ring-white/10 transition-all shadow-sm"
-                          />
-                        </td>
-                        <td className="py-3 px-3 text-center w-[130px] min-w-[110px]">
-                          <input
-                            type="number"
-                            inputMode="decimal"
-                            min={0}
-                            max={50}
-                            step="any"
-                            placeholder="0"
-                            value={s.credits}
-                            onChange={(e) => handleSemesterChange(s.id, 'credits', e.target.value)}
-                            className="h-[48px] w-full max-w-[90px] mx-auto rounded-[10px] bg-[var(--surface)] text-[var(--text-primary)] border border-[var(--input-border)] text-center text-[16px] font-medium placeholder:text-[var(--text-tertiary)] outline-none focus:border-2 focus:border-[var(--text-primary)] focus:ring-2 focus:ring-black/10 dark:focus:ring-white/10 transition-all shadow-sm"
-                          />
-                        </td>
-                        <td className="py-3.5 px-4 text-right font-semibold text-[16px] text-[var(--text-primary)] tabular-nums w-[150px] min-w-[130px]">
-                          {(g * c).toFixed(1)}
-                        </td>
-                        <td className="py-3.5 px-3 text-center w-[80px]">
-                          {semesters.length > 1 && (
+                  {semesters.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="py-8 text-center text-sm text-[var(--text-secondary)]">
+                        No semesters added yet. Click &quot;+ Add Semester&quot; or use the generator above to begin.
+                      </td>
+                    </tr>
+                  ) : (
+                    semesters.map((s) => {
+                      const g = typeof s.gpa === 'number' ? s.gpa : (parseFloat(s.gpa as string) || 0);
+                      const c = typeof s.credits === 'number' ? s.credits : (parseFloat(s.credits as string) || 0);
+                      return (
+                        <tr key={s.id} className="bg-[var(--surface)] border-b border-[var(--border-secondary)] hover:bg-[var(--bg-tertiary)] transition-colors">
+                          <td className="py-3.5 px-4 font-semibold text-[15px] text-[var(--text-primary)]">
+                            Semester {s.semesterNumber}
+                          </td>
+                          <td className="py-3 px-3 text-center w-[140px] min-w-[120px]">
+                            <input
+                              type="number"
+                              inputMode="decimal"
+                              min={0}
+                              max={10}
+                              step="0.01"
+                              placeholder="0"
+                              value={s.gpa}
+                              onChange={(e) => handleSemesterChange(s.id, 'gpa', e.target.value)}
+                              className="h-[48px] w-full max-w-[100px] mx-auto rounded-[10px] bg-[var(--surface)] text-[var(--text-primary)] border border-[var(--input-border)] text-center text-[16px] font-semibold placeholder:text-[var(--text-tertiary)] outline-none focus:border-2 focus:border-[var(--text-primary)] focus:ring-2 focus:ring-black/10 dark:focus:ring-white/10 transition-all shadow-sm"
+                            />
+                          </td>
+                          <td className="py-3 px-3 text-center w-[130px] min-w-[110px]">
+                            <input
+                              type="number"
+                              inputMode="decimal"
+                              min={0}
+                              max={50}
+                              step="any"
+                              placeholder="0"
+                              value={s.credits}
+                              onChange={(e) => handleSemesterChange(s.id, 'credits', e.target.value)}
+                              className="h-[48px] w-full max-w-[90px] mx-auto rounded-[10px] bg-[var(--surface)] text-[var(--text-primary)] border border-[var(--input-border)] text-center text-[16px] font-medium placeholder:text-[var(--text-tertiary)] outline-none focus:border-2 focus:border-[var(--text-primary)] focus:ring-2 focus:ring-black/10 dark:focus:ring-white/10 transition-all shadow-sm"
+                            />
+                          </td>
+                          <td className="py-3.5 px-4 text-right font-semibold text-[16px] text-[var(--text-primary)] tabular-nums w-[150px] min-w-[130px]">
+                            {(g * c).toFixed(1)}
+                          </td>
+                          <td className="py-3.5 px-3 text-center w-[80px]">
                             <button
                               type="button"
                               onClick={() => handleRemoveSemester(s.id)}
@@ -382,18 +380,23 @@ export const CGPACalculatorPage: React.FC = () => {
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
 
             {/* Mobile Stacked Cards */}
             <div className="md:hidden flex flex-col gap-3">
-              {semesters.map((s) => {
+              {semesters.length === 0 ? (
+                <div className="p-6 rounded-xl bg-[var(--surface)] border border-[var(--border-primary)] text-center text-sm text-[var(--text-secondary)]">
+                  No semesters added yet. Click &quot;+ Add Semester&quot; or use the generator above to begin.
+                </div>
+              ) : (
+                semesters.map((s) => {
                 const g = typeof s.gpa === 'number' ? s.gpa : (parseFloat(s.gpa as string) || 0);
                 const c = typeof s.credits === 'number' ? s.credits : (parseFloat(s.credits as string) || 0);
                 return (
@@ -461,7 +464,7 @@ export const CGPACalculatorPage: React.FC = () => {
                     </div>
                   </div>
                 );
-              })}
+              }))}
             </div>
 
             {/* Action Buttons: Add Semester, Reset & Calculate CGPA */}
