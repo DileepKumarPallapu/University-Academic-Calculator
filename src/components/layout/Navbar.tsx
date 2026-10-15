@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { NavLink, Link } from 'react-router-dom';
-import { Menu, X, Sun, Moon, Laptop, User } from 'lucide-react';
+import { Menu, X, Sun, Moon, Laptop, User, Database } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import { useProfile } from '../../context/ProfileContext';
 import { AMS_FEATURE_ENABLED } from '../../config/features';
@@ -172,6 +172,26 @@ export const Navbar: React.FC = () => {
               </div>
               <span className="text-xs text-[var(--text-secondary)] font-normal">
                 {activeProfile.name.trim() || 'Set Details'}
+              </span>
+            </NavLink>
+
+            <NavLink
+              to="/settings/data"
+              onClick={() => setMobileMenuOpen(false)}
+              className={({ isActive }) =>
+                `w-full flex items-center justify-between py-2.5 px-3.5 rounded-xl text-sm font-semibold transition-colors mt-1 ${
+                  isActive
+                    ? 'bg-[var(--nav-link-active-bg)] text-[var(--nav-link-active)]'
+                    : 'text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]'
+                }`
+              }
+            >
+              <div className="flex items-center gap-2">
+                <Database className="w-4 h-4 text-[var(--text-secondary)]" />
+                <span>Data Management</span>
+              </div>
+              <span className="text-xs text-[var(--text-secondary)] font-normal">
+                Backup & Privacy
               </span>
             </NavLink>
           </div>

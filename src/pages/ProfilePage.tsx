@@ -16,6 +16,7 @@ import {
   ChevronRight,
   Building2,
   Shield,
+  Database,
 } from 'lucide-react';
 import { useProfile } from '../context/ProfileContext';
 import { useAppToast } from '../components/layout/AppShell';
@@ -24,6 +25,7 @@ import { REGULATIONS, type RegulationId } from '../config/university';
 import type { StudentProfile, SavedCalculation, CalculationType } from '../types/profile';
 import { getAmsDashboardData } from '../services/amsStorage';
 import { AMS_FEATURE_ENABLED } from '../config/features';
+import { exportStudentBackup, downloadBackupFile } from '../services/dataBackupService';
 
 export const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
@@ -39,7 +41,6 @@ export const ProfilePage: React.FC = () => {
     deleteCalculation,
     toggleFavoriteCalculation,
     renameCalculation,
-    exportProfileData,
     importProfileData,
     clearActiveProfileData,
   } = useProfile();
@@ -198,20 +199,11 @@ export const ProfilePage: React.FC = () => {
     navigate(routeMap[calc.type] || '/');
   };
 
-  // Export JSON
+  // Export JSON Backup
   const handleExportJSON = async () => {
     try {
-      const json = await exportProfileData();
-      const blob = new Blob([json], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      const filename = `${activeProfile.name.replace(/\s+/g, '_')}_Academic_Data_${new Date()
-        .toISOString()
-        .slice(0, 10)}.json`;
-      a.href = url;
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(url);
+      const backup = await exportStudentBackup(activeProfile.id);
+      downloadBackupFile(backup);
       showToast('Export file downloaded successfully!', 'success');
     } catch (err: any) {
       showToast(`Export failed: ${err.message}`, 'error');
@@ -725,13 +717,23 @@ export const ProfilePage: React.FC = () => {
 
       {/* 4. Data Management & Storage Operations */}
       <div className="rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] p-6 shadow-sm flex flex-col gap-5 mt-4">
-        <div className="border-b border-[var(--border-secondary)] pb-3">
-          <h2 className="text-lg font-bold text-[var(--text-primary)]">
-            Data Management & Backup
-          </h2>
-          <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-            Privacy-first local storage. Your academic records stay on this device and can be backed up or transferred anytime.
-          </p>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--border-secondary)] pb-3">
+          <div>
+            <h2 className="text-lg font-bold text-[var(--text-primary)]">
+              Data Management & Backup
+            </h2>
+            <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+              Privacy-first local storage. Your academic records stay on this device and can be backed up or transferred anytime.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate('/settings/data')}
+            className="apple-btn-primary text-xs h-9 px-3.5 gap-2 font-semibold shrink-0 cursor-pointer"
+          >
+            <Database className="w-4 h-4" />
+            <span>Open Settings → Data Management</span>
+          </button>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">

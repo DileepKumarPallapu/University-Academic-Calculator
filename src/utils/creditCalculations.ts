@@ -213,10 +213,12 @@ export function detectDuplicatesAndRetakes(subjects: CreditSubjectItem[]): Credi
       const hasPassed = allMatches.some(
         (m) =>
           m.status === 'Passed' ||
+          m.status === 'Completed' ||
           (m.courseType === 'nptel' && m.nptelDetails?.approvalStatus === 'approved')
       );
       const isThisPassed =
         sub.status === 'Passed' ||
+        sub.status === 'Completed' ||
         (sub.courseType === 'nptel' && sub.nptelDetails?.approvalStatus === 'approved');
 
       return {
@@ -286,10 +288,10 @@ export function calculateCreditSummary(
     // Track Mandatory & Complementary course counts
     if (effectiveCategory === 'mandatory') {
       mandatoryTotalCount += 1;
-      if (sub.status === 'Passed') mandatoryCompletedCount += 1;
+      if (sub.status === 'Passed' || sub.status === 'Completed') mandatoryCompletedCount += 1;
     } else if (effectiveCategory === 'complementary_skills') {
       complementaryTotalCount += 1;
-      if (sub.status === 'Passed') complementaryCompletedCount += 1;
+      if (sub.status === 'Passed' || sub.status === 'Completed') complementaryCompletedCount += 1;
     }
 
     if (isNonCreditCategory) {
@@ -324,7 +326,7 @@ export function calculateCreditSummary(
         pendingCredits += rawCredits;
       }
     } else {
-      if (sub.status === 'Passed') {
+      if (sub.status === 'Passed' || sub.status === 'Completed') {
         if (dedupeKey && countedCourseCodes.has(dedupeKey)) {
           continue;
         }
@@ -334,7 +336,7 @@ export function calculateCreditSummary(
         if (sub.isVerified) {
           verifiedEarnedCredits += studentEarned;
         }
-      } else if (sub.status === 'Pending') {
+      } else if (sub.status === 'Pending' || sub.status === 'Registered') {
         pendingCredits += studentRegistered;
       } else if (sub.status === 'Failed') {
         failedCredits += studentRegistered;
@@ -410,7 +412,7 @@ export function calculateCategoryProgress(
           earnedCredits += eligibility.eligibleCredits;
         }
       } else {
-        if (c.status === 'Passed') {
+        if (c.status === 'Passed' || c.status === 'Completed') {
           if (dedupeKey && countedCodes.has(dedupeKey)) {
             continue;
           }
@@ -430,7 +432,7 @@ export function calculateCategoryProgress(
 
     const isSatisfied =
       cat.isMandatoryNonCredit || cat.isComplementarySkills
-        ? catCourses.length > 0 && catCourses.every((c) => c.status === 'Passed')
+        ? catCourses.length > 0 && catCourses.every((c) => c.status === 'Passed' || c.status === 'Completed')
         : earnedCredits >= cat.requiredCredits;
 
     return {
@@ -490,11 +492,11 @@ export function calculateSemesterProgress(
           pendingCredits += cr;
         }
       } else {
-        if (c.status === 'Passed') {
+        if (c.status === 'Passed' || c.status === 'Completed') {
           earnedCredits += cr;
         } else if (c.status === 'Failed') {
           failedCredits += cr;
-        } else if (c.status === 'Pending') {
+        } else if (c.status === 'Pending' || c.status === 'Registered') {
           pendingCredits += cr;
         }
       }
@@ -506,7 +508,7 @@ export function calculateSemesterProgress(
       semCourses.every((c) =>
         c.courseType === 'nptel'
           ? isNptelCourseEligible(c, rules).isEligible
-          : c.status === 'Passed'
+          : c.status === 'Passed' || c.status === 'Completed'
       );
 
     result.push({

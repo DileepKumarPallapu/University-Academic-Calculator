@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 
 const GithubIcon: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
   <svg
@@ -58,8 +59,15 @@ export const Footer: React.FC = () => {
             </span>
           </div>
 
-          <div className="pt-3 footer-copyright">
-            © 2026 Pallapu Dileep Kumar. All rights reserved.
+          <div className="pt-3 footer-copyright flex flex-wrap items-center gap-3">
+            <span>© 2026 Pallapu Dileep Kumar. All rights reserved.</span>
+            <span className="text-[var(--border-primary)]">•</span>
+            <Link
+              to="/settings/data"
+              className="hover:text-[var(--text-primary)] transition-colors underline underline-offset-2"
+            >
+              Data & Privacy
+            </Link>
           </div>
         </div>
 

@@ -13,6 +13,7 @@ import { CGPACalculatorPage } from './pages/CGPACalculatorPage';
 import { AttendancePage } from './pages/AttendancePage';
 import { CreditsPlannerPage } from './pages/CreditsPlannerPage';
 import { ProfilePage } from './pages/ProfilePage';
+import { DataManagementPage } from './pages/DataManagementPage';
 import { AmsConnectPage } from './pages/AmsConnectPage';
 import { AmsImportPage } from './pages/AmsImportPage';
 import { AmsDevelopmentNotice } from './components/ams/AmsDevelopmentNotice';
@@ -47,6 +48,9 @@ export function App() {
                 <Route path="/reports" element={<AcademicReportsPage />} />
                 <Route path="/catalogue" element={<Navigate to="/credits?tab=catalogue" replace />} />
                 <Route path="/profile" element={<ProfilePage />} />
+                <Route path="/settings" element={<DataManagementPage />} />
+                <Route path="/settings/data" element={<DataManagementPage />} />
+                <Route path="/data-management" element={<DataManagementPage />} />
                 {AMS_FEATURE_ENABLED ? (
                   <>
                     <Route path="/ams-portal" element={<AmsConnectPage />} />

@@ -385,7 +385,7 @@ export const CreditsPlannerPage: React.FC = () => {
               category: cat,
               credits: cr,
               registeredCredits: data.registeredCredits !== undefined ? data.registeredCredits : cr,
-              earnedCredits: data.earnedCredits !== undefined ? data.earnedCredits : (status === 'Passed' ? cr : 0),
+              earnedCredits: data.earnedCredits !== undefined ? data.earnedCredits : (status === 'Passed' || status === 'Completed' ? cr : 0),
               semester: sem,
               status,
               isVerified,
@@ -412,7 +412,7 @@ export const CreditsPlannerPage: React.FC = () => {
         semester: sem,
         credits: cr,
         registeredCredits: data.registeredCredits !== undefined ? data.registeredCredits : cr,
-        earnedCredits: data.earnedCredits !== undefined ? data.earnedCredits : (status === 'Passed' ? cr : 0),
+        earnedCredits: data.earnedCredits !== undefined ? data.earnedCredits : (status === 'Passed' || status === 'Completed' ? cr : 0),
         grade: data.grade || (isNptel ? 'Elite' : '—'),
         status,
         isVerified,
@@ -459,7 +459,7 @@ export const CreditsPlannerPage: React.FC = () => {
       registeredCredits: course.verifiedCredits !== undefined ? course.verifiedCredits : 0,
       earnedCredits: 0,
       grade: '—',
-      status: 'Pending',
+      status: 'Registered',
       isVerified: course.isVerified,
       source: 'Catalogue',
       regulation: course.regulation,
@@ -473,9 +473,18 @@ export const CreditsPlannerPage: React.FC = () => {
   // Delete Subject Handler
   const handleConfirmDeleteSubject = () => {
     if (deleteSubjectId) {
-      setSubjects((prev) => prev.filter((s) => s.id !== deleteSubjectId));
-      setDeleteSubjectId(null);
-      showToast('Course record deleted', 'info');
+      const updated = subjects.filter((s) => s.id !== deleteSubjectId);
+      try {
+        localStorage.setItem(
+          `academic_credits_subjects_${activeProfile.id}`,
+          JSON.stringify(updated)
+        );
+        setSubjects(updated);
+        setDeleteSubjectId(null);
+        showToast('Course record deleted successfully', 'info');
+      } catch {
+        showToast('Failed to update storage during deletion. Please retry.', 'error');
+      }
     }
   };
 
@@ -504,7 +513,7 @@ export const CreditsPlannerPage: React.FC = () => {
     );
   };
 
-  // Reset My Academic Data (Zeros personal records, preserves shared catalogues)
+  // Reset My Credit Data (Zeros personal records, preserves shared catalogues)
   const handleResetAcademicData = () => {
     setCategories(JSON.parse(JSON.stringify(COLLEGE_CHART_TEMPLATE)));
     setSubjects([]);
@@ -513,8 +522,10 @@ export const CreditsPlannerPage: React.FC = () => {
     setResetConfirmOpen(false);
     try {
       localStorage.removeItem(`academic_credits_subjects_${activeProfile.id}`);
-    } catch {}
-    showToast('Personal academic credit records reset to zero.', 'info');
+      showToast('Personal credit records reset to zero.', 'info');
+    } catch {
+      showToast('Failed to reset personal credit records.', 'error');
+    }
   };
 
   // CSV Export
@@ -635,10 +646,10 @@ export const CreditsPlannerPage: React.FC = () => {
             type="button"
             onClick={() => setResetConfirmOpen(true)}
             className="apple-btn-secondary text-xs h-10 px-3.5 gap-1.5 text-[var(--text-secondary)] hover:text-rose-600 cursor-pointer"
-            title="Reset personal academic records to zero"
+            title="Reset personal credit records to zero"
           >
             <RotateCcw className="w-3.5 h-3.5" />
-            <span>Reset My Academic Data</span>
+            <span>Reset My Credit Data</span>
           </button>
 
           <SaveCalculationButton
@@ -762,6 +773,38 @@ export const CreditsPlannerPage: React.FC = () => {
       {/* ======================================================== */}
       {activeSection === 'dashboard' && (
         <div className="flex flex-col gap-6 animate-appleFadeIn">
+          {/* Empty State Banner if no courses recorded */}
+          {subjects.length === 0 && (
+            <div className="rounded-2xl bg-gradient-to-r from-blue-50/70 via-[var(--surface)] to-indigo-50/40 dark:from-blue-950/20 dark:via-[var(--surface)] dark:to-indigo-950/20 border border-[var(--border-primary)] p-6 sm:p-7 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
+              <div className="flex items-start gap-3.5">
+                <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs mt-0.5 sm:mt-0">
+                  <BookOpen className="w-5 h-5" />
+                </div>
+                <div className="flex flex-col gap-1 max-w-xl">
+                  <h3 className="font-bold text-sm text-[var(--text-primary)]">
+                    Your credit record is empty
+                  </h3>
+                  <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+                    Your credit record is empty. Add your subjects and credit details to start tracking your academic progress.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingSubject(null);
+                    setSubjectModalInitialCourseType('regular');
+                    setSubjectModalOpen(true);
+                  }}
+                  className="apple-btn-primary text-xs h-9 px-4 gap-1.5 font-semibold w-full sm:w-auto cursor-pointer flex items-center justify-center"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Add Course</span>
+                </button>
+              </div>
+            </div>
+          )}
           {/* Main Summary Metric Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="p-5 rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] shadow-xs flex flex-col justify-between">
@@ -1148,10 +1191,10 @@ export const CreditsPlannerPage: React.FC = () => {
                             </div>
                             <div className="flex flex-col gap-1">
                               <span className="font-bold text-sm text-[var(--text-primary)]">
-                                No courses added yet
+                                Your credit record is empty
                               </span>
                               <span className="text-xs text-[var(--text-secondary)]">
-                                Select a course from the catalogue or add one manually.
+                                Your credit record is empty. Add your subjects and credit details to start tracking your academic progress.
                               </span>
                             </div>
                             <div className="flex items-center gap-2 pt-2">
@@ -1653,13 +1696,13 @@ export const CreditsPlannerPage: React.FC = () => {
         description="Are you sure you want to remove this course from your academic credit plan? This will immediately recalculate your earned credits."
       />
 
-      {/* Reset Academic Data Confirmation */}
+      {/* Reset Credit Data Confirmation */}
       <ResetConfirmModal
         isOpen={resetConfirmOpen}
         onClose={() => setResetConfirmOpen(false)}
         onConfirm={handleResetAcademicData}
-        title="Reset My Academic Data?"
-        description={`This will reset all registered courses, earned credits, and semester plans for "${activeProfile.name}" to zero. The shared college course catalogue and institutional rules will remain untouched.`}
+        title="Reset My Credit Data?"
+        description={`This will reset all personal course records, earned credits, and semester plans for "${activeProfile.name}" to zero. The shared college course catalogue and institutional rules will remain untouched.`}
       />
     </div>
   );
@@ -2773,7 +2816,10 @@ const SubjectFormModal: React.FC<{
     initialData?.regulation || profileRegulation || 'VTR21'
   );
 
-  // Regular Course Fields (Defaults to zero credits and Pending status)
+  const { showToast } = useAppToast();
+  const [formError, setFormError] = useState<string | null>(null);
+
+  // Regular Course Fields (Defaults to empty for fresh user entry)
   const [name, setName] = useState(initialData?.name || '');
   const [code, setCode] = useState(initialData?.code || '');
   const [category, setCategory] = useState(
@@ -2781,22 +2827,14 @@ const SubjectFormModal: React.FC<{
   );
   const [semester, setSemester] = useState(initialData?.semester || 1);
   const [credits, setCredits] = useState<number | string>(
-    initialData?.credits !== undefined ? initialData.credits : 0
-  );
-  const [registeredCredits, setRegisteredCredits] = useState<number | string>(
-    initialData?.registeredCredits !== undefined
-      ? initialData.registeredCredits
-      : initialData?.credits !== undefined
+    initialData?.credits !== undefined
       ? initialData.credits
-      : 0
-  );
-  const [earnedCredits, setEarnedCredits] = useState<number | string>(
-    initialData?.earnedCredits !== undefined
-      ? initialData.earnedCredits
-      : 0
+      : initialData?.registeredCredits !== undefined
+      ? initialData.registeredCredits
+      : ''
   );
   const [grade, setGrade] = useState(initialData?.grade || '—');
-  const [status, setStatus] = useState<ResultStatus>(initialData?.status || 'Pending');
+  const [status, setStatus] = useState<ResultStatus>(initialData?.status || 'Registered');
   const [isVerified, setIsVerified] = useState(initialData?.isVerified ?? (initialData?.source === 'Catalogue'));
   const [isRetake, setIsRetake] = useState(initialData?.isRetake || false);
   const [source, setSource] = useState<'Manual' | 'Imported' | 'Catalogue'>(
@@ -2841,14 +2879,10 @@ const SubjectFormModal: React.FC<{
     setSource('Catalogue');
     if (course.verifiedCredits !== undefined) {
       setCredits(course.verifiedCredits);
-      setRegisteredCredits(course.verifiedCredits);
-      setEarnedCredits(status === 'Passed' ? course.verifiedCredits : 0);
       setIsVerified(true);
       setCreditNotice(`✓ Verified in ${regulation} syllabus: ${course.verifiedCredits} Cr`);
     } else {
       setCredits('');
-      setRegisteredCredits('');
-      setEarnedCredits(0);
       setIsVerified(false);
       setCreditNotice('⚠️ Credit value unassigned in catalogue. Please enter credits from your curriculum syllabus.');
     }
@@ -2908,10 +2942,15 @@ const SubjectFormModal: React.FC<{
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
 
     if (courseType === 'nptel') {
       const title = nptelCourseName.trim();
-      if (!title) return;
+      if (!title) {
+        setFormError('Please enter the NPTEL course title.');
+        showToast('Please enter the NPTEL course title.', 'error');
+        return;
+      }
 
       const safeCourseCr = Math.max(0, Number(courseCredits) || 0);
       const safeAcceptedCr = Math.max(0, Number(acceptedCredits) || 0);
@@ -2929,30 +2968,43 @@ const SubjectFormModal: React.FC<{
         notes: nptelNotes.trim(),
       };
 
+      const isCompleted = certStatus === 'certificate_received' || certStatus === 'completed';
+
       onSave({
         name: title,
         code: nptelCourseIdOrUrl.trim().toUpperCase() || 'NPTEL',
         category: categoryTarget,
         semester: nptelSemesterCounted,
         credits: safeAcceptedCr,
+        registeredCredits: safeCourseCr || safeAcceptedCr,
+        earnedCredits: isCompleted ? safeAcceptedCr : 0,
         courseType: 'nptel',
         nptelDetails,
         grade: 'Elite',
+        status: isCompleted ? 'Completed' : 'Registered',
+        isVerified: approvalStatus === 'approved',
+        source: 'Catalogue',
         notes: nptelNotes.trim(),
       });
     } else {
       const title = sanitizeCourseTitle(name);
-      if (!title) return;
+      if (!title) {
+        setFormError('Course name is required before saving.');
+        showToast('Course name is required before saving.', 'error');
+        return;
+      }
 
-      const safeCredits = typeof credits === 'number' ? credits : parseFloat(String(credits)) || 0;
-      const safeRegCredits =
-        typeof registeredCredits === 'number'
-          ? registeredCredits
-          : parseFloat(String(registeredCredits)) || safeCredits;
-      const safeEarnedCredits =
-        typeof earnedCredits === 'number'
-          ? earnedCredits
-          : parseFloat(String(earnedCredits)) || (status === 'Passed' ? safeCredits : 0);
+      const parsedCredits = typeof credits === 'number' ? credits : parseFloat(String(credits));
+      if (isNaN(parsedCredits) || parsedCredits < 0) {
+        setFormError('Please enter a valid non-negative credit value.');
+        showToast('Please enter a valid non-negative credit value.', 'error');
+        return;
+      }
+
+      const safeCredits = parsedCredits;
+      const isEarned = status === 'Passed' || status === 'Completed' || status === 'Exempted';
+      const safeRegCredits = safeCredits;
+      const safeEarnedCredits = isEarned ? safeCredits : 0;
 
       onSave({
         name: title,
@@ -3456,11 +3508,11 @@ const SubjectFormModal: React.FC<{
                 </div>
               )}
 
-              {/* Credits & Semester & Grade */}
+              {/* Credit Value, Semester, Course Status, Grade */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="flex flex-col gap-1">
                   <label className="font-semibold text-[var(--text-primary)]">
-                    Registered Cr
+                    Credit Value <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="number"
@@ -3469,42 +3521,16 @@ const SubjectFormModal: React.FC<{
                     step={0.5}
                     required
                     placeholder="e.g. 3"
-                    value={registeredCredits}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setRegisteredCredits(val);
-                      if (status === 'Passed' && (!earnedCredits || earnedCredits === credits)) {
-                        setEarnedCredits(val);
-                        setCredits(val !== '' ? parseFloat(val) : 0);
-                      }
-                    }}
+                    value={credits}
+                    onChange={(e) => setCredits(e.target.value)}
                     className="apple-input h-10 text-xs text-center font-bold"
                   />
                 </div>
 
                 <div className="flex flex-col gap-1">
                   <label className="font-semibold text-[var(--text-primary)]">
-                    Earned Cr
+                    Semester <span className="text-rose-500">*</span>
                   </label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={20}
-                    step={0.5}
-                    required
-                    placeholder="e.g. 3"
-                    value={earnedCredits}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setEarnedCredits(val);
-                      setCredits(val !== '' ? parseFloat(val) : 0);
-                    }}
-                    className="apple-input h-10 text-xs text-center font-bold text-emerald-600 dark:text-emerald-400"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <label className="font-semibold text-[var(--text-primary)]">Semester</label>
                   <select
                     value={semester}
                     onChange={(e) => setSemester(parseInt(e.target.value) || 1)}
@@ -3519,13 +3545,32 @@ const SubjectFormModal: React.FC<{
                 </div>
 
                 <div className="flex flex-col gap-1">
-                  <label className="font-semibold text-[var(--text-primary)]">Grade</label>
+                  <label className="font-semibold text-[var(--text-primary)]">
+                    Course Status <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={status}
+                    onChange={(e) => setStatus(e.target.value as ResultStatus)}
+                    className="apple-input h-10 text-xs cursor-pointer font-semibold"
+                  >
+                    <option value="Registered">Registered</option>
+                    <option value="Completed">Completed</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Passed">Passed</option>
+                    <option value="Failed">Failed</option>
+                    <option value="Withdrawn">Withdrawn</option>
+                    <option value="Exempted">Exempted</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="font-semibold text-[var(--text-primary)]">Grade / Result</label>
                   <select
                     value={grade}
                     onChange={(e) => setGrade(e.target.value)}
                     className="apple-input h-10 text-xs cursor-pointer font-bold"
                   >
-                    {['O', 'A+', 'A', 'B+', 'B', 'C', 'D', 'RA', 'P', 'F', 'W'].map((g) => (
+                    {['—', 'O', 'A+', 'A', 'B+', 'B', 'C', 'D', 'RA', 'P', 'F', 'W'].map((g) => (
                       <option key={g} value={g}>
                         {g}
                       </option>
@@ -3534,30 +3579,18 @@ const SubjectFormModal: React.FC<{
                 </div>
               </div>
 
-              {/* Result Status & Checkboxes */}
+              {/* Source & Record Options */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1">
-                  <label className="font-semibold text-[var(--text-primary)]">Result Status</label>
+                  <label className="font-semibold text-[var(--text-primary)]">Source</label>
                   <select
-                    value={status}
-                    onChange={(e) => {
-                      const nextStatus = e.target.value as ResultStatus;
-                      setStatus(nextStatus);
-                      if (nextStatus !== 'Passed') {
-                        setEarnedCredits(0);
-                      } else {
-                        const defaultCr = Number(registeredCredits) || Number(credits) || 0;
-                        setEarnedCredits(defaultCr);
-                      }
-                    }}
-                    className="apple-input h-10 text-xs cursor-pointer font-semibold"
+                    value={source}
+                    onChange={(e) => setSource(e.target.value as any)}
+                    className="apple-input h-10 text-xs cursor-pointer font-medium"
                   >
-                    <option value="Passed">Passed</option>
-                    <option value="Failed">Failed</option>
-                    <option value="Pending">Pending</option>
-                    <option value="Withdrawn">Withdrawn</option>
-                    <option value="Incomplete">Incomplete</option>
-                    <option value="Exempted">Exempted</option>
+                    <option value="Manual">Manual entry</option>
+                    <option value="Imported">Imported document</option>
+                    <option value="Catalogue">Course Catalogue</option>
                   </select>
                 </div>
 
@@ -3596,6 +3629,13 @@ const SubjectFormModal: React.FC<{
                   />
                 </div>
               </div>
+
+              {formError && (
+                <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>{formError}</span>
+                </div>
+              )}
             </>
           )}
 

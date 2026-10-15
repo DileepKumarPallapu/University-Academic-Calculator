@@ -15,6 +15,8 @@ export type CourseType = 'regular' | 'nptel' | 'external';
 
 export type ResultStatus =
   | 'Passed'
+  | 'Completed'
+  | 'Registered'
   | 'Failed'
   | 'Pending'
   | 'Withdrawn'
