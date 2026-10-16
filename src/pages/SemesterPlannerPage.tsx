@@ -384,9 +384,9 @@ export const SemesterPlannerPage: React.FC = () => {
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8 space-y-6">
+    <div className="apple-page-enter flex flex-col gap-6 w-full print:hidden">
       {/* Top Header & Overview Bar */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
+      <div className="rounded-2xl border border-[var(--border-primary)] bg-[var(--surface)] p-6 shadow-xs">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
@@ -394,10 +394,10 @@ export const SemesterPlannerPage: React.FC = () => {
                 <Calendar className="w-6 h-6" />
               </span>
               <div>
-                <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
+                <h1 className="text-xl sm:text-2xl font-black text-[var(--text-primary)]">
                   Semester Planner & Goal Tracker
                 </h1>
-                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+                <p className="text-xs sm:text-sm text-[var(--text-secondary)]">
                   Manage semesters, track exam readiness, and compare personal goals with university standards.
                 </p>
               </div>
@@ -407,14 +407,14 @@ export const SemesterPlannerPage: React.FC = () => {
           <div className="flex items-center gap-2 self-start md:self-center">
             <button
               onClick={handleOpenCreateSemester}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition-colors"
+              className="apple-btn-primary inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-xl shadow-xs"
             >
               <Plus className="w-4 h-4" />
               Add Semester
             </button>
             <button
               onClick={() => handleOpenCreateTask()}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors"
+              className="apple-btn-secondary inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-xl"
             >
               <Plus className="w-4 h-4" />
               New Task
@@ -423,31 +423,31 @@ export const SemesterPlannerPage: React.FC = () => {
         </div>
 
         {/* Quick Stats Banner */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-5 border-t border-slate-100 dark:border-slate-800 text-xs">
-          <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-700/60">
-            <span className="text-slate-400 block text-[11px]">Active Semester</span>
-            <span className="font-bold text-slate-900 dark:text-white truncate block text-sm mt-0.5">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-5 border-t border-[var(--border-secondary)] text-xs">
+          <div className="p-3 rounded-xl bg-[var(--surface-sunken)] border border-[var(--border-secondary)]">
+            <span className="text-[var(--text-muted)] block text-[11px]">Active Semester</span>
+            <span className="font-bold text-[var(--text-primary)] truncate block text-sm mt-0.5">
               {currentSemesterObj ? currentSemesterObj.title : 'None selected'}
             </span>
           </div>
 
-          <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-700/60">
-            <span className="text-slate-400 block text-[11px]">Planned Credits</span>
-            <span className="font-bold text-slate-900 dark:text-white text-sm mt-0.5 block">
+          <div className="p-3 rounded-xl bg-[var(--surface-sunken)] border border-[var(--border-secondary)]">
+            <span className="text-[var(--text-muted)] block text-[11px]">Planned Credits</span>
+            <span className="font-bold text-[var(--text-primary)] text-sm mt-0.5 block">
               {semesterCreditsTotal} Credits ({selectedSemesterSubjects.length} subjects)
             </span>
           </div>
 
-          <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-700/60">
-            <span className="text-slate-400 block text-[11px]">Exam Readiness</span>
+          <div className="p-3 rounded-xl bg-[var(--surface-sunken)] border border-[var(--border-secondary)]">
+            <span className="text-[var(--text-muted)] block text-[11px]">Exam Readiness</span>
             <span className="font-bold text-indigo-600 dark:text-indigo-400 text-sm mt-0.5 block">
               {semesterReadinessPct}% Ready ({readySubjectsCount}/{selectedSemesterSubjects.length})
             </span>
           </div>
 
-          <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-700/60">
-            <span className="text-slate-400 block text-[11px]">Pending Deadlines</span>
-            <span className="font-bold text-slate-900 dark:text-white text-sm mt-0.5 block">
+          <div className="p-3 rounded-xl bg-[var(--surface-sunken)] border border-[var(--border-secondary)]">
+            <span className="text-[var(--text-muted)] block text-[11px]">Pending Deadlines</span>
+            <span className="font-bold text-[var(--text-primary)] text-sm mt-0.5 block">
               {tasks.filter((t) => t.status !== 'completed').length} Tasks
               {overdueTasksCount > 0 && (
                 <span className="text-rose-600 dark:text-rose-400 text-xs ml-1 font-semibold">
@@ -460,56 +460,41 @@ export const SemesterPlannerPage: React.FC = () => {
       </div>
 
       {/* Navigation Tabs */}
-      <div className="flex border-b border-slate-200 dark:border-slate-800 gap-6 text-sm font-semibold">
+      <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-[var(--surface-sunken)] border border-[var(--border-secondary)] overflow-x-auto no-scrollbar">
         <button
           onClick={() => setActiveTab('dashboard')}
-          className={`pb-3 relative transition-colors ${
+          className={`px-4 py-2 text-xs font-semibold rounded-xl transition-all flex items-center gap-2 whitespace-nowrap ${
             activeTab === 'dashboard'
-              ? 'text-indigo-600 dark:text-indigo-400'
-              : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+              ? 'bg-[var(--surface)] text-[var(--accent-primary)] shadow-xs font-bold'
+              : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-elevated)]'
           }`}
         >
-          <span className="inline-flex items-center gap-1.5">
-            <Layers className="w-4 h-4" />
-            Planner Dashboard
-          </span>
-          {activeTab === 'dashboard' && (
-            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 rounded-full" />
-          )}
+          <Layers className="w-4 h-4" />
+          <span>Planner Dashboard</span>
         </button>
 
         <button
           onClick={() => setActiveTab('semesters')}
-          className={`pb-3 relative transition-colors ${
+          className={`px-4 py-2 text-xs font-semibold rounded-xl transition-all flex items-center gap-2 whitespace-nowrap ${
             activeTab === 'semesters'
-              ? 'text-indigo-600 dark:text-indigo-400'
-              : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+              ? 'bg-[var(--surface)] text-[var(--accent-primary)] shadow-xs font-bold'
+              : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-elevated)]'
           }`}
         >
-          <span className="inline-flex items-center gap-1.5">
-            <BookOpen className="w-4 h-4" />
-            Semesters & Subjects ({semesters.length})
-          </span>
-          {activeTab === 'semesters' && (
-            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 rounded-full" />
-          )}
+          <BookOpen className="w-4 h-4" />
+          <span>Semesters & Subjects ({semesters.length})</span>
         </button>
 
         <button
           onClick={() => setActiveTab('tasks')}
-          className={`pb-3 relative transition-colors ${
+          className={`px-4 py-2 text-xs font-semibold rounded-xl transition-all flex items-center gap-2 whitespace-nowrap ${
             activeTab === 'tasks'
-              ? 'text-indigo-600 dark:text-indigo-400'
-              : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+              ? 'bg-[var(--surface)] text-[var(--accent-primary)] shadow-xs font-bold'
+              : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-elevated)]'
           }`}
         >
-          <span className="inline-flex items-center gap-1.5">
-            <CheckSquare className="w-4 h-4" />
-            Study Tasks & Calendar ({tasks.length})
-          </span>
-          {activeTab === 'tasks' && (
-            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 rounded-full" />
-          )}
+          <CheckSquare className="w-4 h-4" />
+          <span>Study Tasks & Calendar ({tasks.length})</span>
         </button>
       </div>
 

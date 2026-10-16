@@ -5,6 +5,7 @@ import { Footer } from './Footer';
 import { ToastContainer } from '../common/Toast';
 import { OfflineBadge } from '../common/OfflineBadge';
 import { PageLoadingFallback } from '../common/PageLoadingFallback';
+import { useProfile } from '../../context/ProfileContext';
 
 interface ToastItem {
   id: string;
@@ -21,6 +22,7 @@ export const ToastContext = React.createContext<{
 export const useAppToast = () => React.useContext(ToastContext);
 
 export const AppShell: React.FC = () => {
+  const { isLoading } = useProfile();
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
@@ -39,9 +41,13 @@ export const AppShell: React.FC = () => {
         <Navbar />
 
         <main className="flex-1 max-w-[1200px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
-          <Suspense fallback={<PageLoadingFallback />}>
-            <Outlet />
-          </Suspense>
+          {isLoading ? (
+            <PageLoadingFallback />
+          ) : (
+            <Suspense fallback={<PageLoadingFallback />}>
+              <Outlet />
+            </Suspense>
+          )}
         </main>
 
         <Footer />

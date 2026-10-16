@@ -432,7 +432,7 @@ export const AmsConnectPage: React.FC = () => {
   }, [dashboardData.semesterResults]);
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 flex flex-col gap-6 animate-appleFadeIn">
+    <div className="apple-page-enter flex flex-col gap-6 w-full">
       {/* ========================================================================= */}
       {/* 1. VEL TECH AMS BRANDING & STATUS HEADER                                   */}
       {/* ========================================================================= */}

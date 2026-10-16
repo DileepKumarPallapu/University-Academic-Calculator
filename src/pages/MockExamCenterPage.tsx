@@ -258,7 +258,7 @@ export const MockExamCenterPage: React.FC = () => {
   // If viewing a completed attempt report
   if (selectedAttemptForView) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8 px-4 sm:px-6 lg:px-8">
+      <div className="apple-page-enter flex flex-col gap-6 w-full print:hidden">
         <ExamResultView
           attempt={selectedAttemptForView}
           onBackToCenter={() => setSelectedAttemptForView(null)}
@@ -278,141 +278,137 @@ export const MockExamCenterPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8 px-4 sm:px-6 lg:px-8 font-sans">
-      <div className="max-w-6xl mx-auto space-y-6">
-        {/* Header Section */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-200 dark:border-gray-800">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400">
-                <FileQuestion className="w-6 h-6" />
-              </span>
-              <h1 className="text-2xl font-black text-gray-900 dark:text-white">
-                Question Bank & Mock Exam Center
-              </h1>
-            </div>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              Curate your syllabus question bank, generate timed test simulations, and master weak
-              topics.
-            </p>
+    <div className="apple-page-enter flex flex-col gap-6 w-full print:hidden">
+      {/* Header Section */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[var(--border-secondary)]">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="p-2 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400">
+              <FileQuestion className="w-5 h-5 sm:w-6 sm:h-6" />
+            </span>
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[var(--text-primary)]">
+              Question Bank & Mock Exam Center
+            </h1>
           </div>
+          <p className="text-xs sm:text-sm text-[var(--text-secondary)] mt-1">
+            Curate your syllabus question bank, generate timed test simulations, and master weak topics.
+          </p>
+        </div>
 
-          {/* Quick Stats Pill */}
+        {/* Quick Stats Pill */}
+        <div className="flex items-center gap-3">
+          <div className="text-right">
+            <span className="text-[11px] text-[var(--text-tertiary)] block uppercase font-medium">Bank Questions</span>
+            <span className="text-sm sm:text-base font-bold text-[var(--text-primary)]">
+              {questions.length} Saved
+            </span>
+          </div>
+          <div className="h-8 w-px bg-[var(--border-secondary)]" />
+          <div className="text-right">
+            <span className="text-[11px] text-[var(--text-tertiary)] block uppercase font-medium">Practice Tests</span>
+            <span className="text-sm sm:text-base font-bold text-blue-600 dark:text-blue-400">
+              {attempts.length} Attempted
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Practice Tool Disclaimer Notice */}
+      <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-800 dark:text-amber-300 flex items-center gap-2">
+        <HelpCircle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
+        <span>
+          <strong>Practice Disclaimer:</strong> This Mock Exam Center is an independent student study and revision tool for self-evaluation. It is not an official university examination portal.
+        </span>
+      </div>
+
+      {/* Active Unfinished Exam Banner, if any */}
+      {getActiveExamSession(profileId) && (
+        <div className="p-4 bg-[var(--surface)] border border-blue-500/30 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
           <div className="flex items-center gap-3">
-            <div className="text-right">
-              <span className="text-xs text-gray-400 block">Bank Questions</span>
-              <span className="text-base font-bold text-gray-800 dark:text-gray-200">
-                {questions.length} Saved
-              </span>
-            </div>
-            <div className="h-8 w-px bg-gray-200 dark:bg-gray-700" />
-            <div className="text-right">
-              <span className="text-xs text-gray-400 block">Practice Tests</span>
-              <span className="text-base font-bold text-indigo-600 dark:text-indigo-400">
-                {attempts.length} Attempted
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Practice Tool Disclaimer Notice */}
-        <div className="p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 rounded-xl text-xs text-amber-800 dark:text-amber-300 flex items-center gap-2">
-          <HelpCircle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
-          <span>
-            <strong>Practice Disclaimer:</strong> This Mock Exam Center is an independent student
-            study and revision tool for self-evaluation. It is not an official university examination
-            portal.
-          </span>
-        </div>
-
-        {/* Active Unfinished Exam Banner, if any */}
-        {getActiveExamSession(profileId) && (
-          <div className="p-4 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in">
-            <div className="flex items-center gap-3">
-              <span className="p-2 bg-indigo-600 text-white rounded-xl shrink-0">
-                <Clock className="w-5 h-5 animate-spin" />
-              </span>
-              <div>
-                <h3 className="text-sm font-bold text-indigo-900 dark:text-indigo-200">
-                  Unfinished Practice Exam in Progress
-                </h3>
-                <p className="text-xs text-indigo-700 dark:text-indigo-400">
-                  You have an active session for &ldquo;
-                  {getActiveExamSession(profileId)?.examTitle}&rdquo;.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleDiscardOngoingSession}
-                className="px-3 py-1.5 text-xs text-gray-500 hover:text-rose-600 font-semibold"
-              >
-                Discard
-              </button>
-              <button
-                onClick={() => setActiveSession(getActiveExamSession(profileId))}
-                className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-md shadow-indigo-500/20 flex items-center gap-1.5"
-              >
-                <PlayCircle className="w-4 h-4" />
-                <span>Resume Attempt</span>
-              </button>
+            <span className="p-2 bg-blue-600 text-white rounded-xl shrink-0">
+              <Clock className="w-5 h-5 animate-spin" />
+            </span>
+            <div>
+              <h3 className="text-sm font-bold text-[var(--text-primary)]">
+                Unfinished Practice Exam in Progress
+              </h3>
+              <p className="text-xs text-[var(--text-secondary)]">
+                You have an active session for &ldquo;
+                {getActiveExamSession(profileId)?.examTitle}&rdquo;.
+              </p>
             </div>
           </div>
-        )}
 
-        {/* Navigation Tabs */}
-        <div className="flex border-b border-gray-200 dark:border-gray-700 space-x-1 sm:space-x-4">
-          <button
-            onClick={() => setActiveTab('practice')}
-            className={`pb-3 px-3 text-xs sm:text-sm font-bold flex items-center gap-2 border-b-2 transition ${
-              activeTab === 'practice'
-                ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
-                : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-            }`}
-          >
-            <PlayCircle className="w-4 h-4" />
-            <span>Mock Exams ({mockExams.length})</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('questions')}
-            className={`pb-3 px-3 text-xs sm:text-sm font-bold flex items-center gap-2 border-b-2 transition ${
-              activeTab === 'questions'
-                ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
-                : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-            }`}
-          >
-            <FileQuestion className="w-4 h-4" />
-            <span>Question Bank ({questions.length})</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('analytics')}
-            className={`pb-3 px-3 text-xs sm:text-sm font-bold flex items-center gap-2 border-b-2 transition ${
-              activeTab === 'analytics'
-                ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
-                : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-            }`}
-          >
-            <BarChart3 className="w-4 h-4" />
-            <span>Performance Analytics</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('mistakes')}
-            className={`pb-3 px-3 text-xs sm:text-sm font-bold flex items-center gap-2 border-b-2 transition ${
-              activeTab === 'mistakes'
-                ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
-                : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-            }`}
-          >
-            <BookMarked className="w-4 h-4 text-rose-500" />
-            <span>Mistake Notebook ({mistakes.filter((m) => !m.isMastered).length})</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleDiscardOngoingSession}
+              className="px-3 py-1.5 text-xs text-[var(--text-secondary)] hover:text-rose-600 font-semibold"
+            >
+              Discard
+            </button>
+            <button
+              onClick={() => setActiveSession(getActiveExamSession(profileId))}
+              className="apple-btn-primary px-4 py-1.5 text-xs font-semibold flex items-center gap-1.5"
+            >
+              <PlayCircle className="w-4 h-4" />
+              <span>Resume Attempt</span>
+            </button>
+          </div>
         </div>
+      )}
 
-        {/* TAB 1: PRACTICE MOCK EXAMS */}
+      {/* Navigation Tabs */}
+      <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-[var(--surface-sunken)] border border-[var(--border-secondary)] overflow-x-auto no-scrollbar">
+        <button
+          onClick={() => setActiveTab('practice')}
+          className={`flex-1 py-2 px-3 rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 transition whitespace-nowrap ${
+            activeTab === 'practice'
+              ? 'bg-[var(--surface)] text-[var(--text-primary)] shadow-sm font-bold'
+              : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+          }`}
+        >
+          <PlayCircle className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+          <span>Mock Exams ({mockExams.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('questions')}
+          className={`flex-1 py-2 px-3 rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 transition whitespace-nowrap ${
+            activeTab === 'questions'
+              ? 'bg-[var(--surface)] text-[var(--text-primary)] shadow-sm font-bold'
+              : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+          }`}
+        >
+          <FileQuestion className="w-4 h-4 text-indigo-500" />
+          <span>Question Bank ({questions.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('analytics')}
+          className={`flex-1 py-2 px-3 rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 transition whitespace-nowrap ${
+            activeTab === 'analytics'
+              ? 'bg-[var(--surface)] text-[var(--text-primary)] shadow-sm font-bold'
+              : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+          }`}
+        >
+          <BarChart3 className="w-4 h-4 text-emerald-500" />
+          <span>Analytics</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('mistakes')}
+          className={`flex-1 py-2 px-3 rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 transition whitespace-nowrap ${
+            activeTab === 'mistakes'
+              ? 'bg-[var(--surface)] text-[var(--text-primary)] shadow-sm font-bold'
+              : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+          }`}
+        >
+          <BookMarked className="w-4 h-4 text-rose-500" />
+          <span>Mistakes ({mistakes.filter((m) => !m.isMastered).length})</span>
+        </button>
+      </div>
+
+      {/* TAB 1: PRACTICE MOCK EXAMS */}
         {activeTab === 'practice' && (
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -804,7 +800,6 @@ export const MockExamCenterPage: React.FC = () => {
             initialConfig={editingExam}
           />
         )}
-      </div>
     </div>
   );
 };

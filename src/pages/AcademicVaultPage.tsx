@@ -82,16 +82,20 @@ export const AcademicVaultPage: React.FC = () => {
   const [docToDelete, setDocToDelete] = useState<VaultDocumentMetadata | null>(null);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
 
-  // Request cancellation token
+  // Request cancellation token & loading stability guards
   const requestIdRef = useRef(0);
+  const hasLoadedOnceRef = useRef(false);
+  const previousProfileIdRef = useRef(profileId);
 
-  // Load Vault Data with State Machine
+  // Load Vault Data with State Machine (flicker-free lifecycle)
   const loadVaultData = useCallback(
     async (isManualRetry = false) => {
       const currentRequestId = ++requestIdRef.current;
+      const isProfileSwitch = previousProfileIdRef.current !== profileId;
+      previousProfileIdRef.current = profileId;
 
-      // Only enter full loading state if we don't have documents yet or on manual retry
-      if (isManualRetry || status === 'error' || documents.length === 0) {
+      // Only enter full skeleton loading on the very first retrieval, a true profile switch, or explicit manual retry
+      if (isManualRetry || isProfileSwitch || !hasLoadedOnceRef.current) {
         setStatus('loading');
       } else {
         setIsRefreshing(true);
@@ -109,6 +113,7 @@ export const AcademicVaultPage: React.FC = () => {
         // Guard against stale requests if profile changed or component unmounted
         if (currentRequestId !== requestIdRef.current) return;
 
+        hasLoadedOnceRef.current = true;
         setDocuments(docs);
         setFolders(fldrs);
         setStorageStats(stats);
@@ -124,7 +129,7 @@ export const AcademicVaultPage: React.FC = () => {
         }
       }
     },
-    [profileId, status, documents.length]
+    [profileId]
   );
 
   // Initial load & profile change sync
@@ -135,7 +140,7 @@ export const AcademicVaultPage: React.FC = () => {
       // Invalidate pending requests on unmount
       requestIdRef.current++;
     };
-  }, [profileId]); // Re-fetch only when profileId genuinely changes
+  }, [loadVaultData]); // Stable callback guarded by profileId
 
   // Listen for external storage events safely without re-triggering full page spinner
   useEffect(() => {
@@ -285,7 +290,7 @@ export const AcademicVaultPage: React.FC = () => {
   };
 
   return (
-    <div className="w-full space-y-6 animate-appleFadeIn">
+    <div className="apple-page-enter flex flex-col gap-6 w-full print:hidden">
       {/* Top Header Card */}
       <div className="rounded-2xl border border-[var(--border-primary)] bg-[var(--surface)] p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -325,7 +330,7 @@ export const AcademicVaultPage: React.FC = () => {
 
           <button
             onClick={() => setIsUploadOpen(true)}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-500/20 flex items-center gap-1.5 transition-all transform active:scale-95 cursor-pointer"
+            className="apple-btn-primary px-4 py-2 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
           >
             <Upload className="w-4 h-4" />
             <span>Upload Document</span>
@@ -369,7 +374,7 @@ export const AcademicVaultPage: React.FC = () => {
           </div>
           <button
             onClick={() => setIsUploadOpen(true)}
-            className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-500/20 inline-flex items-center gap-2 transition-transform transform active:scale-95 cursor-pointer"
+            className="apple-btn-primary px-5 py-2.5 text-xs font-semibold inline-flex items-center gap-2 cursor-pointer shadow-sm"
           >
             <Upload className="w-4 h-4" />
             <span>Upload Your First Document</span>

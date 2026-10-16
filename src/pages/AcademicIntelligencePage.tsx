@@ -58,7 +58,7 @@ export const AcademicIntelligencePage: React.FC = () => {
   );
 
   return (
-    <div className="w-full max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-8 animate-appleFadeIn">
+    <div className="apple-page-enter flex flex-col gap-6 w-full print:hidden">
       {/* 1. Header Section */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--border-secondary)] pb-6">
         <div>

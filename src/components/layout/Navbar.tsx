@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { NavLink, Link } from 'react-router-dom';
+import { NavLink, Link, useLocation } from 'react-router-dom';
 import { Menu, X, Sun, Moon, Laptop, User, Database } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import { useProfile } from '../../context/ProfileContext';
@@ -10,6 +10,7 @@ export const Navbar: React.FC = () => {
   const { theme, setTheme } = useTheme();
   const { activeProfile } = useProfile();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const location = useLocation();
 
   const navLinks = [
     { to: '/', label: 'Home' },
@@ -27,6 +28,23 @@ export const Navbar: React.FC = () => {
       : [{ to: '/ams-portal', label: 'AMS Portal', isComingSoon: true }]),
   ];
 
+  const isNavActive = (targetTo: string) => {
+    const current = location.pathname;
+    if (targetTo === '/') return current === '/' || current === '';
+    if (targetTo === '/gpa') return current === '/gpa' || current === '/sgpa';
+    if (targetTo === '/vault')
+      return current === '/vault' || current === '/academic-vault' || current === '/documents';
+    if (targetTo === '/mock-exams')
+      return current === '/mock-exams' || current === '/question-bank' || current === '/exam-center';
+    if (targetTo === '/exam-prep')
+      return current === '/exam-prep' || current === '/exams' || current === '/revision-planner';
+    if (targetTo === '/achievements')
+      return current === '/achievements' || current === '/rewards' || current === '/achievement-center';
+    if (targetTo === '/intelligence')
+      return current === '/intelligence' || current === '/academic-intelligence' || current === '/analytics';
+    return current === targetTo || current.startsWith(`${targetTo}/`);
+  };
+
   const themeOptions: { value: ThemeMode; label: string; icon: React.ReactNode }[] = [
     { value: 'light', label: 'Light', icon: <Sun className="w-3.5 h-3.5" /> },
     { value: 'dark', label: 'Dark', icon: <Moon className="w-3.5 h-3.5" /> },
@@ -39,39 +57,42 @@ export const Navbar: React.FC = () => {
 
   return (
     <header className="sticky top-0 z-50 w-full h-16 bg-[var(--nav-bg)] backdrop-blur-[20px] border-b border-[var(--nav-border)] no-print transition-colors">
-      <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 h-full flex items-center justify-between">
+      <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 h-full flex items-center justify-between gap-4">
         {/* Brand */}
         <Link
           to="/"
           onClick={() => setMobileMenuOpen(false)}
-          className="text-[17px] sm:text-[19px] font-semibold tracking-tight text-[var(--text-primary)] hover:opacity-80 transition-opacity"
+          className="text-[17px] sm:text-[19px] font-semibold tracking-tight text-[var(--text-primary)] hover:opacity-80 transition-opacity shrink-0"
         >
           Academic Calculator
         </Link>
 
         {/* Desktop Navigation Links */}
-        <nav className="hidden md:flex items-center gap-1.5" aria-label="Main Navigation">
-          {navLinks.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.to === '/'}
-              className={({ isActive }) =>
-                `px-3.5 py-1.5 rounded-full text-[14px] transition-all flex items-center gap-1.5 ${
-                  isActive
+        <nav
+          className="hidden md:flex items-center gap-1 overflow-x-auto no-scrollbar py-1 scroll-smooth"
+          aria-label="Main Navigation"
+        >
+          {navLinks.map((item) => {
+            const active = isNavActive(item.to);
+            return (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                className={`px-3 py-1.5 rounded-full text-[13px] lg:text-[14px] transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap ${
+                  active
                     ? 'font-semibold text-[var(--nav-link-active)] bg-[var(--nav-link-active-bg)] border border-[var(--border-primary)] shadow-sm'
                     : 'text-[var(--nav-link)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]'
-                }`
-              }
-            >
-              <span>{item.label}</span>
-              {item.isComingSoon && (
-                <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                  Dev
-                </span>
-              )}
-            </NavLink>
-          ))}
+                }`}
+              >
+                <span>{item.label}</span>
+                {item.isComingSoon && (
+                  <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                    Dev
+                  </span>
+                )}
+              </NavLink>
+            );
+          })}
         </nav>
 
         {/* Controls: Profile, Theme, Mobile Hamburger */}
@@ -134,28 +155,28 @@ export const Navbar: React.FC = () => {
       {mobileMenuOpen && (
         <div className="md:hidden bg-[var(--surface)] border-b border-[var(--border-primary)] px-4 py-5 flex flex-col gap-3 shadow-xl animate-appleFadeIn">
           <div className="flex flex-col gap-1">
-            {navLinks.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.to === '/'}
-                onClick={() => setMobileMenuOpen(false)}
-                className={({ isActive }) =>
-                  `py-2.5 px-3.5 rounded-xl text-base font-medium transition-colors flex items-center justify-between ${
-                    isActive
+            {navLinks.map((item) => {
+              const active = isNavActive(item.to);
+              return (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`py-2.5 px-3.5 rounded-xl text-base font-medium transition-colors flex items-center justify-between ${
+                    active
                       ? 'bg-[var(--nav-link-active-bg)] text-[var(--nav-link-active)] font-semibold'
                       : 'text-[var(--nav-link)] hover:bg-[var(--bg-tertiary)]'
-                  }`
-                }
-              >
-                <span>{item.label}</span>
-                {item.isComingSoon && (
-                  <span className="px-2 py-0.5 text-[10px] font-bold uppercase rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                    Dev
-                  </span>
-                )}
-              </NavLink>
-            ))}
+                  }`}
+                >
+                  <span>{item.label}</span>
+                  {item.isComingSoon && (
+                    <span className="px-2 py-0.5 text-[10px] font-bold uppercase rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                      Dev
+                    </span>
+                  )}
+                </NavLink>
+              );
+            })}
           </div>
 
           {/* Mobile Profile Link */}

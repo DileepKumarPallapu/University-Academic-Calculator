@@ -4,7 +4,7 @@ import { AttendanceGoalPlanner } from '../components/intelligence/AttendanceGoal
 
 export const AttendancePlannerPage: React.FC = () => {
   return (
-    <div className="w-full max-w-[1100px] mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-8 animate-appleFadeIn">
+    <div className="apple-page-enter flex flex-col gap-8 w-full">
       {/* Header */}
       <div className="flex flex-col items-center text-center gap-3">
         <div className="w-12 h-12 rounded-2xl bg-black dark:bg-white text-white dark:text-black flex items-center justify-center shadow-sm">

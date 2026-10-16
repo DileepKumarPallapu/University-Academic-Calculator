@@ -270,42 +270,42 @@ export const ExamPrepPage: React.FC = () => {
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8 space-y-6">
+    <div className="apple-page-enter flex flex-col gap-6 w-full print:hidden">
       {/* Top Header Card */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
+      <div className="rounded-2xl border border-[var(--border-primary)] bg-[var(--surface)] p-6 shadow-xs">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <span className="p-2.5 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 rounded-xl">
-              <Calendar className="w-6 h-6" />
+            <span className="p-2.5 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-xl">
+              <Calendar className="w-5 h-5 sm:w-6 sm:h-6" />
             </span>
             <div>
-              <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[var(--text-primary)]">
                 Exam Preparation & Revision Planner
               </h1>
-              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+              <p className="text-xs sm:text-sm text-[var(--text-secondary)] mt-0.5">
                 Track countdowns, master your syllabus topic-by-topic, and generate practical study schedules.
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 self-start md:self-center">
+          <div className="flex items-center gap-2 self-start md:self-center flex-wrap">
             <button
               onClick={handleOpenCreateExam}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition-colors"
+              className="apple-btn-primary inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold"
             >
               <Plus className="w-4 h-4" />
               Add Exam
             </button>
             <button
               onClick={() => handleOpenCreateTopic()}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors"
+              className="apple-btn-secondary inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold"
             >
               <Plus className="w-4 h-4" />
               Add Topic
             </button>
             <button
               onClick={() => setIsScheduleModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-xl bg-purple-50 dark:bg-purple-950/50 hover:bg-purple-100 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 transition-colors"
+              className="apple-btn-secondary inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold border-blue-500/30 text-blue-600 dark:text-blue-400"
             >
               <Clock className="w-4 h-4" />
               Generate Schedule
@@ -314,113 +314,98 @@ export const ExamPrepPage: React.FC = () => {
         </div>
 
         {/* Top Summary Banner */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-6 pt-5 border-t border-slate-100 dark:border-slate-800 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-6 pt-5 border-t border-[var(--border-secondary)] text-xs">
           {/* Next Exam Countdown */}
-          <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-700/60">
-            <span className="text-slate-400 block text-[11px]">Next Upcoming Exam</span>
+          <div className="p-3.5 rounded-xl bg-[var(--surface-sunken)] border border-[var(--border-secondary)]">
+            <span className="text-[var(--text-tertiary)] block text-[11px] uppercase font-medium">Next Upcoming Exam</span>
             {nextUpcomingExam ? (
               <div className="mt-1">
-                <span className="font-bold text-slate-900 dark:text-white truncate block text-sm">
+                <span className="font-bold text-[var(--text-primary)] truncate block text-sm">
                   {nextUpcomingExam.exam.subjectName}
                 </span>
-                <span className="inline-flex items-center gap-1 text-xs font-extrabold text-indigo-600 dark:text-indigo-400 mt-0.5">
+                <span className="inline-flex items-center gap-1 text-xs font-extrabold text-blue-600 dark:text-blue-400 mt-0.5">
                   <Flame className="w-3.5 h-3.5 text-amber-500" />
                   {nextUpcomingExam.formattedCountdown} ({nextUpcomingExam.exam.examDate})
                 </span>
               </div>
             ) : (
-              <span className="font-medium text-slate-500 italic block text-xs mt-1">
+              <span className="font-medium text-[var(--text-secondary)] italic block text-xs mt-1">
                 No upcoming exams scheduled
               </span>
             )}
           </div>
 
           {/* Syllabus Progress */}
-          <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-700/60">
-            <span className="text-slate-400 block text-[11px]">Syllabus Completion</span>
-            <span className="font-bold text-slate-900 dark:text-white text-sm mt-1 block">
+          <div className="p-3.5 rounded-xl bg-[var(--surface-sunken)] border border-[var(--border-secondary)]">
+            <span className="text-[var(--text-tertiary)] block text-[11px] uppercase font-medium">Syllabus Completion</span>
+            <span className="font-bold text-[var(--text-primary)] text-sm mt-1 block">
               {overallSyllabusStats.pct}% Completed
             </span>
-            <span className="text-[11px] text-slate-500 dark:text-slate-400">
+            <span className="text-[11px] text-[var(--text-secondary)]">
               {overallSyllabusStats.completed} of {overallSyllabusStats.total} topics ready
             </span>
           </div>
 
           {/* Today's Focus Plan */}
-          <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-700/60">
-            <span className="text-slate-400 block text-[11px]">Today's Study Plan</span>
-            <span className="font-bold text-slate-900 dark:text-white text-sm mt-1 block">
+          <div className="p-3.5 rounded-xl bg-[var(--surface-sunken)] border border-[var(--border-secondary)]">
+            <span className="text-[var(--text-tertiary)] block text-[11px] uppercase font-medium">Today's Study Plan</span>
+            <span className="font-bold text-[var(--text-primary)] text-sm mt-1 block">
               {todayStudySlots.length} Slots Scheduled
             </span>
-            <span className="text-[11px] text-slate-500 dark:text-slate-400">
+            <span className="text-[11px] text-[var(--text-secondary)]">
               {todayStudySlots.filter((s) => s.completed).length} of {todayStudySlots.length} completed today
             </span>
           </div>
 
           {/* Study Timer Stats */}
-          <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-700/60">
-            <span className="text-slate-400 block text-[11px]">Today's Focus Time</span>
-            <span className="font-bold text-indigo-600 dark:text-indigo-400 text-sm mt-1 block">
+          <div className="p-3.5 rounded-xl bg-[var(--surface-sunken)] border border-[var(--border-secondary)]">
+            <span className="text-[var(--text-tertiary)] block text-[11px] uppercase font-medium">Today's Focus Time</span>
+            <span className="font-bold text-blue-600 dark:text-blue-400 text-sm mt-1 block">
               {studyStats.todayMinutes} mins studied
             </span>
-            <span className="text-[11px] text-slate-500 dark:text-slate-400">
+            <span className="text-[11px] text-[var(--text-secondary)]">
               {studyStats.totalSessions} completed sessions all-time
             </span>
           </div>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex border-b border-slate-200 dark:border-slate-800 gap-6 text-sm font-semibold">
+      {/* Navigation Tabs */}
+      <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-[var(--surface-sunken)] border border-[var(--border-secondary)] overflow-x-auto no-scrollbar">
         <button
           onClick={() => setActiveTab('exams')}
-          className={`pb-3 relative transition-colors ${
+          className={`flex-1 py-2 px-3 rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 transition whitespace-nowrap ${
             activeTab === 'exams'
-              ? 'text-indigo-600 dark:text-indigo-400'
-              : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+              ? 'bg-[var(--surface)] text-[var(--text-primary)] shadow-sm font-bold'
+              : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
           }`}
         >
-          <span className="inline-flex items-center gap-1.5">
-            <Calendar className="w-4 h-4" />
-            Exams & Study Schedule ({exams.length})
-          </span>
-          {activeTab === 'exams' && (
-            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 rounded-full" />
-          )}
+          <Calendar className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+          <span>Exams & Study Schedule ({exams.length})</span>
         </button>
 
         <button
           onClick={() => setActiveTab('syllabus')}
-          className={`pb-3 relative transition-colors ${
+          className={`flex-1 py-2 px-3 rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 transition whitespace-nowrap ${
             activeTab === 'syllabus'
-              ? 'text-indigo-600 dark:text-indigo-400'
-              : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+              ? 'bg-[var(--surface)] text-[var(--text-primary)] shadow-sm font-bold'
+              : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
           }`}
         >
-          <span className="inline-flex items-center gap-1.5">
-            <BookOpen className="w-4 h-4" />
-            Syllabus Tracker ({topics.length})
-          </span>
-          {activeTab === 'syllabus' && (
-            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 rounded-full" />
-          )}
+          <BookOpen className="w-4 h-4 text-emerald-500" />
+          <span>Syllabus Tracker ({topics.length})</span>
         </button>
 
         <button
           onClick={() => setActiveTab('timer')}
-          className={`pb-3 relative transition-colors ${
+          className={`flex-1 py-2 px-3 rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 transition whitespace-nowrap ${
             activeTab === 'timer'
-              ? 'text-indigo-600 dark:text-indigo-400'
-              : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+              ? 'bg-[var(--surface)] text-[var(--text-primary)] shadow-sm font-bold'
+              : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
           }`}
         >
-          <span className="inline-flex items-center gap-1.5">
-            <Clock className="w-4 h-4" />
-            Focus Timer & History
-          </span>
-          {activeTab === 'timer' && (
-            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 rounded-full" />
-          )}
+          <Clock className="w-4 h-4 text-purple-500" />
+          <span>Focus Timer & History</span>
         </button>
       </div>
 
