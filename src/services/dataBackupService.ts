@@ -45,6 +45,18 @@ export interface StudentBackupData {
     semesters?: any[];
     goals?: any;
   };
+  examPrep?: {
+    exams: any[];
+    topics: any[];
+    sessions: any[];
+    schedule?: any;
+  };
+  mockExams?: {
+    questions: any[];
+    exams: any[];
+    attempts: any[];
+    mistakes: any[];
+  };
   preferences: {
     theme?: string;
     regulation?: string;
@@ -163,6 +175,18 @@ export async function exportStudentBackup(profileId: string): Promise<StudentBac
   const semesters = safeGet<any[]>(`academic_planner_semesters_${profileId}`, []);
   const goals = safeGet<any>(`academic_goals_${profileId}`, null);
 
+  // 5b. Exam Prep & Revision Planner
+  const exams = safeGet<any[]>(`academic_exams_${profileId}`, []);
+  const syllabusTopics = safeGet<any[]>(`academic_syllabus_topics_${profileId}`, []);
+  const studySessions = safeGet<any[]>(`academic_study_sessions_${profileId}`, []);
+  const studySchedule = safeGet<any>(`academic_study_schedule_${profileId}`, null);
+
+  // 5c. Question Bank & Mock Exam Center
+  const mockQuestions = safeGet<any[]>(`academic_question_bank_${profileId}`, []);
+  const mockExamConfigs = safeGet<any[]>(`academic_mock_exams_${profileId}`, []);
+  const mockExamAttempts = safeGet<any[]>(`academic_exam_attempts_${profileId}`, []);
+  const mockMistakes = safeGet<any[]>(`academic_mistake_notebook_${profileId}`, []);
+
   // 6. User preferences
   const theme = typeof window !== 'undefined' ? localStorage.getItem('academic_calculator_theme') : 'system';
 
@@ -205,6 +229,18 @@ export async function exportStudentBackup(profileId: string): Promise<StudentBac
       forecaster: forecaster || {},
       semesters: Array.isArray(semesters) ? semesters : [],
       goals: goals || null,
+    },
+    examPrep: {
+      exams: Array.isArray(exams) ? exams : [],
+      topics: Array.isArray(syllabusTopics) ? syllabusTopics : [],
+      sessions: Array.isArray(studySessions) ? studySessions : [],
+      schedule: studySchedule || null,
+    },
+    mockExams: {
+      questions: Array.isArray(mockQuestions) ? mockQuestions : [],
+      exams: Array.isArray(mockExamConfigs) ? mockExamConfigs : [],
+      attempts: Array.isArray(mockExamAttempts) ? mockExamAttempts : [],
+      mistakes: Array.isArray(mockMistakes) ? mockMistakes : [],
     },
     preferences: {
       theme: theme || 'system',
@@ -650,6 +686,59 @@ export async function restoreStudentBackup(
       });
     }
 
+    // Write exam prep data if present
+    if (backup.examPrep) {
+      if (Array.isArray(backup.examPrep.exams)) {
+        safeSet(
+          `academic_exams_${targetProfileId}`,
+          backup.examPrep.exams.map((e: any) => ({ ...e, profileId: targetProfileId }))
+        );
+      }
+      if (Array.isArray(backup.examPrep.topics)) {
+        safeSet(
+          `academic_syllabus_topics_${targetProfileId}`,
+          backup.examPrep.topics.map((t: any) => ({ ...t, profileId: targetProfileId }))
+        );
+      }
+      if (Array.isArray(backup.examPrep.sessions)) {
+        safeSet(
+          `academic_study_sessions_${targetProfileId}`,
+          backup.examPrep.sessions.map((s: any) => ({ ...s, profileId: targetProfileId }))
+        );
+      }
+      if (backup.examPrep.schedule) {
+        safeSet(`academic_study_schedule_${targetProfileId}`, backup.examPrep.schedule);
+      }
+    }
+
+    // Write mock exams data if present
+    if (backup.mockExams) {
+      if (Array.isArray(backup.mockExams.questions)) {
+        safeSet(
+          `academic_question_bank_${targetProfileId}`,
+          backup.mockExams.questions.map((q: any) => ({ ...q, profileId: targetProfileId }))
+        );
+      }
+      if (Array.isArray(backup.mockExams.exams)) {
+        safeSet(
+          `academic_mock_exams_${targetProfileId}`,
+          backup.mockExams.exams.map((e: any) => ({ ...e, profileId: targetProfileId }))
+        );
+      }
+      if (Array.isArray(backup.mockExams.attempts)) {
+        safeSet(
+          `academic_exam_attempts_${targetProfileId}`,
+          backup.mockExams.attempts.map((a: any) => ({ ...a, profileId: targetProfileId }))
+        );
+      }
+      if (Array.isArray(backup.mockExams.mistakes)) {
+        safeSet(
+          `academic_mistake_notebook_${targetProfileId}`,
+          backup.mockExams.mistakes.map((m: any) => ({ ...m, profileId: targetProfileId }))
+        );
+      }
+    }
+
     // Write internals draft if present
     if (backup.internals?.draft) {
       safeSet(`academic_draft_internals_${targetProfileId}`, backup.internals.draft);
@@ -737,10 +826,25 @@ export async function resetStudentPersonalData(
     // 3. Reset internal marks drafts
     safeRemove(`academic_draft_internals_${profileId}`);
 
-    // 4. Reset companion tasks and planner
+    // 4. Reset companion tasks, planner, and goals
     safeSet(`academic_companion_tasks_${profileId}`, []);
     safeSet(`academic_companion_planner_${profileId}`, {});
     safeSet(`academic_companion_forecaster_${profileId}`, {});
+    safeSet(`academic_planner_semesters_${profileId}`, []);
+    safeRemove(`academic_goals_${profileId}`);
+
+    // 4b. Reset exam prep
+    safeSet(`academic_exams_${profileId}`, []);
+    safeSet(`academic_syllabus_topics_${profileId}`, []);
+    safeSet(`academic_study_sessions_${profileId}`, []);
+    safeRemove(`academic_study_schedule_${profileId}`);
+
+    // 4c. Reset mock exams & question bank
+    safeSet(`academic_question_bank_${profileId}`, []);
+    safeSet(`academic_mock_exams_${profileId}`, []);
+    safeSet(`academic_exam_attempts_${profileId}`, []);
+    safeRemove(`academic_active_attempt_${profileId}`);
+    safeSet(`academic_mistake_notebook_${profileId}`, []);
 
     // 5. Delete calculations for this profile in IndexedDB
     const calcs = await db.getCalculationsByProfile(profileId);

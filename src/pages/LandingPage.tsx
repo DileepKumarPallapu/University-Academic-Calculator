@@ -8,6 +8,9 @@ import {
   Building2,
   ArrowRight,
   ShieldCheck,
+  Calendar,
+  Clock,
+  FileQuestion,
 } from 'lucide-react';
 
 import { AMS_FEATURE_ENABLED } from '../config/features';
@@ -208,7 +211,127 @@ export const LandingPage: React.FC = () => {
         </div>
       </section>
 
-      {/* 4. SEPARATE, CLEARLY DISTINGUISHED ENTRY: VEL TECH AMS PORTAL */}
+      {/* 4. EXAM PREPARATION & REVISION PLANNER */}
+      <section className="flex flex-col gap-4">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+            Exam Preparation & Revision Planner
+          </span>
+          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+            Study Timetable & Tracker
+          </span>
+        </div>
+
+        <div className="rounded-3xl border border-[var(--border-primary)] bg-[var(--surface)] p-6 sm:p-8 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+          <div className="flex items-start gap-4 sm:gap-5">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-600 text-white flex items-center justify-center shrink-0 shadow-md">
+              <Calendar className="w-7 h-7" />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-xl font-bold text-[var(--text-primary)] tracking-tight">
+                  Exam Countdown & Personalized Revision Planner
+                </h3>
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+                  Timetable • Focus Timer
+                </span>
+              </div>
+
+              <div className="text-sm font-semibold text-[var(--text-primary)]">
+                Algorithmic study schedule generator, syllabus tracker, and pomodoro focus timer.
+              </div>
+
+              <p className="text-xs text-[var(--text-secondary)] max-w-xl leading-relaxed">
+                Track upcoming exam countdowns, break down course syllabi into manageable units and topics, generate realistic daily study timetables with workload conflict detection, and record study sessions locally.
+              </p>
+
+              <div className="flex items-center gap-3 text-[11px] text-[var(--text-tertiary)] mt-1 flex-wrap">
+                <span className="flex items-center gap-1">
+                  <Clock className="w-3.5 h-3.5 text-indigo-500" />
+                  Accurate Wall-Clock Timer
+                </span>
+                <span>•</span>
+                <span>Feasibility Conflict Detection</span>
+                <span>•</span>
+                <span>100% Client-Side Private</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0 w-full md:w-auto">
+            <Link
+              to="/exam-prep"
+              className="apple-btn-primary text-xs h-11 px-6 gap-2 font-semibold w-full sm:w-auto shadow-sm"
+            >
+              <span>Open Exam Planner</span>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* 4b. SEPARATE SECTION: QUESTION BANK & MOCK EXAM CENTER */}
+      <section className="flex flex-col gap-4">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+            Practice & Test Simulation
+          </span>
+          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+            Mock Exam Center
+          </span>
+        </div>
+
+        <div className="rounded-3xl border border-[var(--border-primary)] bg-[var(--surface)] p-6 sm:p-8 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+          <div className="flex items-start gap-4 sm:gap-5">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-600 text-white flex items-center justify-center shrink-0 shadow-md">
+              <FileQuestion className="w-7 h-7" />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-xl font-bold text-[var(--text-primary)] tracking-tight">
+                  Question Bank & Mock Exam Center
+                </h3>
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+                  MCQ • True/False • Theory
+                </span>
+              </div>
+
+              <div className="text-sm font-semibold text-[var(--text-primary)]">
+                Create syllabus questions, practice timed tests, and master weak topics.
+              </div>
+
+              <p className="text-xs text-[var(--text-secondary)] max-w-xl leading-relaxed">
+                Build a personal question bank with MCQs, True/False, and descriptive questions. Configure timed mock exams with customizable negative marking, autosaving countdowns, mistake revision notebooks, and topic accuracy analytics.
+              </p>
+
+              <div className="flex items-center gap-2 text-[11px] text-[var(--text-tertiary)] mt-1 flex-wrap">
+                <span className="flex items-center gap-1">
+                  <Clock className="w-3.5 h-3.5 text-indigo-500" />
+                  Real-time Simulation
+                </span>
+                <span>•</span>
+                <span>Self-Paced Practice</span>
+                <span>•</span>
+                <span>Mistake Error Log</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0 w-full md:w-auto">
+            <Link
+              to="/mock-exams"
+              className="apple-btn-primary text-xs h-11 px-6 gap-2 font-semibold w-full sm:w-auto shadow-sm"
+            >
+              <span>Open Exam Center</span>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* 5. SEPARATE, CLEARLY DISTINGUISHED ENTRY: VEL TECH AMS PORTAL */}
       <section className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
