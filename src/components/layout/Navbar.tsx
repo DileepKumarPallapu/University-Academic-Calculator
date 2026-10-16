@@ -17,6 +17,7 @@ export const Navbar: React.FC = () => {
     { to: '/gpa', label: 'SGPA' },
     { to: '/cgpa', label: 'CGPA' },
     { to: '/attendance', label: 'Attendance' },
+    { to: '/vault', label: 'Vault' },
     { to: '/mock-exams', label: 'Mock Exams' },
     { to: '/exam-prep', label: 'Exam Prep' },
     { to: '/intelligence', label: 'Intelligence' },

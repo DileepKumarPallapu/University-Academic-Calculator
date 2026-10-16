@@ -3,6 +3,12 @@ import type { CreditSubjectItem } from '../types/credits';
 import * as db from './db';
 import { safeGet, safeSet, safeRemove, isStorageAvailable } from '../utils/safeStorage';
 import { calculateCreditSummary, COLLEGE_CHART_TEMPLATE } from '../utils/creditCalculations';
+import {
+  getDocumentsForProfile,
+  getVaultFolders,
+  deleteDocument,
+  deleteVaultFolder,
+} from './vaultStorage';
 
 export interface StudentBackupData {
   version: '2.0.0' | '1.0.0';
@@ -56,6 +62,11 @@ export interface StudentBackupData {
     exams: any[];
     attempts: any[];
     mistakes: any[];
+  };
+  vault?: {
+    documents: any[];
+    folders: any[];
+    note?: string;
   };
   preferences: {
     theme?: string;
@@ -187,6 +198,10 @@ export async function exportStudentBackup(profileId: string): Promise<StudentBac
   const mockExamAttempts = safeGet<any[]>(`academic_exam_attempts_${profileId}`, []);
   const mockMistakes = safeGet<any[]>(`academic_mistake_notebook_${profileId}`, []);
 
+  // 5d. Academic Vault Documents (metadata)
+  const vaultDocuments = await getDocumentsForProfile(profileId);
+  const vaultFolders = await getVaultFolders(profileId);
+
   // 6. User preferences
   const theme = typeof window !== 'undefined' ? localStorage.getItem('academic_calculator_theme') : 'system';
 
@@ -241,6 +256,11 @@ export async function exportStudentBackup(profileId: string): Promise<StudentBac
       exams: Array.isArray(mockExamConfigs) ? mockExamConfigs : [],
       attempts: Array.isArray(mockExamAttempts) ? mockExamAttempts : [],
       mistakes: Array.isArray(mockMistakes) ? mockMistakes : [],
+    },
+    vault: {
+      documents: Array.isArray(vaultDocuments) ? vaultDocuments : [],
+      folders: Array.isArray(vaultFolders) ? vaultFolders : [],
+      note: 'Academic Vault document metadata. Binary files remain stored in local device IndexedDB.',
     },
     preferences: {
       theme: theme || 'system',
@@ -845,6 +865,16 @@ export async function resetStudentPersonalData(
     safeSet(`academic_exam_attempts_${profileId}`, []);
     safeRemove(`academic_active_attempt_${profileId}`);
     safeSet(`academic_mistake_notebook_${profileId}`, []);
+
+    // 4d. Reset Academic Vault documents & folders
+    const vaultDocs = await getDocumentsForProfile(profileId);
+    for (const vd of vaultDocs) {
+      await deleteDocument(profileId, vd.id);
+    }
+    const vaultFldrs = await getVaultFolders(profileId);
+    for (const vf of vaultFldrs) {
+      await deleteVaultFolder(profileId, vf.id);
+    }
 
     // 5. Delete calculations for this profile in IndexedDB
     const calcs = await db.getCalculationsByProfile(profileId);
