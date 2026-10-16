@@ -20,6 +20,7 @@ export const Navbar: React.FC = () => {
     { to: '/vault', label: 'Vault' },
     { to: '/mock-exams', label: 'Mock Exams' },
     { to: '/exam-prep', label: 'Exam Prep' },
+    { to: '/achievements', label: 'Achievements' },
     { to: '/intelligence', label: 'Intelligence' },
     ...(AMS_FEATURE_ENABLED
       ? [{ to: '/ams-portal', label: 'AMS Portal', isComingSoon: false }]

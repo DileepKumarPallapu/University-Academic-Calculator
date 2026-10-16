@@ -12,6 +12,8 @@ import {
   Clock,
   FileQuestion,
   FolderLock,
+  Trophy,
+  Sparkles,
 } from 'lucide-react';
 
 import { AMS_FEATURE_ENABLED } from '../config/features';
@@ -386,6 +388,66 @@ export const LandingPage: React.FC = () => {
               className="apple-btn-primary text-xs h-11 px-6 gap-2 font-semibold w-full sm:w-auto shadow-sm"
             >
               <span>Open Academic Vault</span>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* 4d. SEPARATE SECTION: ACADEMIC ACHIEVEMENT & GAMIFICATION */}
+      <section className="flex flex-col gap-4">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+            Study Motivation & Streaks
+          </span>
+          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+            Gamification Center
+          </span>
+        </div>
+
+        <div className="rounded-3xl border border-[var(--border-primary)] bg-[var(--surface)] p-6 sm:p-8 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+          <div className="flex items-start gap-4 sm:gap-5">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-500 to-indigo-600 text-white flex items-center justify-center shrink-0 shadow-md">
+              <Trophy className="w-7 h-7" />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-xl font-bold text-[var(--text-primary)] tracking-tight">
+                  Academic Achievement & Gamification Center
+                </h3>
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                  XP • Badges • Streaks
+                </span>
+              </div>
+
+              <div className="text-sm font-semibold text-[var(--text-primary)]">
+                Earn experience points, protect study streaks, and unlock academic milestone badges.
+              </div>
+
+              <p className="text-xs text-[var(--text-secondary)] max-w-xl leading-relaxed">
+                Level up through 10 academic ranks from Novice Scholar to Grandmaster. Transparent points awarded for real focus sessions, completed tasks, syllabus topics, and mock exams with zero sample-data fabrication.
+              </p>
+
+              <div className="flex items-center gap-2 text-[11px] text-[var(--text-tertiary)] mt-1 flex-wrap">
+                <span className="flex items-center gap-1">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                  Verifiable Learning XP
+                </span>
+                <span>•</span>
+                <span>Daily Study Heatmap</span>
+                <span>•</span>
+                <span>Weekly Challenges</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0 w-full md:w-auto">
+            <Link
+              to="/achievements"
+              className="apple-btn-primary text-xs h-11 px-6 gap-2 font-semibold w-full sm:w-auto shadow-sm"
+            >
+              <span>Open Achievement Center</span>
               <ArrowRight className="w-4 h-4" />
             </Link>
           </div>

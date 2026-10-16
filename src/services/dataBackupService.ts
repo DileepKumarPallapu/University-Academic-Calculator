@@ -68,6 +68,12 @@ export interface StudentBackupData {
     folders: any[];
     note?: string;
   };
+  gamification?: {
+    profile?: any;
+    transactions?: any[];
+    unlocked?: Record<string, any>;
+    challenges?: any[];
+  };
   preferences: {
     theme?: string;
     regulation?: string;
@@ -261,6 +267,12 @@ export async function exportStudentBackup(profileId: string): Promise<StudentBac
       documents: Array.isArray(vaultDocuments) ? vaultDocuments : [],
       folders: Array.isArray(vaultFolders) ? vaultFolders : [],
       note: 'Academic Vault document metadata. Binary files remain stored in local device IndexedDB.',
+    },
+    gamification: {
+      profile: safeGet<any>(`academic_gamification_profile_${profileId}`, null),
+      transactions: safeGet<any[]>(`academic_points_history_${profileId}`, []),
+      unlocked: safeGet<any>(`academic_unlocked_achievements_${profileId}`, {}),
+      challenges: safeGet<any[]>(`academic_weekly_challenges_${profileId}`, []),
     },
     preferences: {
       theme: theme || 'system',
@@ -759,6 +771,25 @@ export async function restoreStudentBackup(
       }
     }
 
+    // Restore Gamification Center data if present
+    if (backup.gamification) {
+      if (backup.gamification.profile) {
+        safeSet(`academic_gamification_profile_${targetProfileId}`, {
+          ...backup.gamification.profile,
+          profileId: targetProfileId,
+        });
+      }
+      if (Array.isArray(backup.gamification.transactions)) {
+        safeSet(`academic_points_history_${targetProfileId}`, backup.gamification.transactions);
+      }
+      if (backup.gamification.unlocked) {
+        safeSet(`academic_unlocked_achievements_${targetProfileId}`, backup.gamification.unlocked);
+      }
+      if (Array.isArray(backup.gamification.challenges)) {
+        safeSet(`academic_weekly_challenges_${targetProfileId}`, backup.gamification.challenges);
+      }
+    }
+
     // Write internals draft if present
     if (backup.internals?.draft) {
       safeSet(`academic_draft_internals_${targetProfileId}`, backup.internals.draft);
@@ -875,6 +906,12 @@ export async function resetStudentPersonalData(
     for (const vf of vaultFldrs) {
       await deleteVaultFolder(profileId, vf.id);
     }
+
+    // 4e. Reset Academic Achievement & Gamification data
+    safeRemove(`academic_gamification_profile_${profileId}`);
+    safeSet(`academic_points_history_${profileId}`, []);
+    safeSet(`academic_unlocked_achievements_${profileId}`, {});
+    safeSet(`academic_weekly_challenges_${profileId}`, []);
 
     // 5. Delete calculations for this profile in IndexedDB
     const calcs = await db.getCalculationsByProfile(profileId);

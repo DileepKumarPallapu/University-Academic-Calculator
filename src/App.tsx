@@ -27,6 +27,7 @@ import { AttendancePlannerPage } from './pages/AttendancePlannerPage';
 import { ExamPrepPage } from './pages/ExamPrepPage';
 import { MockExamCenterPage } from './pages/MockExamCenterPage';
 import { AcademicVaultPage } from './pages/AcademicVaultPage';
+import { AchievementCenterPage } from './pages/AchievementCenterPage';
 
 export function App() {
   useEffect(() => {
@@ -65,6 +66,9 @@ export function App() {
                 <Route path="/vault" element={<AcademicVaultPage />} />
                 <Route path="/academic-vault" element={<AcademicVaultPage />} />
                 <Route path="/documents" element={<AcademicVaultPage />} />
+                <Route path="/achievements" element={<AchievementCenterPage />} />
+                <Route path="/achievement-center" element={<AchievementCenterPage />} />
+                <Route path="/rewards" element={<AchievementCenterPage />} />
                 <Route path="/forecaster" element={<MarksForecasterPage />} />
                 <Route path="/reports" element={<AcademicReportsPage />} />
                 <Route path="/catalogue" element={<Navigate to="/credits?tab=catalogue" replace />} />
