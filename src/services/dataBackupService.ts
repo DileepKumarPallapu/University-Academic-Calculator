@@ -42,6 +42,8 @@ export interface StudentBackupData {
     tasks: any[];
     planner: any;
     forecaster: any;
+    semesters?: any[];
+    goals?: any;
   };
   preferences: {
     theme?: string;
@@ -158,6 +160,8 @@ export async function exportStudentBackup(profileId: string): Promise<StudentBac
   const tasks = safeGet<any[]>(`academic_companion_tasks_${profileId}`, []);
   const planner = safeGet<any>(`academic_companion_planner_${profileId}`, {});
   const forecaster = safeGet<any>(`academic_companion_forecaster_${profileId}`, {});
+  const semesters = safeGet<any[]>(`academic_planner_semesters_${profileId}`, []);
+  const goals = safeGet<any>(`academic_goals_${profileId}`, null);
 
   // 6. User preferences
   const theme = typeof window !== 'undefined' ? localStorage.getItem('academic_calculator_theme') : 'system';
@@ -199,6 +203,8 @@ export async function exportStudentBackup(profileId: string): Promise<StudentBac
       tasks: Array.isArray(tasks) ? tasks : [],
       planner: planner || {},
       forecaster: forecaster || {},
+      semesters: Array.isArray(semesters) ? semesters : [],
+      goals: goals || null,
     },
     preferences: {
       theme: theme || 'system',
@@ -626,6 +632,23 @@ export async function restoreStudentBackup(
     // Write companion tasks
     const tasksKey = `academic_companion_tasks_${targetProfileId}`;
     safeSet(tasksKey, tasksToSave);
+
+    // Write semesters if present
+    if (Array.isArray(backup.companion?.semesters) && backup.companion.semesters.length > 0) {
+      const mappedSemesters = backup.companion.semesters.map((s: any) => ({
+        ...s,
+        profileId: targetProfileId,
+      }));
+      safeSet(`academic_planner_semesters_${targetProfileId}`, mappedSemesters);
+    }
+
+    // Write goals if present
+    if (backup.companion?.goals) {
+      safeSet(`academic_goals_${targetProfileId}`, {
+        ...backup.companion.goals,
+        profileId: targetProfileId,
+      });
+    }
 
     // Write internals draft if present
     if (backup.internals?.draft) {

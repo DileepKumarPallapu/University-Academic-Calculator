@@ -4,6 +4,9 @@ import type {
   MarksForecastScenario,
   AcademicAlert,
   AcademicCompanionOverview,
+  PlannerSemester,
+  StudentAcademicGoals,
+  AcademicGoalMetric,
 } from '../types/academicCompanion';
 import type { StudentProfile } from '../types/profile';
 import { safeGetItem, safeSetItem, sanitizeCourseTitle } from './catalogueStorage';
@@ -15,6 +18,8 @@ const TASKS_PREFIX = 'academic_companion_tasks_';
 const PLANNER_PREFIX = 'academic_companion_planner_';
 const FORECASTER_PREFIX = 'academic_companion_forecaster_';
 const DISMISSED_ALERTS_PREFIX = 'academic_companion_dismissed_alerts_';
+const SEMESTERS_PREFIX = 'academic_planner_semesters_';
+const GOALS_PREFIX = 'academic_goals_';
 
 // ==========================================
 // 1. TASKS MANAGEMENT (Per Profile)
@@ -128,6 +133,7 @@ export function addPlannedSubject(
     id: `plan-${now}-${Math.random().toString(36).slice(2, 6)}`,
     profileId,
     courseName: sanitizeCourseTitle(subject.courseName),
+    preparationStatus: subject.preparationStatus || 'not_started',
     createdAt: now,
     updatedAt: now,
   };
@@ -162,6 +168,352 @@ export function deletePlannedSubject(profileId: string, subjectId: string): bool
     return true;
   }
   return false;
+}
+
+// ==========================================
+// 2B. SEMESTER MANAGEMENT (Smart Semester Planner)
+// ==========================================
+
+export function getSemestersForProfile(profileId: string): PlannerSemester[] {
+  if (!profileId) return [];
+  const raw = safeGetItem(`${SEMESTERS_PREFIX}${profileId}`);
+  if (!raw) return [];
+  try {
+    const list = JSON.parse(raw);
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveSemestersForProfile(profileId: string, semesters: PlannerSemester[]): void {
+  if (!profileId) return;
+  safeSetItem(`${SEMESTERS_PREFIX}${profileId}`, JSON.stringify(semesters));
+}
+
+export function createSemester(
+  profileId: string,
+  data: Omit<PlannerSemester, 'id' | 'profileId' | 'createdAt' | 'updatedAt'>
+): PlannerSemester {
+  const current = getSemestersForProfile(profileId);
+  const now = Date.now();
+  let updatedList = [...current];
+
+  if (data.isCurrent) {
+    updatedList = updatedList.map((s) => ({ ...s, isCurrent: false }));
+  }
+
+  const newSemester: PlannerSemester = {
+    ...data,
+    id: `sem-${now}-${Math.random().toString(36).slice(2, 6)}`,
+    profileId,
+    title: data.title.trim() || `Semester ${data.semesterNumber}`,
+    isCurrent: !!data.isCurrent,
+    isArchived: !!data.isArchived,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  saveSemestersForProfile(profileId, [...updatedList, newSemester]);
+  return newSemester;
+}
+
+export function updateSemester(
+  profileId: string,
+  semesterId: string,
+  updates: Partial<PlannerSemester>
+): PlannerSemester | null {
+  const current = getSemestersForProfile(profileId);
+  const idx = current.findIndex((s) => s.id === semesterId);
+  if (idx < 0) return null;
+
+  let updatedList = [...current];
+  if (updates.isCurrent) {
+    updatedList = updatedList.map((s) => ({ ...s, isCurrent: false }));
+  }
+
+  const updated: PlannerSemester = {
+    ...updatedList[idx],
+    ...updates,
+    updatedAt: Date.now(),
+  };
+  updatedList[idx] = updated;
+  saveSemestersForProfile(profileId, updatedList);
+  return updated;
+}
+
+export function deleteSemester(profileId: string, semesterId: string): boolean {
+  const current = getSemestersForProfile(profileId);
+  const filtered = current.filter((s) => s.id !== semesterId);
+  if (filtered.length !== current.length) {
+    saveSemestersForProfile(profileId, filtered);
+    // Remove linked subjects
+    const subjects = getPlannedSubjectsForProfile(profileId);
+    const updatedSubjects = subjects.filter((s) => s.semesterId !== semesterId);
+    if (updatedSubjects.length !== subjects.length) {
+      savePlannedSubjectsForProfile(profileId, updatedSubjects);
+    }
+    return true;
+  }
+  return false;
+}
+
+export function toggleArchiveSemester(profileId: string, semesterId: string): PlannerSemester | null {
+  const current = getSemestersForProfile(profileId);
+  const sem = current.find((s) => s.id === semesterId);
+  if (!sem) return null;
+  const willArchive = !sem.isArchived;
+  return updateSemester(profileId, semesterId, {
+    isArchived: willArchive,
+    isCurrent: willArchive ? false : sem.isCurrent,
+  });
+}
+
+export function setCurrentSemester(profileId: string, semesterId: string): PlannerSemester | null {
+  return updateSemester(profileId, semesterId, { isCurrent: true, isArchived: false });
+}
+
+// ==========================================
+// 2C. ACADEMIC GOALS (Goal Tracker)
+// ==========================================
+
+export function getAcademicGoalsForProfile(profileId: string): StudentAcademicGoals | null {
+  if (!profileId) return null;
+  const raw = safeGetItem(`${GOALS_PREFIX}${profileId}`);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (typeof parsed === 'object' && parsed !== null) {
+      return parsed as StudentAcademicGoals;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveAcademicGoalsForProfile(
+  profileId: string,
+  goals: Partial<StudentAcademicGoals>
+): StudentAcademicGoals {
+  const existing = getAcademicGoalsForProfile(profileId);
+  const updated: StudentAcademicGoals = {
+    profileId,
+    targetSgpa: goals.targetSgpa !== undefined ? goals.targetSgpa : existing?.targetSgpa ?? null,
+    targetCgpa: goals.targetCgpa !== undefined ? goals.targetCgpa : existing?.targetCgpa ?? null,
+    targetAttendancePct:
+      goals.targetAttendancePct !== undefined
+        ? goals.targetAttendancePct
+        : existing?.targetAttendancePct ?? null,
+    targetCredits:
+      goals.targetCredits !== undefined ? goals.targetCredits : existing?.targetCredits ?? null,
+    targetPrepCompletionPct:
+      goals.targetPrepCompletionPct !== undefined
+        ? goals.targetPrepCompletionPct
+        : existing?.targetPrepCompletionPct ?? null,
+    updatedAt: Date.now(),
+  };
+  safeSetItem(`${GOALS_PREFIX}${profileId}`, JSON.stringify(updated));
+  return updated;
+}
+
+export async function calculateAcademicGoalMetrics(
+  profile: StudentProfile,
+  goals?: StudentAcademicGoals | null
+): Promise<AcademicGoalMetric[]> {
+  const profileId = profile.id;
+  const effectiveGoals = goals ?? getAcademicGoalsForProfile(profileId);
+
+  // 1. SGPA & CGPA from calculations
+  const calculations = await getCalculationsByProfile(profileId);
+  const sgpaCalcs = calculations.filter((c) => c.type === 'sgpa');
+  let latestSgpa: number | null = null;
+  if (sgpaCalcs.length > 0) {
+    const val = parseFloat(sgpaCalcs[0].resultValue);
+    if (!isNaN(val)) latestSgpa = val;
+  }
+
+  const cgpaCalcs = calculations.filter((c) => c.type === 'cgpa');
+  let latestCgpa: number | null = null;
+  if (cgpaCalcs.length > 0) {
+    const val = parseFloat(cgpaCalcs[0].resultValue);
+    if (!isNaN(val)) latestCgpa = val;
+  }
+
+  // 2. Attendance
+  let currentAttendancePct: number | null = null;
+  const attRaw = safeGetItem(`academic_attendance_subjects_${profileId}`);
+  if (attRaw) {
+    try {
+      const attList = JSON.parse(attRaw);
+      if (Array.isArray(attList) && attList.length > 0) {
+        let totalAtt = 0;
+        let totalCond = 0;
+        attList.forEach((s: any) => {
+          totalAtt += Number(s.attended || s.presentSessions || 0);
+          totalCond += Number(s.conducted || s.totalSessions || 0);
+        });
+        if (totalCond > 0) {
+          currentAttendancePct = Math.round((totalAtt / totalCond) * 1000) / 10;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+  if (currentAttendancePct === null) {
+    const amsData = getAmsDashboardData(profileId);
+    if (amsData.attendance && amsData.attendance.length > 0) {
+      let totalAtt = 0;
+      let totalCond = 0;
+      amsData.attendance.forEach((a) => {
+        totalAtt += a.presentSessions || 0;
+        totalCond += a.officialTotalSessions || 0;
+      });
+      if (totalCond > 0) {
+        currentAttendancePct = calculateAmsAttendancePercentage(totalCond, totalAtt);
+      }
+    }
+  }
+
+  // 3. Earned Credits
+  let earnedCredits = 0;
+  let hasCreditRecords = false;
+  const rawCreds = safeGetItem(`academic_credits_subjects_${profileId}`);
+  if (rawCreds) {
+    try {
+      const creditSubjects = JSON.parse(rawCreds);
+      if (Array.isArray(creditSubjects) && creditSubjects.length > 0) {
+        hasCreditRecords = true;
+        for (const cs of creditSubjects) {
+          const cr = Number(cs.credits) || 0;
+          if (cs.status === 'Passed' || (cs.earnedCredits && Number(cs.earnedCredits) > 0)) {
+            earnedCredits += cs.earnedCredits !== undefined ? Number(cs.earnedCredits) : cr;
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // 4. Preparation Completion Rate
+  const subjects = getPlannedSubjectsForProfile(profileId);
+  const semesters = getSemestersForProfile(profileId);
+  const currentSem = semesters.find((s) => s.isCurrent && !s.isArchived);
+  const targetSubjects = currentSem
+    ? subjects.filter(
+        (s) =>
+          (s.semesterId && s.semesterId === currentSem.id) ||
+          s.semester === currentSem.semesterNumber
+      )
+    : subjects;
+
+  const totalSubjs = targetSubjects.length;
+  const readySubjs = targetSubjects.filter((s) => s.preparationStatus === 'ready').length;
+  const prepCompletionPct = totalSubjs > 0 ? Math.round((readySubjs / totalSubjs) * 100) : null;
+
+  const metrics: AcademicGoalMetric[] = [
+    {
+      key: 'sgpa',
+      title: 'Target SGPA',
+      targetValue: effectiveGoals?.targetSgpa ?? null,
+      currentValue: latestSgpa,
+      hasData: latestSgpa !== null,
+      unit: 'GPA',
+      collegeRequirement: 'College standard: 5.0 Min Passing SGPA (VTR Regulation)',
+      userTargetLabel: 'Your Target SGPA',
+      isAchieved:
+        latestSgpa !== null && effectiveGoals?.targetSgpa != null
+          ? latestSgpa >= effectiveGoals.targetSgpa
+          : false,
+      progressPct:
+        latestSgpa !== null && effectiveGoals?.targetSgpa
+          ? Math.min(100, Math.round((latestSgpa / effectiveGoals.targetSgpa) * 100))
+          : 0,
+      statusText: latestSgpa !== null ? `Current: ${latestSgpa.toFixed(2)}` : 'Not calculated yet',
+    },
+    {
+      key: 'cgpa',
+      title: 'Target CGPA',
+      targetValue: effectiveGoals?.targetCgpa ?? null,
+      currentValue: latestCgpa,
+      hasData: latestCgpa !== null,
+      unit: 'CGPA',
+      collegeRequirement: 'College standard: 5.0 Min Passing CGPA for Degree',
+      userTargetLabel: 'Your Target CGPA',
+      isAchieved:
+        latestCgpa !== null && effectiveGoals?.targetCgpa != null
+          ? latestCgpa >= effectiveGoals.targetCgpa
+          : false,
+      progressPct:
+        latestCgpa !== null && effectiveGoals?.targetCgpa
+          ? Math.min(100, Math.round((latestCgpa / effectiveGoals.targetCgpa) * 100))
+          : 0,
+      statusText: latestCgpa !== null ? `Current: ${latestCgpa.toFixed(2)}` : 'Not calculated yet',
+    },
+    {
+      key: 'attendance',
+      title: 'Target Attendance',
+      targetValue: effectiveGoals?.targetAttendancePct ?? null,
+      currentValue: currentAttendancePct,
+      hasData: currentAttendancePct !== null,
+      unit: '%',
+      collegeRequirement: 'College requirement: 75% Min Attendance (65% condonation)',
+      userTargetLabel: 'Your Target Attendance',
+      isAchieved:
+        currentAttendancePct !== null && effectiveGoals?.targetAttendancePct != null
+          ? currentAttendancePct >= effectiveGoals.targetAttendancePct
+          : false,
+      progressPct:
+        currentAttendancePct !== null && effectiveGoals?.targetAttendancePct
+          ? Math.min(100, Math.round((currentAttendancePct / effectiveGoals.targetAttendancePct) * 100))
+          : 0,
+      statusText:
+        currentAttendancePct !== null
+          ? `Current: ${currentAttendancePct.toFixed(1)}%`
+          : 'No attendance recorded yet',
+    },
+    {
+      key: 'credits',
+      title: 'Target Earned Credits',
+      targetValue: effectiveGoals?.targetCredits ?? 160,
+      currentValue: hasCreditRecords ? earnedCredits : null,
+      hasData: hasCreditRecords,
+      unit: 'Credits',
+      collegeRequirement: 'College requirement: 160 Credits for B.Tech Degree',
+      userTargetLabel: 'Your Target Credits',
+      isAchieved:
+        effectiveGoals?.targetCredits != null ? earnedCredits >= effectiveGoals.targetCredits : false,
+      progressPct: effectiveGoals?.targetCredits
+        ? Math.min(100, Math.round((earnedCredits / effectiveGoals.targetCredits) * 100))
+        : 0,
+      statusText: hasCreditRecords
+        ? `${earnedCredits} of ${effectiveGoals?.targetCredits || 160} credits earned`
+        : 'No credit records added yet',
+    },
+    {
+      key: 'prep_completion',
+      title: 'Subject Exam Readiness',
+      targetValue: effectiveGoals?.targetPrepCompletionPct ?? 100,
+      currentValue: prepCompletionPct,
+      hasData: prepCompletionPct !== null,
+      unit: '%',
+      collegeRequirement: 'University exam rule: Minimum 50% combined score required',
+      userTargetLabel: 'Your Readiness Target',
+      isAchieved:
+        prepCompletionPct !== null && effectiveGoals?.targetPrepCompletionPct != null
+          ? prepCompletionPct >= effectiveGoals.targetPrepCompletionPct
+          : false,
+      progressPct: prepCompletionPct ?? 0,
+      statusText:
+        prepCompletionPct !== null
+          ? `${readySubjs} of ${totalSubjs} subjects fully ready (${prepCompletionPct}%)`
+          : 'No planned subjects in active semester',
+    },
+  ];
+
+  return metrics;
 }
 
 // ==========================================

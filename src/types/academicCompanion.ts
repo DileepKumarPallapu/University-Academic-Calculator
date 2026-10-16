@@ -21,6 +21,9 @@ export interface AcademicTask {
   dueTime?: string; // e.g. "11:59 PM"
   priority: TaskPriority;
   status: TaskStatus;
+  semester?: number;
+  semesterId?: string;
+  subjectId?: string;
   courseName?: string;
   courseCode?: string;
   credits?: number;
@@ -31,21 +34,63 @@ export interface AcademicTask {
 
 export type PlannedCourseStatus = 'planned' | 'enrolled' | 'completed' | 'dropped';
 
+export type PreparationStatus = 'not_started' | 'in_progress' | 'revision' | 'ready';
+
+export interface PlannerSemester {
+  id: string;
+  profileId: string;
+  semesterNumber: number; // 1 to 10
+  title: string;
+  academicYear?: string; // e.g. "2024-2025"
+  isCurrent: boolean;
+  isArchived: boolean;
+  notes?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface PlannedSubject {
   id: string;
   profileId: string;
   semester: number;
+  semesterId?: string;
   courseName: string;
   courseCode?: string;
   category: CourseCategoryType;
   plannedCredits: number;
   targetGrade?: string;
   status: PlannedCourseStatus;
+  examDate?: string; // YYYY-MM-DD
+  preparationStatus?: PreparationStatus;
   isNptel?: boolean;
   nptelMilestone?: string;
   notes?: string;
   createdAt: number;
   updatedAt: number;
+}
+
+export interface StudentAcademicGoals {
+  profileId: string;
+  targetSgpa: number | null;
+  targetCgpa: number | null;
+  targetAttendancePct: number | null;
+  targetCredits: number | null;
+  targetPrepCompletionPct: number | null;
+  updatedAt: number;
+}
+
+export interface AcademicGoalMetric {
+  key: 'sgpa' | 'cgpa' | 'attendance' | 'credits' | 'prep_completion';
+  title: string;
+  targetValue: number | null;
+  currentValue: number | null;
+  hasData: boolean;
+  unit: string;
+  collegeRequirement: string;
+  userTargetLabel: string;
+  isAchieved: boolean;
+  progressPct: number;
+  statusText: string;
 }
 
 export interface ForecastSubjectItem {

@@ -1,999 +1,1225 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
+  Calendar,
+  BookOpen,
+  CheckSquare,
   Plus,
+  Trash2,
+  Edit2,
   CheckCircle2,
   Clock,
-  BookOpen,
-  Trash2,
-  Edit3,
-  Check,
-  X,
-  Info,
+  AlertCircle,
+  Archive,
+  Layers,
+  ChevronRight,
+  List,
 } from 'lucide-react';
 import { useProfile } from '../context/ProfileContext';
 import { useAppToast } from '../components/layout/AppShell';
 import type {
-  AcademicTask,
+  PlannerSemester,
   PlannedSubject,
-  TaskCategory,
-  TaskPriority,
+  AcademicTask,
+  StudentAcademicGoals,
+  AcademicGoalMetric,
+  PreparationStatus,
   PlannedCourseStatus,
+  TaskPriority,
+  TaskStatus,
+  TaskCategory,
 } from '../types/academicCompanion';
-import type { CourseCategoryType } from '../types/credits';
 import {
+  getSemestersForProfile,
+  createSemester,
+  updateSemester,
+  deleteSemester,
+  toggleArchiveSemester,
+  setCurrentSemester,
+  getPlannedSubjectsForProfile,
+  addPlannedSubject,
+  updatePlannedSubject,
+  deletePlannedSubject,
   getTasksForProfile,
   addTask,
   updateTask,
   deleteTask,
   toggleTaskStatus,
-  getPlannedSubjectsForProfile,
-  addPlannedSubject,
-  updatePlannedSubject,
-  deletePlannedSubject,
+  getAcademicGoalsForProfile,
+  saveAcademicGoalsForProfile,
+  calculateAcademicGoalMetrics,
 } from '../services/companionStorage';
-import { isRegulationSupportingCourseCode, sanitizeCourseTitle } from '../services/catalogueStorage';
 import { REGULATIONS, type RegulationId } from '../config/university';
 import { ResetConfirmModal } from '../components/common/ResetConfirmModal';
-
-const CATEGORIES: { value: CourseCategoryType; label: string }[] = [
-  { value: 'foundation', label: 'Foundation' },
-  { value: 'programme_core', label: 'Programme Core' },
-  { value: 'programme_elective', label: 'Programme Elective (PE)' },
-  { value: 'open_elective', label: 'Open Elective (OE)' },
-  { value: 'independent_learning', label: 'Independent Learning' },
-  { value: 'industry_interaction', label: 'Industry Interaction' },
-  { value: 'professional_proficiency', label: 'Professional Proficiency' },
-  { value: 'mandatory', label: 'Mandatory Course' },
-  { value: 'custom', label: 'Custom' },
-];
+import { AcademicGoalsCard } from '../components/planner/AcademicGoalsCard';
+import { GoalsManagerModal } from '../components/planner/GoalsManagerModal';
+import { SemesterManagerModal } from '../components/planner/SemesterManagerModal';
+import { SubjectPlannerModal } from '../components/planner/SubjectPlannerModal';
+import { TaskPlannerModal } from '../components/planner/TaskPlannerModal';
+import { InteractiveCalendarView } from '../components/planner/InteractiveCalendarView';
 
 export const SemesterPlannerPage: React.FC = () => {
   const { activeProfile } = useProfile();
   const { showToast } = useAppToast();
 
-  const [activeTab, setActiveTab] = useState<'subjects' | 'tasks'>('subjects');
-  const [selectedSemester, setSelectedSemester] = useState<number>(activeProfile.currentSemester || 1);
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'semesters' | 'tasks'>('dashboard');
+  const [taskViewMode, setTaskViewMode] = useState<'list' | 'calendar'>('list');
 
-  // Subjects state
-  const [plannedSubjects, setPlannedSubjects] = useState<PlannedSubject[]>([]);
+  // Core Data State
+  const [semesters, setSemesters] = useState<PlannerSemester[]>([]);
+  const [selectedSemesterId, setSelectedSemesterId] = useState<string>('');
+  const [subjects, setSubjects] = useState<PlannedSubject[]>([]);
+  const [tasks, setTasks] = useState<AcademicTask[]>([]);
+  const [goals, setGoals] = useState<StudentAcademicGoals | null>(null);
+  const [goalMetrics, setGoalMetrics] = useState<AcademicGoalMetric[]>([]);
+
+  // Modals State
+  const [isGoalsModalOpen, setIsGoalsModalOpen] = useState(false);
+  const [isSemesterModalOpen, setIsSemesterModalOpen] = useState(false);
+  const [editingSemester, setEditingSemester] = useState<PlannerSemester | null>(null);
   const [isSubjectModalOpen, setIsSubjectModalOpen] = useState(false);
   const [editingSubject, setEditingSubject] = useState<PlannedSubject | null>(null);
-
-  // Form state for Subject
-  const [subCourseName, setSubCourseName] = useState('');
-  const [subCourseCode, setSubCourseCode] = useState('');
-  const [subCategory, setSubCategory] = useState<CourseCategoryType>('programme_core');
-  const [subCredits, setSubCredits] = useState<number>(3);
-  const [subTargetGrade, setSubTargetGrade] = useState<string>('S');
-  const [subStatus, setSubStatus] = useState<PlannedCourseStatus>('planned');
-  const [subIsNptel, setSubIsNptel] = useState(false);
-  const [subNptelMilestone, setSubNptelMilestone] = useState('');
-
-  // Tasks state
-  const [tasks, setTasks] = useState<AcademicTask[]>([]);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<AcademicTask | null>(null);
-
-  // Form state for Task
-  const [taskTitle, setTaskTitle] = useState('');
-  const [taskCategory, setTaskCategory] = useState<TaskCategory>('assignment');
-  const [taskDueDate, setTaskDueDate] = useState('');
-  const [taskPriority, setTaskPriority] = useState<TaskPriority>('medium');
-  const [taskCourseName, setTaskCourseName] = useState('');
-  const [taskNotes, setTaskNotes] = useState('');
-
-  // Filter tasks
-  const [taskFilterCategory, setTaskFilterCategory] = useState<string>('all');
-  const [taskFilterStatus, setTaskFilterStatus] = useState<'all' | 'pending' | 'completed'>('all');
+  const [prefilledTaskDate, setPrefilledTaskDate] = useState<string | undefined>(undefined);
 
   // Deletion confirm
-  const [itemToDelete, setItemToDelete] = useState<{ type: 'subject' | 'task'; id: string } | null>(null);
+  const [itemToDelete, setItemToDelete] = useState<{
+    type: 'semester' | 'subject' | 'task';
+    id: string;
+    title: string;
+  } | null>(null);
 
-  const supportsCode = isRegulationSupportingCourseCode(activeProfile.regulation || 'VTR21');
-  const availableGrades = REGULATIONS[(activeProfile.regulation as RegulationId) || 'VTR21']?.grades || [];
+  // Filters
+  const [taskSemesterFilter, setTaskSemesterFilter] = useState<string>('all');
+  const [taskPriorityFilter, setTaskPriorityFilter] = useState<string>('all');
+  const [taskStatusFilter, setTaskStatusFilter] = useState<string>('all');
+  const [semesterViewFilter, setSemesterViewFilter] = useState<'active' | 'archived' | 'all'>('active');
 
-  // Reload data on activeProfile change
-  const reloadData = () => {
-    setPlannedSubjects(getPlannedSubjectsForProfile(activeProfile.id));
-    setTasks(getTasksForProfile(activeProfile.id));
+  const todayDateStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
+
+  const availableGrades = useMemo(() => {
+    return REGULATIONS[(activeProfile.regulation as RegulationId) || 'VTR21']?.grades || [];
+  }, [activeProfile.regulation]);
+
+  // Load all records for active profile
+  const loadData = async () => {
+    const sems = getSemestersForProfile(activeProfile.id);
+    const subjs = getPlannedSubjectsForProfile(activeProfile.id);
+    const tsks = getTasksForProfile(activeProfile.id);
+    const gls = getAcademicGoalsForProfile(activeProfile.id);
+
+    setSemesters(sems);
+    setSubjects(subjs);
+    setTasks(tsks);
+    setGoals(gls);
+
+    // Set active semester default
+    if (sems.length > 0) {
+      const current = sems.find((s) => s.isCurrent && !s.isArchived) || sems[0];
+      setSelectedSemesterId((prev) => (sems.some((s) => s.id === prev) ? prev : current.id));
+    } else {
+      setSelectedSemesterId('');
+    }
+
+    const metrics = await calculateAcademicGoalMetrics(activeProfile, gls);
+    setGoalMetrics(metrics);
   };
 
   useEffect(() => {
-    reloadData();
-    setSelectedSemester(activeProfile.currentSemester || 1);
+    loadData();
   }, [activeProfile.id]);
 
-  // Semester subjects calculation
-  const semesterSubjects = useMemo(() => {
-    return plannedSubjects.filter((s) => s.semester === selectedSemester);
-  }, [plannedSubjects, selectedSemester]);
+  // Active / Selected semester object
+  const currentSemesterObj = useMemo(() => {
+    return semesters.find((s) => s.id === selectedSemesterId) || null;
+  }, [semesters, selectedSemesterId]);
 
-  const totalPlannedCredits = useMemo(() => {
-    return semesterSubjects.reduce((sum, s) => sum + (s.plannedCredits || 0), 0);
-  }, [semesterSubjects]);
+  // Subjects for the selected semester
+  const selectedSemesterSubjects = useMemo(() => {
+    if (!selectedSemesterId) return [];
+    const sem = currentSemesterObj;
+    return subjects.filter(
+      (s) => s.semesterId === selectedSemesterId || (sem && s.semester === sem.semesterNumber)
+    );
+  }, [subjects, selectedSemesterId, currentSemesterObj]);
 
-  // Open Subject Modal
-  const handleOpenSubjectModal = (subj?: PlannedSubject) => {
-    if (subj) {
-      setEditingSubject(subj);
-      setSubCourseName(subj.courseName);
-      setSubCourseCode(subj.courseCode || '');
-      setSubCategory(subj.category);
-      setSubCredits(subj.plannedCredits);
-      setSubTargetGrade(subj.targetGrade || 'S');
-      setSubStatus(subj.status);
-      setSubIsNptel(!!subj.isNptel);
-      setSubNptelMilestone(subj.nptelMilestone || '');
+  // Semester Summary stats
+  const semesterCreditsTotal = useMemo(() => {
+    return selectedSemesterSubjects.reduce((sum, s) => sum + (s.plannedCredits || 0), 0);
+  }, [selectedSemesterSubjects]);
+
+  const readySubjectsCount = useMemo(() => {
+    return selectedSemesterSubjects.filter((s) => s.preparationStatus === 'ready').length;
+  }, [selectedSemesterSubjects]);
+
+  const semesterReadinessPct = useMemo(() => {
+    if (selectedSemesterSubjects.length === 0) return 0;
+    return Math.round((readySubjectsCount / selectedSemesterSubjects.length) * 100);
+  }, [selectedSemesterSubjects, readySubjectsCount]);
+
+  // Filtered Semesters
+  const filteredSemesters = useMemo(() => {
+    if (semesterViewFilter === 'active') return semesters.filter((s) => !s.isArchived);
+    if (semesterViewFilter === 'archived') return semesters.filter((s) => s.isArchived);
+    return semesters;
+  }, [semesters, semesterViewFilter]);
+
+  // Filtered Tasks for List View
+  const filteredTasks = useMemo(() => {
+    return tasks.filter((task) => {
+      if (taskSemesterFilter !== 'all') {
+        const matchesSemester =
+          task.semesterId === taskSemesterFilter ||
+          (currentSemesterObj && task.semester === currentSemesterObj.semesterNumber);
+        if (!matchesSemester) return false;
+      }
+      if (taskPriorityFilter !== 'all' && task.priority !== taskPriorityFilter) {
+        return false;
+      }
+      if (taskStatusFilter !== 'all' && task.status !== taskStatusFilter) {
+        return false;
+      }
+      return true;
+    });
+  }, [tasks, taskSemesterFilter, taskPriorityFilter, taskStatusFilter, currentSemesterObj]);
+
+  // Upcoming deadlines (next 14 days)
+  const upcomingDeadlines = useMemo(() => {
+    const twoWeeksLater = new Date();
+    twoWeeksLater.setDate(twoWeeksLater.getDate() + 14);
+    const limitStr = twoWeeksLater.toISOString().slice(0, 10);
+
+    return tasks
+      .filter((t) => t.status !== 'completed' && t.dueDate <= limitStr)
+      .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+      .slice(0, 5);
+  }, [tasks]);
+
+  // Overdue Tasks Count
+  const overdueTasksCount = useMemo(() => {
+    return tasks.filter((t) => t.status !== 'completed' && t.dueDate < todayDateStr).length;
+  }, [tasks, todayDateStr]);
+
+  // ==========================================
+  // Handlers for Semesters
+  // ==========================================
+
+  const handleOpenCreateSemester = () => {
+    setEditingSemester(null);
+    setIsSemesterModalOpen(true);
+  };
+
+  const handleOpenEditSemester = (sem: PlannerSemester) => {
+    setEditingSemester(sem);
+    setIsSemesterModalOpen(true);
+  };
+
+  const handleSaveSemester = (data: {
+    semesterNumber: number;
+    title: string;
+    academicYear?: string;
+    isCurrent: boolean;
+    isArchived: boolean;
+    notes?: string;
+  }) => {
+    if (editingSemester) {
+      updateSemester(activeProfile.id, editingSemester.id, data);
+      showToast(`Updated ${data.title}.`, 'success');
     } else {
-      setEditingSubject(null);
-      setSubCourseName('');
-      setSubCourseCode('');
-      setSubCategory('programme_core');
-      setSubCredits(3);
-      setSubTargetGrade(availableGrades[0]?.grade || 'S');
-      setSubStatus('planned');
-      setSubIsNptel(false);
-      setSubNptelMilestone('');
+      const created = createSemester(activeProfile.id, data);
+      setSelectedSemesterId(created.id);
+      showToast(`Created ${data.title}.`, 'success');
     }
+    loadData();
+  };
+
+  const handleToggleArchive = (semId: string) => {
+    const res = toggleArchiveSemester(activeProfile.id, semId);
+    if (res) {
+      showToast(
+        res.isArchived ? `Archived ${res.title}.` : `Restored ${res.title} to active semesters.`,
+        'info'
+      );
+      loadData();
+    }
+  };
+
+  const handleSetCurrent = (semId: string) => {
+    const res = setCurrentSemester(activeProfile.id, semId);
+    if (res) {
+      showToast(`Set ${res.title} as current active semester.`, 'success');
+      loadData();
+    }
+  };
+
+  // ==========================================
+  // Handlers for Subjects
+  // ==========================================
+
+  const handleOpenCreateSubject = () => {
+    if (!currentSemesterObj) {
+      showToast('Please create or select a semester first.', 'info');
+      return;
+    }
+    setEditingSubject(null);
     setIsSubjectModalOpen(true);
   };
 
-  // Save Subject
-  const handleSaveSubject = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!subCourseName.trim()) {
-      showToast('Course Name is required.', 'error');
-      return;
-    }
-
-    if (editingSubject) {
-      updatePlannedSubject(activeProfile.id, editingSubject.id, {
-        semester: selectedSemester,
-        courseName: sanitizeCourseTitle(subCourseName),
-        courseCode: supportsCode && subCourseCode.trim() ? subCourseCode.trim().toUpperCase() : undefined,
-        category: subCategory,
-        plannedCredits: Number(subCredits) || 3,
-        targetGrade: subTargetGrade,
-        status: subStatus,
-        isNptel: subIsNptel,
-        nptelMilestone: subIsNptel ? subNptelMilestone.trim() : undefined,
-      });
-      showToast('Planned course updated.', 'success');
-    } else {
-      addPlannedSubject(activeProfile.id, {
-        semester: selectedSemester,
-        courseName: sanitizeCourseTitle(subCourseName),
-        courseCode: supportsCode && subCourseCode.trim() ? subCourseCode.trim().toUpperCase() : undefined,
-        category: subCategory,
-        plannedCredits: Number(subCredits) || 3,
-        targetGrade: subTargetGrade,
-        status: subStatus,
-        isNptel: subIsNptel,
-        nptelMilestone: subIsNptel ? subNptelMilestone.trim() : undefined,
-      });
-      showToast('Course added to semester plan.', 'success');
-    }
-
-    setIsSubjectModalOpen(false);
-    reloadData();
+  const handleOpenEditSubject = (subj: PlannedSubject) => {
+    setEditingSubject(subj);
+    setIsSubjectModalOpen(true);
   };
 
-  // Open Task Modal
-  const handleOpenTaskModal = (task?: AcademicTask) => {
-    if (task) {
-      setEditingTask(task);
-      setTaskTitle(task.title);
-      setTaskCategory(task.category);
-      setTaskDueDate(task.dueDate);
-      setTaskPriority(task.priority);
-      setTaskCourseName(task.courseName || '');
-      setTaskNotes(task.notes || '');
+  const handleSaveSubject = (data: {
+    courseName: string;
+    courseCode?: string;
+    credits: number;
+    category: any;
+    examDate?: string;
+    preparationStatus: PreparationStatus;
+    status: PlannedCourseStatus;
+    targetGrade?: string;
+    notes?: string;
+    semester: number;
+    semesterId?: string;
+  }) => {
+    if (editingSubject) {
+      updatePlannedSubject(activeProfile.id, editingSubject.id, data);
+      showToast(`Updated subject "${data.courseName}".`, 'success');
     } else {
-      setEditingTask(null);
-      setTaskTitle('');
-      setTaskCategory('assignment');
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      setTaskDueDate(tomorrow.toISOString().split('T')[0]);
-      setTaskPriority('medium');
-      setTaskCourseName('');
-      setTaskNotes('');
+      addPlannedSubject(activeProfile.id, {
+        ...data,
+        plannedCredits: data.credits,
+      });
+      showToast(`Added "${data.courseName}" to semester.`, 'success');
     }
+    loadData();
+  };
+
+  const handleQuickPrepStatusChange = (subjectId: string, status: PreparationStatus) => {
+    updatePlannedSubject(activeProfile.id, subjectId, { preparationStatus: status });
+    loadData();
+  };
+
+  // ==========================================
+  // Handlers for Tasks
+  // ==========================================
+
+  const handleOpenCreateTask = (datePrefill?: string) => {
+    setEditingTask(null);
+    setPrefilledTaskDate(datePrefill);
     setIsTaskModalOpen(true);
   };
 
-  // Save Task
-  const handleSaveTask = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!taskTitle.trim()) {
-      showToast('Task title is required.', 'error');
-      return;
-    }
-    if (!taskDueDate) {
-      showToast('Due date is required.', 'error');
-      return;
-    }
+  const handleOpenEditTask = (task: AcademicTask) => {
+    setEditingTask(task);
+    setPrefilledTaskDate(undefined);
+    setIsTaskModalOpen(true);
+  };
 
+  const handleSaveTask = (data: {
+    title: string;
+    category: TaskCategory;
+    dueDate: string;
+    priority: TaskPriority;
+    status: TaskStatus;
+    semester?: number;
+    semesterId?: string;
+    subjectId?: string;
+    courseName?: string;
+    notes?: string;
+  }) => {
     if (editingTask) {
-      updateTask(activeProfile.id, editingTask.id, {
-        title: taskTitle.trim(),
-        category: taskCategory,
-        dueDate: taskDueDate,
-        priority: taskPriority,
-        courseName: taskCourseName.trim() || undefined,
-        notes: taskNotes.trim() || undefined,
-      });
-      showToast('Task updated.', 'success');
+      updateTask(activeProfile.id, editingTask.id, data);
+      showToast(`Updated task "${data.title}".`, 'success');
     } else {
-      addTask(activeProfile.id, {
-        title: taskTitle.trim(),
-        category: taskCategory,
-        dueDate: taskDueDate,
-        priority: taskPriority,
-        status: 'pending',
-        courseName: taskCourseName.trim() || undefined,
-        notes: taskNotes.trim() || undefined,
-      });
-      showToast('Academic task added.', 'success');
+      addTask(activeProfile.id, data);
+      showToast(`Task "${data.title}" scheduled.`, 'success');
     }
-
-    setIsTaskModalOpen(false);
-    reloadData();
+    loadData();
   };
 
-  // Toggle Task Status
-  const handleToggleTask = (taskId: string) => {
-    toggleTaskStatus(activeProfile.id, taskId);
-    reloadData();
+  const handleToggleTaskStatus = (taskId: string) => {
+    const updated = toggleTaskStatus(activeProfile.id, taskId);
+    if (updated) {
+      showToast(
+        updated.status === 'completed'
+          ? `Marked "${updated.title}" as completed!`
+          : `Marked "${updated.title}" as pending.`,
+        'success'
+      );
+      loadData();
+    }
   };
 
-  // Confirm Delete
+  // ==========================================
+  // Handlers for Goals
+  // ==========================================
+
+  const handleSaveGoals = (newGoals: Partial<StudentAcademicGoals>) => {
+    const saved = saveAcademicGoalsForProfile(activeProfile.id, newGoals);
+    setGoals(saved);
+    showToast('Academic targets updated successfully.', 'success');
+    loadData();
+  };
+
+  // ==========================================
+  // Confirmation Deletion Dispatcher
+  // ==========================================
+
   const handleConfirmDelete = () => {
     if (!itemToDelete) return;
-    if (itemToDelete.type === 'subject') {
+    if (itemToDelete.type === 'semester') {
+      deleteSemester(activeProfile.id, itemToDelete.id);
+      showToast(`Deleted semester "${itemToDelete.title}".`, 'info');
+    } else if (itemToDelete.type === 'subject') {
       deletePlannedSubject(activeProfile.id, itemToDelete.id);
-      showToast('Planned course removed.', 'info');
-    } else {
+      showToast(`Removed subject "${itemToDelete.title}".`, 'info');
+    } else if (itemToDelete.type === 'task') {
       deleteTask(activeProfile.id, itemToDelete.id);
-      showToast('Task removed.', 'info');
+      showToast(`Deleted task "${itemToDelete.title}".`, 'info');
     }
     setItemToDelete(null);
-    reloadData();
+    loadData();
   };
 
-  // Filtered tasks
-  const filteredTasks = useMemo(() => {
-    return tasks.filter((t) => {
-      if (taskFilterCategory !== 'all' && t.category !== taskFilterCategory) return false;
-      if (taskFilterStatus === 'pending' && t.status === 'completed') return false;
-      if (taskFilterStatus === 'completed' && t.status !== 'completed') return false;
-      return true;
-    });
-  }, [tasks, taskFilterCategory, taskFilterStatus]);
-
-  const todayStr = new Date().toISOString().split('T')[0];
-
   return (
-    <div className="w-full max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-8 animate-appleFadeIn">
-      {/* 1. Header Section */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--border-secondary)] pb-6">
-        <div>
-          <div className="flex items-center gap-2 mb-1.5">
-            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-black/5 dark:bg-white/10 text-[var(--text-secondary)]">
-              {activeProfile.name} • {activeProfile.regulation}
-            </span>
-            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
-              Semester Planner
-            </span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[var(--text-primary)]">
-            Smart Semester Planner
-          </h1>
-          <p className="text-xs sm:text-sm text-[var(--text-secondary)] mt-1">
-            Organize upcoming subjects, track planned credits, and manage exams, assignments, and milestones.
-          </p>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="flex items-center gap-2">
-          {activeTab === 'subjects' ? (
-            <button
-              type="button"
-              onClick={() => handleOpenSubjectModal()}
-              className="apple-btn-primary text-xs h-9 px-3.5 gap-1.5 font-medium"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add Planned Course</span>
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => handleOpenTaskModal()}
-              className="apple-btn-primary text-xs h-9 px-3.5 gap-1.5 font-medium"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add Academic Task</span>
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* 2. Important Notice Banner */}
-      <div className="rounded-2xl bg-amber-500/10 border border-amber-500/30 p-4 text-xs text-amber-700 dark:text-amber-400 flex items-start gap-3">
-        <Info className="w-4 h-4 shrink-0 mt-0.5" />
-        <div className="leading-relaxed">
-          <span className="font-bold">Strict Credit Separation Guarantee:</span> Planned subjects and projected credits are strictly simulation goals and are <span className="underline">never</span> counted as officially earned graduation credits. Earned credits update only upon confirmed course completion.
-        </div>
-      </div>
-
-      {/* 3. Quick Stats Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] shadow-sm flex flex-col justify-between">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-            Planned Courses (Sem {selectedSemester})
-          </span>
-          <div className="text-2xl font-bold text-[var(--text-primary)] mt-1 tabular-nums">
-            {semesterSubjects.length}
-          </div>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] shadow-sm flex flex-col justify-between">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-            Planned Credits (Projected)
-          </span>
-          <div className="text-2xl font-bold text-blue-600 dark:text-blue-400 mt-1 tabular-nums">
-            {totalPlannedCredits}
-          </div>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] shadow-sm flex flex-col justify-between">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-            Pending Tasks
-          </span>
-          <div className="text-2xl font-bold text-amber-600 dark:text-amber-400 mt-1 tabular-nums">
-            {tasks.filter((t) => t.status !== 'completed').length}
-          </div>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] shadow-sm flex flex-col justify-between">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-            Completed Tasks
-          </span>
-          <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1 tabular-nums">
-            {tasks.filter((t) => t.status === 'completed').length}
-          </div>
-        </div>
-      </div>
-
-      {/* 4. Tab Navigation & Semester Selector */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--border-secondary)] pb-3">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setActiveTab('subjects')}
-            className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
-              activeTab === 'subjects'
-                ? 'bg-black text-white dark:bg-white dark:text-black shadow-xs'
-                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]'
-            }`}
-          >
-            Planned Subjects & Credits
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('tasks')}
-            className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
-              activeTab === 'tasks'
-                ? 'bg-black text-white dark:bg-white dark:text-black shadow-xs'
-                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]'
-            }`}
-          >
-            Exams, Tasks & Deadlines ({tasks.filter((t) => t.status !== 'completed').length})
-          </button>
-        </div>
-
-        {activeTab === 'subjects' && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-[var(--text-secondary)] font-medium">Semester:</span>
-            <div className="flex items-center rounded-xl bg-[var(--surface)] border border-[var(--border-primary)] p-0.5">
-              {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => setSelectedSemester(s)}
-                  className={`w-7 h-7 text-xs font-semibold rounded-lg transition-all ${
-                    selectedSemester === s
-                      ? 'bg-black text-white dark:bg-white dark:text-black shadow-xs'
-                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                  }`}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* 5. TAB CONTENT */}
-      {activeTab === 'subjects' ? (
-        <div className="flex flex-col gap-4">
-          {semesterSubjects.length === 0 ? (
-            <div className="p-12 rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] text-center flex flex-col items-center justify-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-[var(--text-secondary)]">
-                <BookOpen className="w-6 h-6" />
-              </div>
-              <h3 className="text-base font-bold text-[var(--text-primary)]">
-                No planned subjects for Semester {selectedSemester}
-              </h3>
-              <p className="text-xs text-[var(--text-secondary)] max-w-md">
-                Add courses you intend to register for in upcoming semesters to preview credit load and workload.
-              </p>
-              <button
-                type="button"
-                onClick={() => handleOpenSubjectModal()}
-                className="apple-btn-primary text-xs h-9 px-4 gap-2 font-medium mt-2"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Add First Planned Course</span>
-              </button>
-            </div>
-          ) : (
-            <div className="overflow-x-auto rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] shadow-sm">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="border-b border-[var(--border-secondary)] bg-[var(--bg-tertiary)]/50 text-[var(--text-secondary)] font-semibold uppercase tracking-wider text-[10px]">
-                    <th className="py-3 px-4">Course</th>
-                    {supportsCode && <th className="py-3 px-4">Code</th>}
-                    <th className="py-3 px-4">Category</th>
-                    <th className="py-3 px-4">Credits</th>
-                    <th className="py-3 px-4">Target Grade</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[var(--border-secondary)]">
-                  {semesterSubjects.map((sub) => (
-                    <tr key={sub.id} className="hover:bg-[var(--bg-tertiary)]/30 transition-colors">
-                      <td className="py-3 px-4">
-                        <div className="font-semibold text-sm text-[var(--text-primary)]">
-                          {sub.courseName}
-                        </div>
-                        {sub.isNptel && (
-                          <div className="flex items-center gap-1 text-[11px] text-blue-600 dark:text-blue-400 mt-0.5">
-                            <span className="font-medium">NPTEL Course</span>
-                            {sub.nptelMilestone && <span>• {sub.nptelMilestone}</span>}
-                          </div>
-                        )}
-                      </td>
-                      {supportsCode && (
-                        <td className="py-3 px-4 font-mono font-medium text-[var(--text-secondary)]">
-                          {sub.courseCode || '—'}
-                        </td>
-                      )}
-                      <td className="py-3 px-4 capitalize text-[var(--text-secondary)]">
-                        {sub.category.replace(/_/g, ' ')}
-                      </td>
-                      <td className="py-3 px-4 font-bold tabular-nums text-[var(--text-primary)]">
-                        {sub.plannedCredits}
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className="px-2 py-0.5 rounded-md font-bold text-[11px] bg-zinc-100 dark:bg-zinc-800 text-[var(--text-primary)]">
-                          {sub.targetGrade || '—'}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4">
-                        <span
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${
-                            sub.status === 'enrolled'
-                              ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20'
-                              : sub.status === 'completed'
-                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
-                              : sub.status === 'dropped'
-                              ? 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20'
-                              : 'bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border-zinc-500/20'
-                          }`}
-                        >
-                          {sub.status}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenSubjectModal(sub)}
-                            className="p-1.5 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]"
-                            title="Edit"
-                          >
-                            <Edit3 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setItemToDelete({ type: 'subject', id: sub.id })}
-                            className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      ) : (
-        /* Tasks Tab */
-        <div className="flex flex-col gap-4">
-          {/* Task Filters */}
-          <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl bg-[var(--surface)] border border-[var(--border-primary)] text-xs">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[var(--text-secondary)] font-semibold">Filter:</span>
-              <div className="flex items-center rounded-lg bg-[var(--bg-tertiary)] p-0.5">
-                {(['all', 'pending', 'completed'] as const).map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => setTaskFilterStatus(s)}
-                    className={`px-2.5 py-1 rounded-md text-[11px] font-semibold capitalize transition-all ${
-                      taskFilterStatus === s
-                        ? 'bg-[var(--surface)] text-[var(--text-primary)] shadow-xs'
-                        : 'text-[var(--text-secondary)]'
-                    }`}
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-
-              <select
-                value={taskFilterCategory}
-                onChange={(e) => setTaskFilterCategory(e.target.value)}
-                className="apple-input text-xs h-7 px-2 py-0 rounded-lg bg-[var(--surface)]"
-              >
-                <option value="all">All Categories</option>
-                <option value="assignment">Assignments</option>
-                <option value="exam">Exams</option>
-                <option value="nptel">NPTEL Milestones</option>
-                <option value="project">Projects</option>
-                <option value="class">Classes</option>
-                <option value="other">Other</option>
-              </select>
-            </div>
-
-            <div className="text-[11px] text-[var(--text-tertiary)]">
-              Showing {filteredTasks.length} task(s)
-            </div>
-          </div>
-
-          {filteredTasks.length === 0 ? (
-            <div className="p-12 rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] text-center flex flex-col items-center justify-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-[var(--text-secondary)]">
-                <CheckCircle2 className="w-6 h-6" />
-              </div>
-              <h3 className="text-base font-bold text-[var(--text-primary)]">
-                No academic tasks found
-              </h3>
-              <p className="text-xs text-[var(--text-secondary)] max-w-md">
-                Add upcoming exams, lab assignments, project milestones, or NPTEL deadlines to stay on track.
-              </p>
-              <button
-                type="button"
-                onClick={() => handleOpenTaskModal()}
-                className="apple-btn-primary text-xs h-9 px-4 gap-2 font-medium mt-2"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Add Academic Task</span>
-              </button>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2.5">
-              {filteredTasks.map((task) => {
-                const isOverdue = task.status !== 'completed' && task.dueDate < todayStr;
-                return (
-                  <div
-                    key={task.id}
-                    className={`p-4 rounded-2xl bg-[var(--surface)] border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-                      task.status === 'completed'
-                        ? 'opacity-60 border-[var(--border-secondary)]'
-                        : isOverdue
-                        ? 'border-red-500/40 bg-red-50/10 dark:bg-red-950/10'
-                        : 'border-[var(--border-primary)] shadow-xs'
-                    }`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <button
-                        type="button"
-                        onClick={() => handleToggleTask(task.id)}
-                        className={`w-5 h-5 rounded-md border flex items-center justify-center mt-0.5 shrink-0 transition-colors ${
-                          task.status === 'completed'
-                            ? 'bg-emerald-600 border-emerald-600 text-white'
-                            : 'border-zinc-300 dark:border-zinc-700 hover:border-zinc-500'
-                        }`}
-                      >
-                        {task.status === 'completed' && <Check className="w-3.5 h-3.5" />}
-                      </button>
-
-                      <div className="flex flex-col gap-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span
-                            className={`text-sm font-semibold text-[var(--text-primary)] ${
-                              task.status === 'completed' ? 'line-through text-[var(--text-secondary)]' : ''
-                            }`}
-                          >
-                            {task.title}
-                          </span>
-                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-zinc-100 dark:bg-zinc-800 text-[var(--text-secondary)]">
-                            {task.category}
-                          </span>
-                          <span
-                            className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
-                              task.priority === 'high'
-                                ? 'bg-red-500/10 text-red-600 dark:text-red-400'
-                                : task.priority === 'medium'
-                                ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
-                                : 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
-                            }`}
-                          >
-                            {task.priority} Priority
-                          </span>
-                        </div>
-
-                        {task.courseName && (
-                          <span className="text-xs text-[var(--text-secondary)]">
-                            Course: {task.courseName}
-                          </span>
-                        )}
-                        {task.notes && (
-                          <p className="text-xs text-[var(--text-tertiary)] italic">
-                            "{task.notes}"
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-[var(--border-secondary)]">
-                      <div className="flex items-center gap-1.5 text-xs">
-                        <Clock className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
-                        <span
-                          className={`font-semibold ${
-                            isOverdue
-                              ? 'text-red-600 dark:text-red-400'
-                              : 'text-[var(--text-secondary)]'
-                          }`}
-                        >
-                          Due: {task.dueDate} {isOverdue && '(Overdue)'}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => handleOpenTaskModal(task)}
-                          className="p-1.5 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]"
-                          title="Edit Task"
-                        >
-                          <Edit3 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setItemToDelete({ type: 'task', id: task.id })}
-                          className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20"
-                          title="Delete Task"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* MODAL: ADD / EDIT PLANNED SUBJECT */}
-      {isSubjectModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] shadow-2xl p-6 flex flex-col gap-5 animate-appleFadeIn">
-            <div className="flex items-center justify-between border-b border-[var(--border-secondary)] pb-3">
-              <h3 className="text-lg font-bold text-[var(--text-primary)]">
-                {editingSubject ? 'Edit Planned Course' : 'Add Planned Course'}
-              </h3>
-              <button
-                type="button"
-                onClick={() => setIsSubjectModalOpen(false)}
-                className="p-1 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveSubject} className="flex flex-col gap-4 text-xs">
+    <div className="max-w-6xl mx-auto px-4 py-8 space-y-6">
+      {/* Top Header & Overview Bar */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="p-2 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 rounded-xl">
+                <Calendar className="w-6 h-6" />
+              </span>
               <div>
-                <label className="font-semibold text-[var(--text-primary)] mb-1 block">
-                  Course Title <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={subCourseName}
-                  onChange={(e) => setSubCourseName(e.target.value)}
-                  placeholder="e.g. Distributed Systems"
-                  className="apple-input w-full h-10 px-3 rounded-xl"
-                  required
-                />
+                <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
+                  Semester Planner & Goal Tracker
+                </h1>
+                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+                  Manage semesters, track exam readiness, and compare personal goals with university standards.
+                </p>
               </div>
+            </div>
+          </div>
 
-              {supportsCode && (
-                <div>
-                  <label className="font-semibold text-[var(--text-primary)] mb-1 block">
-                    Course Code (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={subCourseCode}
-                    onChange={(e) => setSubCourseCode(e.target.value)}
-                    placeholder="e.g. 10211CS301"
-                    className="apple-input w-full h-10 px-3 rounded-xl uppercase font-mono"
-                  />
+          <div className="flex items-center gap-2 self-start md:self-center">
+            <button
+              onClick={handleOpenCreateSemester}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Add Semester
+            </button>
+            <button
+              onClick={() => handleOpenCreateTask()}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              New Task
+            </button>
+          </div>
+        </div>
+
+        {/* Quick Stats Banner */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-5 border-t border-slate-100 dark:border-slate-800 text-xs">
+          <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-700/60">
+            <span className="text-slate-400 block text-[11px]">Active Semester</span>
+            <span className="font-bold text-slate-900 dark:text-white truncate block text-sm mt-0.5">
+              {currentSemesterObj ? currentSemesterObj.title : 'None selected'}
+            </span>
+          </div>
+
+          <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-700/60">
+            <span className="text-slate-400 block text-[11px]">Planned Credits</span>
+            <span className="font-bold text-slate-900 dark:text-white text-sm mt-0.5 block">
+              {semesterCreditsTotal} Credits ({selectedSemesterSubjects.length} subjects)
+            </span>
+          </div>
+
+          <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-700/60">
+            <span className="text-slate-400 block text-[11px]">Exam Readiness</span>
+            <span className="font-bold text-indigo-600 dark:text-indigo-400 text-sm mt-0.5 block">
+              {semesterReadinessPct}% Ready ({readySubjectsCount}/{selectedSemesterSubjects.length})
+            </span>
+          </div>
+
+          <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-700/60">
+            <span className="text-slate-400 block text-[11px]">Pending Deadlines</span>
+            <span className="font-bold text-slate-900 dark:text-white text-sm mt-0.5 block">
+              {tasks.filter((t) => t.status !== 'completed').length} Tasks
+              {overdueTasksCount > 0 && (
+                <span className="text-rose-600 dark:text-rose-400 text-xs ml-1 font-semibold">
+                  ({overdueTasksCount} overdue)
+                </span>
+              )}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Navigation Tabs */}
+      <div className="flex border-b border-slate-200 dark:border-slate-800 gap-6 text-sm font-semibold">
+        <button
+          onClick={() => setActiveTab('dashboard')}
+          className={`pb-3 relative transition-colors ${
+            activeTab === 'dashboard'
+              ? 'text-indigo-600 dark:text-indigo-400'
+              : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+          }`}
+        >
+          <span className="inline-flex items-center gap-1.5">
+            <Layers className="w-4 h-4" />
+            Planner Dashboard
+          </span>
+          {activeTab === 'dashboard' && (
+            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 rounded-full" />
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveTab('semesters')}
+          className={`pb-3 relative transition-colors ${
+            activeTab === 'semesters'
+              ? 'text-indigo-600 dark:text-indigo-400'
+              : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+          }`}
+        >
+          <span className="inline-flex items-center gap-1.5">
+            <BookOpen className="w-4 h-4" />
+            Semesters & Subjects ({semesters.length})
+          </span>
+          {activeTab === 'semesters' && (
+            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 rounded-full" />
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveTab('tasks')}
+          className={`pb-3 relative transition-colors ${
+            activeTab === 'tasks'
+              ? 'text-indigo-600 dark:text-indigo-400'
+              : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+          }`}
+        >
+          <span className="inline-flex items-center gap-1.5">
+            <CheckSquare className="w-4 h-4" />
+            Study Tasks & Calendar ({tasks.length})
+          </span>
+          {activeTab === 'tasks' && (
+            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 rounded-full" />
+          )}
+        </button>
+      </div>
+
+      {/* ==================================================== */}
+      {/* TAB 1: PLANNER DASHBOARD                            */}
+      {/* ==================================================== */}
+      {activeTab === 'dashboard' && (
+        <div className="space-y-6">
+          {/* Empty State for Fresh Profile without Semesters */}
+          {semesters.length === 0 ? (
+            <div className="p-8 text-center rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900/60 shadow-sm">
+              <div className="w-12 h-12 mx-auto mb-3 p-3 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400">
+                <Calendar className="w-6 h-6" />
+              </div>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white mb-1">
+                Your Semester Planner is Clean
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto mb-5 leading-relaxed">
+                Create your first semester to organize your courses, track exam dates, monitor preparation readiness, and schedule study tasks.
+              </p>
+              <button
+                onClick={handleOpenCreateSemester}
+                className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                Create First Semester
+              </button>
+            </div>
+          ) : (
+            <>
+              {/* Current Semester Summary Card */}
+              {currentSemesterObj && (
+                <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                        Current Semester Focus
+                      </span>
+                      {currentSemesterObj.isCurrent && (
+                        <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300">
+                          Active
+                        </span>
+                      )}
+                    </div>
+                    <h2 className="text-xl font-black text-slate-900 dark:text-white mt-1">
+                      {currentSemesterObj.title}
+                    </h2>
+                    {currentSemesterObj.notes && (
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-xl">
+                        {currentSemesterObj.notes}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 self-start md:self-center">
+                    <button
+                      onClick={handleOpenCreateSubject}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Add Subject
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('semesters')}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors"
+                    >
+                      View All Subjects <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-semibold text-[var(--text-primary)] mb-1 block">
-                    Category
-                  </label>
-                  <select
-                    value={subCategory}
-                    onChange={(e) => setSubCategory(e.target.value as CourseCategoryType)}
-                    className="apple-input w-full h-10 px-3 rounded-xl"
+              {/* Upcoming Deadlines Widget */}
+              <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                    <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+                      Upcoming Deadlines & Tasks (Next 14 Days)
+                    </h3>
+                  </div>
+                  <button
+                    onClick={() => setActiveTab('tasks')}
+                    className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-semibold"
                   >
-                    {CATEGORIES.map((c) => (
-                      <option key={c.value} value={c.value}>
-                        {c.label}
-                      </option>
-                    ))}
-                  </select>
+                    View All Tasks →
+                  </button>
                 </div>
 
-                <div>
-                  <label className="font-semibold text-[var(--text-primary)] mb-1 block">
-                    Planned Credits
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="10"
-                    value={subCredits}
-                    onChange={(e) => setSubCredits(Number(e.target.value))}
-                    className="apple-input w-full h-10 px-3 rounded-xl"
-                    required
-                  />
-                </div>
-              </div>
+                {upcomingDeadlines.length === 0 ? (
+                  <p className="text-xs text-slate-500 dark:text-slate-400 italic py-2">
+                    No deadlines due in the next 14 days. You're all caught up!
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {upcomingDeadlines.map((task) => {
+                      const isOverdue = task.dueDate < todayDateStr;
+                      return (
+                        <div
+                          key={task.id}
+                          className="flex items-center justify-between p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-700/60 text-xs"
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <button
+                              onClick={() => handleToggleTaskStatus(task.id)}
+                              className="text-slate-400 hover:text-indigo-600 transition-colors"
+                            >
+                              <CheckCircle2 className="w-4 h-4" />
+                            </button>
+                            <div>
+                              <span className="font-medium text-slate-900 dark:text-white">
+                                {task.title}
+                              </span>
+                              {task.courseName && (
+                                <span className="text-[10px] text-slate-400 ml-1.5">
+                                  ({task.courseName})
+                                </span>
+                              )}
+                            </div>
+                          </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-semibold text-[var(--text-primary)] mb-1 block">
-                    Target Grade Goal
-                  </label>
-                  <select
-                    value={subTargetGrade}
-                    onChange={(e) => setSubTargetGrade(e.target.value)}
-                    className="apple-input w-full h-10 px-3 rounded-xl"
-                  >
-                    {availableGrades.map((g) => (
-                      <option key={g.grade} value={g.grade}>
-                        {g.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="font-semibold text-[var(--text-primary)] mb-1 block">
-                    Status
-                  </label>
-                  <select
-                    value={subStatus}
-                    onChange={(e) => setSubStatus(e.target.value as PlannedCourseStatus)}
-                    className="apple-input w-full h-10 px-3 rounded-xl"
-                  >
-                    <option value="planned">Planned</option>
-                    <option value="enrolled">Enrolled</option>
-                    <option value="completed">Completed</option>
-                    <option value="dropped">Dropped</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* NPTEL toggle */}
-              <div className="p-3 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] flex flex-col gap-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={subIsNptel}
-                    onChange={(e) => setSubIsNptel(e.target.checked)}
-                    className="w-4 h-4 rounded text-blue-600"
-                  />
-                  <span className="font-semibold text-[var(--text-primary)]">
-                    This is an NPTEL Course
-                  </span>
-                </label>
-                {subIsNptel && (
-                  <input
-                    type="text"
-                    value={subNptelMilestone}
-                    onChange={(e) => setSubNptelMilestone(e.target.value)}
-                    placeholder="Milestone (e.g. Week 8 Assignment / Exam Reg)"
-                    className="apple-input w-full h-9 px-3 rounded-xl text-xs"
-                  />
+                          <div className="flex items-center gap-2">
+                            {isOverdue ? (
+                              <span className="inline-flex items-center gap-1 font-semibold text-rose-600 dark:text-rose-400 text-[11px]">
+                                <AlertCircle className="w-3 h-3" /> Overdue ({task.dueDate})
+                              </span>
+                            ) : (
+                              <span className="text-slate-500 dark:text-slate-400 text-[11px]">
+                                Due {task.dueDate}
+                              </span>
+                            )}
+                            <span
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                                task.priority === 'high'
+                                  ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400'
+                                  : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                              }`}
+                            >
+                              {task.priority.toUpperCase()}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
+            </>
+          )}
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border-secondary)]">
-                <button
-                  type="button"
-                  onClick={() => setIsSubjectModalOpen(false)}
-                  className="apple-btn-secondary text-xs h-9 px-3.5"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="apple-btn-primary text-xs h-9 px-4 font-semibold"
-                >
-                  Save Course
-                </button>
-              </div>
-            </form>
-          </div>
+          {/* Academic Goals & Benchmarks Card */}
+          <AcademicGoalsCard
+            metrics={goalMetrics}
+            onEditGoals={() => setIsGoalsModalOpen(true)}
+          />
         </div>
       )}
 
-      {/* MODAL: ADD / EDIT TASK */}
-      {isTaskModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] shadow-2xl p-6 flex flex-col gap-5 animate-appleFadeIn">
-            <div className="flex items-center justify-between border-b border-[var(--border-secondary)] pb-3">
-              <h3 className="text-lg font-bold text-[var(--text-primary)]">
-                {editingTask ? 'Edit Academic Task' : 'Add Academic Task'}
-              </h3>
-              <button
-                type="button"
-                onClick={() => setIsTaskModalOpen(false)}
-                className="p-1 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveTask} className="flex flex-col gap-4 text-xs">
-              <div>
-                <label className="font-semibold text-[var(--text-primary)] mb-1 block">
-                  Task Title <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={taskTitle}
-                  onChange={(e) => setTaskTitle(e.target.value)}
-                  placeholder="e.g. Unit Test 2 Preparation / NPTEL Assignment 4"
-                  className="apple-input w-full h-10 px-3 rounded-xl"
-                  required
-                />
+      {/* ==================================================== */}
+      {/* TAB 2: SEMESTERS & SUBJECTS                         */}
+      {/* ==================================================== */}
+      {activeTab === 'semesters' && (
+        <div className="space-y-6">
+          {/* Semester Selector & Filters */}
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  Select Semester:
+                </span>
+                <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg text-xs">
+                  <button
+                    onClick={() => setSemesterViewFilter('active')}
+                    className={`px-2 py-0.5 rounded-md font-medium transition-colors ${
+                      semesterViewFilter === 'active'
+                        ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
+                        : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    Active
+                  </button>
+                  <button
+                    onClick={() => setSemesterViewFilter('archived')}
+                    className={`px-2 py-0.5 rounded-md font-medium transition-colors ${
+                      semesterViewFilter === 'archived'
+                        ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
+                        : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    Archived
+                  </button>
+                  <button
+                    onClick={() => setSemesterViewFilter('all')}
+                    className={`px-2 py-0.5 rounded-md font-medium transition-colors ${
+                      semesterViewFilter === 'all'
+                        ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
+                        : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    All
+                  </button>
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleOpenCreateSemester}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition-colors"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  New Semester
+                </button>
+              </div>
+            </div>
+
+            {/* Semester Tabs Pills */}
+            {filteredSemesters.length === 0 ? (
+              <p className="text-xs text-slate-400 italic py-2">
+                No {semesterViewFilter !== 'all' ? semesterViewFilter : ''} semesters found.
+              </p>
+            ) : (
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
+                {filteredSemesters.map((sem) => {
+                  const isSelected = sem.id === selectedSemesterId;
+                  return (
+                    <button
+                      key={sem.id}
+                      onClick={() => setSelectedSemesterId(sem.id)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                        isSelected
+                          ? 'bg-indigo-600 text-white shadow-sm'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                      }`}
+                    >
+                      <span>{sem.title}</span>
+                      {sem.isCurrent && (
+                        <span className={`text-[9px] px-1.5 py-0.2 rounded font-bold ${
+                          isSelected ? 'bg-indigo-700 text-indigo-100' : 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300'
+                        }`}>
+                          Current
+                        </span>
+                      )}
+                      {sem.isArchived && (
+                        <span className={`text-[9px] px-1.5 py-0.2 rounded font-bold ${
+                          isSelected ? 'bg-amber-600 text-amber-100' : 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
+                        }`}>
+                          Archived
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Active Semester Subjects Section */}
+          {currentSemesterObj ? (
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+              <div className="p-5 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                  <label className="font-semibold text-[var(--text-primary)] mb-1 block">
-                    Category
-                  </label>
-                  <select
-                    value={taskCategory}
-                    onChange={(e) => setTaskCategory(e.target.value as TaskCategory)}
-                    className="apple-input w-full h-10 px-3 rounded-xl"
-                  >
-                    <option value="assignment">Assignment</option>
-                    <option value="exam">Exam</option>
-                    <option value="nptel">NPTEL Milestone</option>
-                    <option value="project">Project Deadline</option>
-                    <option value="class">Class Presentation</option>
-                    <option value="other">Other</option>
-                  </select>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                      {currentSemesterObj.title} Subjects
+                    </h2>
+                    <span className="text-xs px-2 py-0.5 rounded-full font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                      {semesterCreditsTotal} Credits Planned
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    {readySubjectsCount} of {selectedSemesterSubjects.length} subjects ready ({semesterReadinessPct}% preparation progress)
+                  </p>
                 </div>
 
-                <div>
-                  <label className="font-semibold text-[var(--text-primary)] mb-1 block">
-                    Priority
-                  </label>
-                  <select
-                    value={taskPriority}
-                    onChange={(e) => setTaskPriority(e.target.value as TaskPriority)}
-                    className="apple-input w-full h-10 px-3 rounded-xl"
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleOpenEditSemester(currentSemesterObj)}
+                    className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                    title="Edit Semester Settings"
                   >
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => handleToggleArchive(currentSemesterObj.id)}
+                    className="p-1.5 text-slate-400 hover:text-amber-600 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                    title={currentSemesterObj.isArchived ? 'Restore Semester' : 'Archive Semester'}
+                  >
+                    <Archive className="w-4 h-4" />
+                  </button>
+                  {!currentSemesterObj.isCurrent && !currentSemesterObj.isArchived && (
+                    <button
+                      onClick={() => handleSetCurrent(currentSemesterObj.id)}
+                      className="px-2 py-1 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 rounded-lg transition-colors"
+                    >
+                      Make Current
+                    </button>
+                  )}
+                  <button
+                    onClick={() =>
+                      setItemToDelete({
+                        type: 'semester',
+                        id: currentSemesterObj.id,
+                        title: currentSemesterObj.title,
+                      })
+                    }
+                    className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                    title="Delete Semester"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={handleOpenCreateSubject}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition-colors ml-2"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Add Subject
+                  </button>
+                </div>
+              </div>
+
+              {/* Subjects Table */}
+              {selectedSemesterSubjects.length === 0 ? (
+                <div className="p-8 text-center">
+                  <BookOpen className="w-8 h-8 text-slate-400 mx-auto mb-2 opacity-50" />
+                  <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                    No subjects added for {currentSemesterObj.title} yet.
+                  </p>
+                  <p className="text-[11px] text-slate-400 mt-0.5 mb-4">
+                    Add your courses to track credits, exam dates, and preparation status.
+                  </p>
+                  <button
+                    onClick={handleOpenCreateSubject}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 rounded-lg transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Add First Subject
+                  </button>
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {selectedSemesterSubjects.map((subj) => {
+                    const prepStatus = subj.preparationStatus || 'not_started';
+                    return (
+                      <div
+                        key={subj.id}
+                        className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors"
+                      >
+                        <div className="space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-bold text-sm text-slate-900 dark:text-white">
+                              {subj.courseName}
+                            </span>
+                            {subj.courseCode && (
+                              <span className="text-xs font-mono font-semibold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                                {subj.courseCode}
+                              </span>
+                            )}
+                            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300">
+                              {subj.plannedCredits} Credits
+                            </span>
+                            {subj.targetGrade && (
+                              <span className="text-xs text-slate-500">
+                                Target Grade: <strong>{subj.targetGrade}</strong>
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+                            {subj.examDate && (
+                              <span className="inline-flex items-center gap-1">
+                                <Calendar className="w-3 h-3 text-slate-400" />
+                                Exam: <strong>{subj.examDate}</strong>
+                              </span>
+                            )}
+                            {subj.notes && <span className="italic truncate max-w-md">{subj.notes}</span>}
+                          </div>
+                        </div>
+
+                        {/* Prep Status Selector & Actions */}
+                        <div className="flex items-center gap-3 self-end md:self-center">
+                          <select
+                            value={prepStatus}
+                            onChange={(e) =>
+                              handleQuickPrepStatusChange(subj.id, e.target.value as PreparationStatus)
+                            }
+                            className={`text-xs font-semibold px-2.5 py-1 rounded-lg border focus:outline-none transition-colors ${
+                              prepStatus === 'ready'
+                                ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-300 text-emerald-700 dark:text-emerald-400'
+                                : prepStatus === 'revision'
+                                ? 'bg-indigo-50 dark:bg-indigo-950/60 border-indigo-300 text-indigo-700 dark:text-indigo-400'
+                                : prepStatus === 'in_progress'
+                                ? 'bg-amber-50 dark:bg-amber-950/60 border-amber-300 text-amber-700 dark:text-amber-400'
+                                : 'bg-slate-100 dark:bg-slate-800 border-slate-300 text-slate-600 dark:text-slate-400'
+                            }`}
+                          >
+                            <option value="not_started">⚪ Not Started</option>
+                            <option value="in_progress">🟡 In Progress</option>
+                            <option value="revision">🔵 In Revision</option>
+                            <option value="ready">🟢 Exam Ready</option>
+                          </select>
+
+                          <button
+                            onClick={() => handleOpenEditSubject(subj)}
+                            className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            title="Edit Subject"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() =>
+                              setItemToDelete({
+                                type: 'subject',
+                                id: subj.id,
+                                title: subj.courseName,
+                              })
+                            }
+                            className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            title="Delete Subject"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="p-8 text-center rounded-xl border border-dashed border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900">
+              <p className="text-xs text-slate-500">Please create or select a semester above.</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ==================================================== */}
+      {/* TAB 3: STUDY TASKS & CALENDAR                       */}
+      {/* ==================================================== */}
+      {activeTab === 'tasks' && (
+        <div className="space-y-6">
+          {/* Controls Bar: View Toggle & Filters */}
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg text-xs">
+                <button
+                  onClick={() => setTaskViewMode('list')}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-md font-semibold transition-colors ${
+                    taskViewMode === 'list'
+                      ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
+                      : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <List className="w-3.5 h-3.5" />
+                  List View
+                </button>
+                <button
+                  onClick={() => setTaskViewMode('calendar')}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-md font-semibold transition-colors ${
+                    taskViewMode === 'calendar'
+                      ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
+                      : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <Calendar className="w-3.5 h-3.5" />
+                  Interactive Calendar
+                </button>
+              </div>
+
+              {taskViewMode === 'list' && (
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <select
+                    value={taskSemesterFilter}
+                    onChange={(e) => setTaskSemesterFilter(e.target.value)}
+                    className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300"
+                  >
+                    <option value="all">All Semesters</option>
+                    {semesters.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.title}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={taskPriorityFilter}
+                    onChange={(e) => setTaskPriorityFilter(e.target.value)}
+                    className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300"
+                  >
+                    <option value="all">All Priorities</option>
                     <option value="high">High Priority</option>
                     <option value="medium">Medium Priority</option>
                     <option value="low">Low Priority</option>
                   </select>
+
+                  <select
+                    value={taskStatusFilter}
+                    onChange={(e) => setTaskStatusFilter(e.target.value)}
+                    className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300"
+                  >
+                    <option value="all">All Statuses</option>
+                    <option value="pending">To Do</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="completed">Completed</option>
+                  </select>
                 </div>
-              </div>
+              )}
+            </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-semibold text-[var(--text-primary)] mb-1 block">
-                    Due Date <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="date"
-                    value={taskDueDate}
-                    onChange={(e) => setTaskDueDate(e.target.value)}
-                    className="apple-input w-full h-10 px-3 rounded-xl"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="font-semibold text-[var(--text-primary)] mb-1 block">
-                    Associated Course (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={taskCourseName}
-                    onChange={(e) => setTaskCourseName(e.target.value)}
-                    placeholder="e.g. Operating Systems"
-                    className="apple-input w-full h-10 px-3 rounded-xl"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="font-semibold text-[var(--text-primary)] mb-1 block">
-                  Notes / Details (Optional)
-                </label>
-                <textarea
-                  value={taskNotes}
-                  onChange={(e) => setTaskNotes(e.target.value)}
-                  placeholder="Additional notes, submission links, or chapters to cover..."
-                  rows={3}
-                  className="apple-input w-full p-3 rounded-xl resize-none"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border-secondary)]">
-                <button
-                  type="button"
-                  onClick={() => setIsTaskModalOpen(false)}
-                  className="apple-btn-secondary text-xs h-9 px-3.5"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="apple-btn-primary text-xs h-9 px-4 font-semibold"
-                >
-                  Save Task
-                </button>
-              </div>
-            </form>
+            <button
+              onClick={() => handleOpenCreateTask()}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition-colors self-start sm:self-center"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Add Task
+            </button>
           </div>
+
+          {/* Interactive Calendar View */}
+          {taskViewMode === 'calendar' && (
+            <InteractiveCalendarView
+              tasks={tasks}
+              onAddTaskForDate={(date) => handleOpenCreateTask(date)}
+              onEditTask={(task) => handleOpenEditTask(task)}
+              onDeleteTask={(taskId) => {
+                const t = tasks.find((item) => item.id === taskId);
+                setItemToDelete({ type: 'task', id: taskId, title: t?.title || 'task' });
+              }}
+              onToggleStatus={(taskId) => handleToggleTaskStatus(taskId)}
+            />
+          )}
+
+          {/* Task List View */}
+          {taskViewMode === 'list' && (
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+              {filteredTasks.length === 0 ? (
+                <div className="p-8 text-center">
+                  <CheckSquare className="w-8 h-8 text-slate-400 mx-auto mb-2 opacity-50" />
+                  <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                    No tasks match your current filter.
+                  </p>
+                  <p className="text-[11px] text-slate-400 mt-0.5 mb-4">
+                    Stay on top of assignments and preparation by creating study tasks.
+                  </p>
+                  <button
+                    onClick={() => handleOpenCreateTask()}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 rounded-lg transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Create Study Task
+                  </button>
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {filteredTasks.map((task) => {
+                    const isOverdue = task.status !== 'completed' && task.dueDate < todayDateStr;
+                    return (
+                      <div
+                        key={task.id}
+                        className={`p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors ${
+                          isOverdue
+                            ? 'bg-rose-50/25 dark:bg-rose-950/20'
+                            : 'hover:bg-slate-50/50 dark:hover:bg-slate-800/20'
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <button
+                            onClick={() => handleToggleTaskStatus(task.id)}
+                            className={`mt-0.5 p-1 rounded-md transition-colors ${
+                              task.status === 'completed'
+                                ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60'
+                                : 'text-slate-400 hover:text-indigo-600 bg-slate-100 dark:bg-slate-800'
+                            }`}
+                            title={task.status === 'completed' ? 'Mark Pending' : 'Mark Completed'}
+                          >
+                            <CheckCircle2 className="w-4 h-4" />
+                          </button>
+
+                          <div className="space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span
+                                className={`text-sm font-semibold ${
+                                  task.status === 'completed'
+                                    ? 'line-through text-slate-400 dark:text-slate-500'
+                                    : 'text-slate-900 dark:text-white'
+                                }`}
+                              >
+                                {task.title}
+                              </span>
+
+                              {isOverdue && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-400">
+                                  <AlertCircle className="w-3 h-3" /> Overdue
+                                </span>
+                              )}
+
+                              <span
+                                className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                                  task.priority === 'high'
+                                    ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400'
+                                    : task.priority === 'medium'
+                                    ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400'
+                                    : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                                }`}
+                              >
+                                {task.priority.toUpperCase()}
+                              </span>
+
+                              {task.courseName && (
+                                <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
+                                  {task.courseName}
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+                              <span>Due: {task.dueDate}</span>
+                              {task.notes && (
+                                <span className="italic truncate max-w-md">{task.notes}</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 self-end sm:self-center">
+                          <button
+                            onClick={() => handleOpenEditTask(task)}
+                            className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            title="Edit Task"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() =>
+                              setItemToDelete({
+                                type: 'task',
+                                id: task.id,
+                                title: task.title,
+                              })
+                            }
+                            className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            title="Delete Task"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
-      {/* DELETE CONFIRM MODAL */}
-      <ResetConfirmModal
-        isOpen={itemToDelete !== null}
-        onClose={() => setItemToDelete(null)}
-        onConfirm={handleConfirmDelete}
-        title={itemToDelete?.type === 'subject' ? 'Remove Planned Course' : 'Delete Academic Task'}
-        description={`Are you sure you want to remove this ${
-          itemToDelete?.type === 'subject' ? 'planned course' : 'academic task'
-        }?`}
-        confirmLabel="Remove"
+      {/* ==================================================== */}
+      {/* MODALS                                               */}
+      {/* ==================================================== */}
+
+      {/* Academic Goals Modal */}
+      <GoalsManagerModal
+        isOpen={isGoalsModalOpen}
+        onClose={() => setIsGoalsModalOpen(false)}
+        currentGoals={goals}
+        onSaveGoals={handleSaveGoals}
       />
+
+      {/* Semester Modal */}
+      <SemesterManagerModal
+        isOpen={isSemesterModalOpen}
+        onClose={() => setIsSemesterModalOpen(false)}
+        semesterToEdit={editingSemester}
+        onSaveSemester={handleSaveSemester}
+      />
+
+      {/* Subject Modal */}
+      <SubjectPlannerModal
+        isOpen={isSubjectModalOpen}
+        onClose={() => setIsSubjectModalOpen(false)}
+        semesterNumber={currentSemesterObj?.semesterNumber || 1}
+        semesterId={currentSemesterObj?.id}
+        subjectToEdit={editingSubject}
+        availableGrades={availableGrades}
+        onSaveSubject={handleSaveSubject}
+      />
+
+      {/* Task Modal */}
+      <TaskPlannerModal
+        isOpen={isTaskModalOpen}
+        onClose={() => setIsTaskModalOpen(false)}
+        taskToEdit={editingTask}
+        semesters={semesters}
+        subjects={subjects}
+        prefilledDate={prefilledTaskDate}
+        defaultSemesterId={selectedSemesterId}
+        onSaveTask={handleSaveTask}
+      />
+
+      {/* Confirmation Modal */}
+      {itemToDelete && (
+        <ResetConfirmModal
+          isOpen={true}
+          title={`Delete ${itemToDelete.type}`}
+          description={`Are you sure you want to delete "${itemToDelete.title}"? This cannot be undone.`}
+          confirmLabel="Delete"
+          onConfirm={handleConfirmDelete}
+          onClose={() => setItemToDelete(null)}
+        />
+      )}
     </div>
   );
 };
