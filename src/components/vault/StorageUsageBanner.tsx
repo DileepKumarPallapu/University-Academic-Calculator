@@ -9,7 +9,7 @@ interface StorageUsageBannerProps {
 
 export const StorageUsageBanner: React.FC<StorageUsageBannerProps> = ({ stats }) => {
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 shadow-sm space-y-3">
+    <div className="bg-[var(--surface)] rounded-2xl border border-[var(--border-primary)] p-4 sm:p-5 shadow-xs space-y-3">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         {/* Left: Storage Usage Metric */}
         <div className="flex items-center gap-3">
@@ -18,7 +18,7 @@ export const StorageUsageBanner: React.FC<StorageUsageBannerProps> = ({ stats })
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+              <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
                 Academic Vault Storage
               </span>
               {stats.isNearQuota && (
@@ -28,10 +28,10 @@ export const StorageUsageBanner: React.FC<StorageUsageBannerProps> = ({ stats })
                 </span>
               )}
             </div>
-            <div className="text-sm font-bold text-gray-900 dark:text-white mt-0.5">
+            <div className="text-sm font-bold text-[var(--text-primary)] mt-0.5">
               {stats.formattedTotalBytes} Used ({stats.totalFiles} {stats.totalFiles === 1 ? 'document' : 'documents'})
               {stats.storageQuotaBytes ? (
-                <span className="text-xs font-normal text-gray-500 dark:text-gray-400 ml-1.5">
+                <span className="text-xs font-normal text-[var(--text-secondary)] ml-1.5">
                   &bull; Available Device Quota: {formatFileSize(stats.storageQuotaBytes)}
                 </span>
               ) : null}

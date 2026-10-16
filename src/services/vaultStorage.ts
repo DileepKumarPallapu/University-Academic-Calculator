@@ -30,11 +30,20 @@ const STORE_FOLDERS = 'vault_folders';
 export const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB
 
 let vaultDbInstance: IDBDatabase | null = null;
+let vaultDbOpenPromise: Promise<IDBDatabase> | null = null;
 
 // Fallback in-memory stores for testing or environments without IndexedDB
 const memoryMetadata: Record<string, VaultDocumentMetadata[]> = {};
 const memoryBlobs: Record<string, Blob> = {};
 const memoryFolders: Record<string, VaultFolder[]> = {};
+
+export function isIndexedDBAvailable(): boolean {
+  try {
+    return typeof window !== 'undefined' && !!window.indexedDB;
+  } catch {
+    return false;
+  }
+}
 
 export function formatFileSize(bytes: number): string {
   if (bytes === 0) return '0 B';
@@ -51,14 +60,16 @@ export function getFileExtension(filename: string): string {
 }
 
 /**
- * Open or initialize AcademicVaultDB
+ * Open or initialize AcademicVaultDB with shared single promise to prevent race conditions
  */
-function openVaultDB(): Promise<IDBDatabase> {
+export function openVaultDB(): Promise<IDBDatabase> {
   if (vaultDbInstance) return Promise.resolve(vaultDbInstance);
+  if (vaultDbOpenPromise) return vaultDbOpenPromise;
 
-  return new Promise((resolve, reject) => {
-    if (typeof window === 'undefined' || !window.indexedDB) {
-      return reject(new Error('IndexedDB not available'));
+  vaultDbOpenPromise = new Promise((resolve, reject) => {
+    if (!isIndexedDBAvailable()) {
+      vaultDbOpenPromise = null;
+      return reject(new Error('IndexedDB is unavailable in this environment'));
     }
 
     try {
@@ -91,16 +102,38 @@ function openVaultDB(): Promise<IDBDatabase> {
 
       request.onsuccess = () => {
         vaultDbInstance = request.result;
+        vaultDbOpenPromise = null;
+
+        vaultDbInstance.onversionchange = () => {
+          vaultDbInstance?.close();
+          vaultDbInstance = null;
+          vaultDbOpenPromise = null;
+        };
+
+        vaultDbInstance.onclose = () => {
+          vaultDbInstance = null;
+          vaultDbOpenPromise = null;
+        };
+
         resolve(vaultDbInstance);
       };
 
       request.onerror = () => {
-        reject(request.error);
+        vaultDbOpenPromise = null;
+        reject(request.error || new Error('Failed to open AcademicVaultDB'));
+      };
+
+      request.onblocked = () => {
+        vaultDbOpenPromise = null;
+        reject(new Error('AcademicVaultDB open request was blocked by another connection'));
       };
     } catch (err) {
+      vaultDbOpenPromise = null;
       reject(err);
     }
   });
+
+  return vaultDbOpenPromise;
 }
 
 /**
@@ -231,7 +264,7 @@ export async function saveDocument(
     uploadedAt: now,
   };
 
-  try {
+  if (isIndexedDBAvailable()) {
     const db = await openVaultDB();
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction([STORE_METADATA, STORE_BLOBS], 'readwrite');
@@ -239,10 +272,22 @@ export async function saveDocument(
       tx.objectStore(STORE_BLOBS).put(blobRecord);
 
       tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
+      tx.onerror = () => {
+        const error = tx.error;
+        if (error?.name === 'QuotaExceededError') {
+          reject(
+            new Error(
+              'Device local storage is full (QuotaExceededError). Please delete older documents or free disk space.'
+            )
+          );
+        } else {
+          reject(error || new Error('Failed to save document to IndexedDB'));
+        }
+      };
+      tx.onabort = () => reject(new Error('Document upload transaction was aborted'));
     });
-  } catch {
-    // Memory fallback
+  } else {
+    // Memory fallback for tests
     if (!memoryMetadata[profileId]) memoryMetadata[profileId] = [];
     memoryMetadata[profileId].unshift(metadata);
     memoryBlobs[id] = file;
@@ -260,7 +305,7 @@ export async function getDocumentsForProfile(
 ): Promise<VaultDocumentMetadata[]> {
   if (!profileId) return [];
 
-  try {
+  if (isIndexedDBAvailable()) {
     const db = await openVaultDB();
     return await new Promise<VaultDocumentMetadata[]>((resolve, reject) => {
       const tx = db.transaction(STORE_METADATA, 'readonly');
@@ -270,15 +315,15 @@ export async function getDocumentsForProfile(
 
       request.onsuccess = () => {
         const results = (request.result as VaultDocumentMetadata[]) || [];
-        // Sort descending by upload date
         results.sort((a, b) => b.uploadedAt - a.uploadedAt);
         resolve(results);
       };
-      request.onerror = () => reject(request.error);
+      request.onerror = () => reject(request.error || new Error('Failed to retrieve documents'));
     });
-  } catch {
-    return memoryMetadata[profileId] || [];
   }
+
+  // Memory fallback for tests
+  return (memoryMetadata[profileId] || []).slice().sort((a, b) => b.uploadedAt - a.uploadedAt);
 }
 
 export async function getDocumentBlob(
@@ -287,7 +332,7 @@ export async function getDocumentBlob(
 ): Promise<Blob | null> {
   if (!docId) return null;
 
-  try {
+  if (isIndexedDBAvailable()) {
     const db = await openVaultDB();
     return await new Promise<Blob | null>((resolve, reject) => {
       const tx = db.transaction(STORE_BLOBS, 'readonly');
@@ -302,11 +347,11 @@ export async function getDocumentBlob(
           resolve(null);
         }
       };
-      request.onerror = () => reject(request.error);
+      request.onerror = () => reject(request.error || new Error('Failed to retrieve document content'));
     });
-  } catch {
-    return memoryBlobs[docId] || null;
   }
+
+  return memoryBlobs[docId] || null;
 }
 
 export async function downloadDocumentFile(
@@ -344,17 +389,19 @@ export async function updateDocumentMetadata(
     Omit<VaultDocumentMetadata, 'id' | 'profileId' | 'fileSize' | 'fileExtension' | 'uploadedAt'>
   >
 ): Promise<VaultDocumentMetadata | null> {
-  try {
+  if (isIndexedDBAvailable()) {
     const db = await openVaultDB();
     return await new Promise<VaultDocumentMetadata | null>((resolve, reject) => {
       const tx = db.transaction([STORE_METADATA], 'readwrite');
       const store = tx.objectStore(STORE_METADATA);
       const request = store.get(docId);
 
+      let resultRecord: VaultDocumentMetadata | null = null;
+
       request.onsuccess = () => {
         const existing = request.result as VaultDocumentMetadata | undefined;
         if (!existing || existing.profileId !== profileId) {
-          resolve(null);
+          resultRecord = null;
           return;
         }
 
@@ -364,25 +411,26 @@ export async function updateDocumentMetadata(
         };
 
         store.put(updated);
-        resolve(updated);
+        resultRecord = updated;
       };
 
-      request.onerror = () => reject(request.error);
+      tx.oncomplete = () => resolve(resultRecord);
+      tx.onerror = () => reject(tx.error || new Error('Failed to update document metadata'));
     });
-  } catch {
-    const list = memoryMetadata[profileId] || [];
-    const idx = list.findIndex((d) => d.id === docId);
-    if (idx === -1) return null;
-    list[idx] = { ...list[idx], ...updates };
-    return list[idx];
   }
+
+  const list = memoryMetadata[profileId] || [];
+  const idx = list.findIndex((d) => d.id === docId);
+  if (idx === -1) return null;
+  list[idx] = { ...list[idx], ...updates };
+  return list[idx];
 }
 
 export async function deleteDocument(
   profileId: string,
   docId: string
 ): Promise<boolean> {
-  try {
+  if (isIndexedDBAvailable()) {
     const db = await openVaultDB();
     return await new Promise<boolean>((resolve, reject) => {
       const tx = db.transaction([STORE_METADATA, STORE_BLOBS], 'readwrite');
@@ -390,15 +438,15 @@ export async function deleteDocument(
       tx.objectStore(STORE_BLOBS).delete(docId);
 
       tx.oncomplete = () => resolve(true);
-      tx.onerror = () => reject(tx.error);
+      tx.onerror = () => reject(tx.error || new Error('Failed to delete document'));
     });
-  } catch {
-    if (memoryMetadata[profileId]) {
-      memoryMetadata[profileId] = memoryMetadata[profileId].filter((d) => d.id !== docId);
-    }
-    delete memoryBlobs[docId];
-    return true;
   }
+
+  if (memoryMetadata[profileId]) {
+    memoryMetadata[profileId] = memoryMetadata[profileId].filter((d) => d.id !== docId);
+  }
+  delete memoryBlobs[docId];
+  return true;
 }
 
 // ==========================================
@@ -408,7 +456,7 @@ export async function deleteDocument(
 export async function getVaultFolders(profileId: string): Promise<VaultFolder[]> {
   if (!profileId) return [];
 
-  try {
+  if (isIndexedDBAvailable()) {
     const db = await openVaultDB();
     return await new Promise<VaultFolder[]>((resolve, reject) => {
       const tx = db.transaction(STORE_FOLDERS, 'readonly');
@@ -420,11 +468,11 @@ export async function getVaultFolders(profileId: string): Promise<VaultFolder[]>
         const results = (request.result as VaultFolder[]) || [];
         resolve(results);
       };
-      request.onerror = () => reject(request.error);
+      request.onerror = () => reject(request.error || new Error('Failed to retrieve vault folders'));
     });
-  } catch {
-    return memoryFolders[profileId] || [];
   }
+
+  return memoryFolders[profileId] || [];
 }
 
 export async function createVaultFolder(
@@ -440,15 +488,15 @@ export async function createVaultFolder(
     createdAt: Date.now(),
   };
 
-  try {
+  if (isIndexedDBAvailable()) {
     const db = await openVaultDB();
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction(STORE_FOLDERS, 'readwrite');
       tx.objectStore(STORE_FOLDERS).put(folder);
       tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
+      tx.onerror = () => reject(tx.error || new Error('Failed to create folder'));
     });
-  } catch {
+  } else {
     if (!memoryFolders[profileId]) memoryFolders[profileId] = [];
     memoryFolders[profileId].push(folder);
   }
@@ -460,21 +508,21 @@ export async function deleteVaultFolder(
   profileId: string,
   folderId: string
 ): Promise<boolean> {
-  try {
+  if (isIndexedDBAvailable()) {
     const db = await openVaultDB();
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction(STORE_FOLDERS, 'readwrite');
       tx.objectStore(STORE_FOLDERS).delete(folderId);
       tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
+      tx.onerror = () => reject(tx.error || new Error('Failed to delete folder'));
     });
     return true;
-  } catch {
-    if (memoryFolders[profileId]) {
-      memoryFolders[profileId] = memoryFolders[profileId].filter((f) => f.id !== folderId);
-    }
-    return true;
   }
+
+  if (memoryFolders[profileId]) {
+    memoryFolders[profileId] = memoryFolders[profileId].filter((f) => f.id !== folderId);
+  }
+  return true;
 }
 
 // ==========================================
@@ -617,19 +665,40 @@ export async function clearVaultStorage(profileId?: string): Promise<void> {
     Object.keys(memoryFolders).forEach((k) => delete memoryFolders[k]);
   }
 
-  try {
-    const db = await openVaultDB();
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction([STORE_METADATA, STORE_BLOBS, STORE_FOLDERS], 'readwrite');
-      if (!profileId) {
-        tx.objectStore(STORE_METADATA).clear();
-        tx.objectStore(STORE_BLOBS).clear();
-        tx.objectStore(STORE_FOLDERS).clear();
-      }
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
-  } catch {
-    // ignore
+  if (isIndexedDBAvailable()) {
+    try {
+      const db = await openVaultDB();
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction([STORE_METADATA, STORE_BLOBS, STORE_FOLDERS], 'readwrite');
+        if (!profileId) {
+          tx.objectStore(STORE_METADATA).clear();
+          tx.objectStore(STORE_BLOBS).clear();
+          tx.objectStore(STORE_FOLDERS).clear();
+        } else {
+          const metaStore = tx.objectStore(STORE_METADATA);
+          const blobStore = tx.objectStore(STORE_BLOBS);
+          const folderStore = tx.objectStore(STORE_FOLDERS);
+
+          const metaReq = metaStore.index('by_profile').getAllKeys(IDBKeyRange.only(profileId));
+          metaReq.onsuccess = () => {
+            const keys = (metaReq.result as string[]) || [];
+            keys.forEach((k) => {
+              metaStore.delete(k);
+              blobStore.delete(k);
+            });
+          };
+
+          const fReq = folderStore.index('by_profile').getAllKeys(IDBKeyRange.only(profileId));
+          fReq.onsuccess = () => {
+            const fKeys = (fReq.result as string[]) || [];
+            fKeys.forEach((k) => folderStore.delete(k));
+          };
+        }
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      });
+    } catch {
+      // ignore
+    }
   }
 }

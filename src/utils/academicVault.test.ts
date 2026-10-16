@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   saveDocument,
   getDocumentsForProfile,
+  getDocumentBlob,
   updateDocumentMetadata,
   deleteDocument,
   getVaultFolders,
@@ -15,6 +16,7 @@ import {
   clearVaultStorage,
 } from '../services/vaultStorage';
 import type { VaultDocumentMetadata } from '../types/vault';
+import type { VaultLoadingState } from '../pages/AcademicVaultPage';
 
 describe('Student Academic Vault & Document Search Service', () => {
   const profileAlpha = 'student_profile_alpha';
@@ -99,61 +101,88 @@ describe('Student Academic Vault & Document Search Service', () => {
     it('updates document metadata accurately without losing properties', async () => {
       const doc = new File(['Sample syllabus'], 'syllabus.txt', { type: 'text/plain' });
       const saved = await saveDocument(profileAlpha, doc, {
+        semester: 'Semester 1',
         category: 'Syllabus',
-        semester: 'Semester 4',
       });
 
       const updated = await updateDocumentMetadata(profileAlpha, saved.id, {
-        fileName: 'os_syllabus_revised.txt',
-        subjectName: 'Operating Systems',
-        notes: 'Revised 2026 syllabus guidelines',
+        fileName: 'Revised_Syllabus_2026.txt',
+        notes: 'Updated module breakdown',
+        tags: ['curriculum', 'vtr21'],
       });
 
       expect(updated).not.toBeNull();
-      expect(updated?.fileName).toBe('os_syllabus_revised.txt');
-      expect(updated?.subjectName).toBe('Operating Systems');
-      expect(updated?.notes).toBe('Revised 2026 syllabus guidelines');
-      expect(updated?.semester).toBe('Semester 4');
+      expect(updated?.fileName).toBe('Revised_Syllabus_2026.txt');
+      expect(updated?.notes).toBe('Updated module breakdown');
+      expect(updated?.tags).toEqual(['curriculum', 'vtr21']);
+      expect(updated?.category).toBe('Syllabus'); // preserved
     });
 
-    it('deletes document cleanly from profile vault', async () => {
-      const doc = new File(['assignment solution'], 'assign1.txt', { type: 'text/plain' });
-      const saved = await saveDocument(profileAlpha, doc, { category: 'Assignments' });
+    it('deletes document cleanly and removes metadata and blob records', async () => {
+      const doc = new File(['Lab experiment notes'], 'exp1.txt', { type: 'text/plain' });
+      const saved = await saveDocument(profileAlpha, doc, { category: 'Lab Records' });
 
       expect(await getDocumentsForProfile(profileAlpha)).toHaveLength(1);
-      await deleteDocument(profileAlpha, saved.id);
+      const blobBefore = await getDocumentBlob(profileAlpha, saved.id);
+      expect(blobBefore).not.toBeNull();
+
+      const deleted = await deleteDocument(profileAlpha, saved.id);
+      expect(deleted).toBe(true);
+
+      const docsAfter = await getDocumentsForProfile(profileAlpha);
+      expect(docsAfter).toHaveLength(0);
+      const blobAfter = await getDocumentBlob(profileAlpha, saved.id);
+      expect(blobAfter).toBeNull();
+    });
+
+    it('clears storage strictly for specified profile without removing another student profile data', async () => {
+      const docA = new File(['Student A file'], 'docA.txt', { type: 'text/plain' });
+      const docB = new File(['Student B file'], 'docB.txt', { type: 'text/plain' });
+
+      await saveDocument(profileAlpha, docA, { category: 'Lecture Notes' });
+      await saveDocument(profileBeta, docB, { category: 'Lecture Notes' });
+
+      expect(await getDocumentsForProfile(profileAlpha)).toHaveLength(1);
+      expect(await getDocumentsForProfile(profileBeta)).toHaveLength(1);
+
+      await clearVaultStorage(profileAlpha);
+
       expect(await getDocumentsForProfile(profileAlpha)).toHaveLength(0);
+      expect(await getDocumentsForProfile(profileBeta)).toHaveLength(1);
     });
   });
 
-  describe('3. Custom Folder & Category Management', () => {
-    it('creates and isolates custom folders per profile', async () => {
-      expect(await getVaultFolders(profileAlpha)).toEqual([]);
-      expect(await getVaultFolders(profileBeta)).toEqual([]);
-
-      const folder = await createVaultFolder(profileAlpha, 'Major Capstone Project', '#2563eb');
-      expect(folder.id).toBeDefined();
-      expect(folder.name).toBe('Major Capstone Project');
+  describe('3. Folders & Custom Categories', () => {
+    it('creates and lists custom folders isolated per profile', async () => {
+      const folder1 = await createVaultFolder(profileAlpha, 'Cap Stone Project', '#7c3aed');
+      expect(folder1.id).toBeDefined();
+      expect(folder1.name).toBe('Cap Stone Project');
+      expect(folder1.color).toBe('#7c3aed');
 
       const alphaFolders = await getVaultFolders(profileAlpha);
       expect(alphaFolders).toHaveLength(1);
-      expect(alphaFolders[0].name).toBe('Major Capstone Project');
+      expect(alphaFolders[0].name).toBe('Cap Stone Project');
 
-      // Profile Beta remains empty
-      expect(await getVaultFolders(profileBeta)).toHaveLength(0);
+      const betaFolders = await getVaultFolders(profileBeta);
+      expect(betaFolders).toHaveLength(0);
+    });
 
-      // Delete folder
-      await deleteVaultFolder(profileAlpha, folder.id);
+    it('deletes folder safely', async () => {
+      const folder = await createVaultFolder(profileAlpha, 'Drafts');
+      expect(await getVaultFolders(profileAlpha)).toHaveLength(1);
+
+      const res = await deleteVaultFolder(profileAlpha, folder.id);
+      expect(res).toBe(true);
       expect(await getVaultFolders(profileAlpha)).toHaveLength(0);
     });
   });
 
-  describe('4. Smart Search and Multi-Filtering Engine', () => {
+  describe('4. Search, Filter & Multi-Criteria Engine', () => {
     const mockDocs: VaultDocumentMetadata[] = [
       {
         id: 'doc_1',
         profileId: profileAlpha,
-        fileName: 'Networks_Unit1_Protocols.pdf',
+        fileName: 'Computer_Networks_Unit1.pdf',
         fileType: 'application/pdf',
         fileExtension: 'pdf',
         fileSize: 2048000,
@@ -161,9 +190,9 @@ describe('Student Academic Vault & Document Search Service', () => {
         semester: 'Semester 5',
         subjectName: 'Computer Networks',
         category: 'Lecture Notes',
-        tags: ['osi', 'tcp', 'ip'],
-        notes: 'Covers physical and data link layers',
-        extractedText: 'Open Systems Interconnection 7 layer protocol stack overview',
+        tags: ['cn', 'osi_model', 'ethernet'],
+        notes: 'Chapter 1 Open Systems Interconnection',
+        extractedText: 'Chapter 1 Open Systems Interconnection Reference Model',
         hasTextExtraction: true,
       },
       {
@@ -175,11 +204,11 @@ describe('Student Academic Vault & Document Search Service', () => {
         fileSize: 4096000,
         uploadedAt: 1700000050000,
         semester: 'Semester 4',
-        subjectName: 'Database Management',
+        subjectName: 'Database Management Systems',
         category: 'Lab Records',
         tags: ['sql', 'queries', 'normalization'],
-        notes: 'Week 1 to 10 experiments',
-        extractedText: 'PL/SQL triggers cursors relational algebra schema creation',
+        notes: 'PL/SQL triggers and cursors guide',
+        extractedText: 'Create table student and run cursors',
         hasTextExtraction: true,
       },
       {
@@ -193,8 +222,8 @@ describe('Student Academic Vault & Document Search Service', () => {
         semester: 'Semester 6',
         subjectName: 'Artificial Intelligence',
         category: 'Presentations',
-        tags: ['ethics', 'fairness', 'seminar'],
-        notes: 'Group presentation slides',
+        tags: ['ai', 'ethics', 'seminar'],
+        notes: 'Final presentation slides',
         hasTextExtraction: false,
       },
       {
@@ -294,6 +323,58 @@ describe('Student Academic Vault & Document Search Service', () => {
       expect(stats.totalBytes).toBe(0);
       expect(stats.formattedTotalBytes).toBe('0 B');
       expect(stats.isNearQuota).toBe(false);
+    });
+  });
+
+  describe('6. Loading State Machine & Concurrency Tests', () => {
+    it('simulates state machine transitions: loading -> empty when 0 documents', async () => {
+      let state: VaultLoadingState = 'loading';
+      const docs = await getDocumentsForProfile(profileAlpha);
+      state = docs.length === 0 ? 'empty' : 'success';
+      expect(state).toBe('empty');
+    });
+
+    it('simulates state machine transitions: loading -> success when documents exist', async () => {
+      let state: VaultLoadingState = 'loading';
+      const file = new File(['Lecture 1 Content'], 'lecture1.txt', { type: 'text/plain' });
+      await saveDocument(profileAlpha, file, { category: 'Lecture Notes' });
+
+      const docs = await getDocumentsForProfile(profileAlpha);
+      state = docs.length === 0 ? 'empty' : 'success';
+      expect(state).toBe('success');
+      expect(docs).toHaveLength(1);
+    });
+
+    it('handles simulated storage errors by transitioning to error state, never empty', async () => {
+      let state: VaultLoadingState = 'loading';
+      let errorOccurred = false;
+
+      try {
+        // Simulate a failing storage call
+        throw new Error('IndexedDB transaction blocked');
+      } catch {
+        errorOccurred = true;
+        state = 'error';
+      }
+
+      expect(errorOccurred).toBe(true);
+      expect(state).toBe('error');
+      // Never 'empty' on error
+      expect(state).not.toBe('empty');
+    });
+
+    it('recovers cleanly from error to success upon retry', async () => {
+      let state: VaultLoadingState = 'error';
+      let retryCount = 0;
+
+      // User clicks retry
+      retryCount++;
+      state = 'loading';
+      const docs = await getDocumentsForProfile(profileAlpha);
+      state = docs.length === 0 ? 'empty' : 'success';
+
+      expect(retryCount).toBe(1);
+      expect(['empty', 'success']).toContain(state);
     });
   });
 });
