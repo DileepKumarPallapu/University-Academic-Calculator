@@ -64,6 +64,12 @@ export function safeGetItem(key: string): string | null {
       return memoryStore[key] || null;
     }
   }
+  if (typeof globalThis !== 'undefined' && typeof (globalThis as any).localStorage !== 'undefined') {
+    try {
+      const val = (globalThis as any).localStorage.getItem(key);
+      if (val !== null) return val;
+    } catch {}
+  }
   return memoryStore[key] || null;
 }
 
@@ -74,6 +80,11 @@ export function safeSetItem(key: string, value: string): void {
     } catch {
       memoryStore[key] = value;
     }
+  } else if (typeof globalThis !== 'undefined' && typeof (globalThis as any).localStorage !== 'undefined') {
+    try {
+      (globalThis as any).localStorage.setItem(key, value);
+    } catch {}
+    memoryStore[key] = value;
   } else {
     memoryStore[key] = value;
   }

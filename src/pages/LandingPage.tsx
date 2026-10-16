@@ -148,7 +148,67 @@ export const LandingPage: React.FC = () => {
         </div>
       </section>
 
-      {/* 3. SEPARATE, CLEARLY DISTINGUISHED ENTRY: VEL TECH AMS PORTAL */}
+      {/* 3. SEPARATE, CLEARLY NAMED SECTION: ACADEMIC INTELLIGENCE & SIMULATOR */}
+      <section className="flex flex-col gap-4">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+            Academic Intelligence & Simulator
+          </span>
+          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+            Analytics Suite
+          </span>
+        </div>
+
+        <div className="rounded-3xl border border-[var(--border-primary)] bg-[var(--surface)] p-6 sm:p-8 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+          <div className="flex items-start gap-4 sm:gap-5">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white flex items-center justify-center shrink-0 shadow-md">
+              <TrendingUp className="w-7 h-7" />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-xl font-bold text-[var(--text-primary)] tracking-tight">
+                  Academic Intelligence & What-If Simulator
+                </h3>
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-purple-500/10 text-purple-600 dark:text-purple-400">
+                  Analytics • Goal Planning
+                </span>
+              </div>
+
+              <div className="text-sm font-semibold text-[var(--text-primary)]">
+                Unified analytics, trajectory charts, and hypothetical grade modeling.
+              </div>
+
+              <p className="text-xs text-[var(--text-secondary)] max-w-xl leading-relaxed">
+                Derive real SGPA/CGPA standings from saved calculations, simulate hypothetical semester outcomes with regulation-specific grading without mutating saved records, and calculate exact attendance recovery goals.
+              </p>
+
+              <div className="flex items-center gap-3 text-[11px] text-[var(--text-tertiary)] mt-1 flex-wrap">
+                <span className="flex items-center gap-1">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+                  100% Client-Side Private
+                </span>
+                <span>•</span>
+                <span>Multi-Scenario Comparison</span>
+                <span>•</span>
+                <span>Printable Summary</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0 w-full md:w-auto">
+            <Link
+              to="/intelligence"
+              className="apple-btn-primary text-xs h-11 px-6 gap-2 font-semibold w-full sm:w-auto shadow-sm"
+            >
+              <span>Open Intelligence</span>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* 4. SEPARATE, CLEARLY DISTINGUISHED ENTRY: VEL TECH AMS PORTAL */}
       <section className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">

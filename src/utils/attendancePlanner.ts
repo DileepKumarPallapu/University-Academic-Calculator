@@ -361,3 +361,181 @@ export function getStatusDetails(status: AttendanceStatus, diff: number | null):
       };
   }
 }
+
+export interface AttendanceGoalPlanOptions {
+  allowExtraClasses?: boolean;
+  isPolicyConfirmed?: boolean;
+  horizonLimit?: number;
+}
+
+export interface AttendanceGoalPlanResult {
+  officialTotalSessions: number;
+  countablePresentSessions: number;
+  desiredPercentage: number;
+  plannedFutureClasses: number;
+  currentPercentage: number | null;
+  additionalClassesNeeded: number;
+  isTargetAchievable: boolean;
+  canReachTargetWithPlannedClasses: boolean;
+  classesNeededOutOfPlanned: number | null;
+  projectedPercentageIfAllPlannedAttended: number | null;
+  isEstimate: boolean;
+  status: AttendanceStatus;
+  statusDetails: AttendanceStatusDetails;
+  explanation: string;
+  policyNote?: string;
+}
+
+/**
+ * Shared Attendance Goal Planning Service
+ * Computes consecutive classes needed and projected attendance with planned future sessions.
+ * Respects configured treatment of extra classes, caps displayed attendance strictly at 100%,
+ * and flags unconfirmed policy results as estimates.
+ */
+export function calculateAttendanceGoalPlan(
+  officialTotalSessions: number,
+  countablePresentSessions: number,
+  desiredPercentage: number,
+  plannedFutureClasses: number = 0,
+  options: AttendanceGoalPlanOptions = {}
+): AttendanceGoalPlanResult {
+  const {
+    allowExtraClasses = false,
+    isPolicyConfirmed = true,
+    horizonLimit = 200,
+  } = options;
+
+  const isEstimate = !isPolicyConfirmed;
+  const safeFuture = Math.max(0, Math.floor(plannedFutureClasses || 0));
+  const safeDesired = Math.max(0, Math.min(100, desiredPercentage));
+
+  if (officialTotalSessions <= 0) {
+    const statusDetails: AttendanceStatusDetails = {
+      status: 'Insufficient Data',
+      label: 'Not calculated',
+      badgeClass: 'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300 border-neutral-200 dark:border-neutral-700',
+      description: 'Enter your session numbers to calculate required attendance.',
+    };
+    return {
+      officialTotalSessions: 0,
+      countablePresentSessions: 0,
+      desiredPercentage: safeDesired,
+      plannedFutureClasses: safeFuture,
+      currentPercentage: null,
+      additionalClassesNeeded: 0,
+      isTargetAchievable: true,
+      canReachTargetWithPlannedClasses: true,
+      classesNeededOutOfPlanned: null,
+      projectedPercentageIfAllPlannedAttended: null,
+      isEstimate,
+      status: 'Insufficient Data',
+      statusDetails,
+      explanation: 'No official sessions have been conducted yet.',
+    };
+  }
+
+  // Treatment of extra classes: cap countable at official unless permitted
+  let effectiveAttended = Math.max(0, countablePresentSessions);
+  let policyNote: string | undefined;
+
+  if (effectiveAttended > officialTotalSessions) {
+    if (!allowExtraClasses) {
+      effectiveAttended = officialTotalSessions;
+      policyNote = 'Extra sessions beyond official total are excluded from countable attendance per standard institutional policy.';
+    } else {
+      policyNote = 'Extra sessions are permitted and counted towards official attendance according to selected institutional rule.';
+    }
+  }
+
+  const rawPct = (effectiveAttended / officialTotalSessions) * 100;
+  const currentPercentage = roundTo(Math.min(100, rawPct), 2);
+  const diffFromTarget = roundTo(currentPercentage - safeDesired, 2);
+
+  // Recovery calculation: x consecutive classes needed
+  let additionalClassesNeeded = 0;
+  let isTargetAchievable = true;
+  let explanation = '';
+
+  if (currentPercentage >= safeDesired) {
+    additionalClassesNeeded = 0;
+    isTargetAchievable = true;
+    explanation = `You are currently at ${currentPercentage}%, which meets your ${safeDesired}% target.`;
+  } else if (safeDesired >= 100) {
+    const isFull = effectiveAttended === officialTotalSessions;
+    additionalClassesNeeded = isFull ? 0 : Infinity;
+    isTargetAchievable = isFull;
+    explanation = isFull
+      ? 'You have maintained 100% attendance.'
+      : 'A 100% attendance target cannot be reached because sessions have already been missed. Attending all future classes will yield the maximum possible percentage.';
+  } else {
+    // Formula: (effectiveAttended + x) / (officialTotalSessions + x) >= safeDesired / 100
+    // x >= (safeDesired * officialTotalSessions - 100 * effectiveAttended) / (100 - safeDesired)
+    const numerator = safeDesired * officialTotalSessions - 100 * effectiveAttended;
+    const denominator = 100 - safeDesired;
+    const rawX = numerator / denominator;
+    const x = Math.max(0, Math.ceil(rawX - 1e-9));
+
+    additionalClassesNeeded = x;
+    isTargetAchievable = x <= horizonLimit;
+
+    const projectedPct = roundTo(Math.min(100, ((effectiveAttended + x) / (officialTotalSessions + x)) * 100), 2);
+    explanation = isTargetAchievable
+      ? `Attend the next ${x} consecutive ${x === 1 ? 'class' : 'classes'} to reach ${projectedPct}% (≥ ${safeDesired}% target).`
+      : `Reaching ${safeDesired}% requires ${x} consecutive classes, which exceeds the planning horizon limit (${horizonLimit} classes).`;
+  }
+
+  // Future planned classes simulation
+  let projectedPercentageIfAllPlannedAttended: number | null = null;
+  let canReachTargetWithPlannedClasses = true;
+  let classesNeededOutOfPlanned: number | null = null;
+
+  if (safeFuture > 0) {
+    const totalWithFuture = officialTotalSessions + safeFuture;
+    const attendedAll = effectiveAttended + safeFuture;
+    projectedPercentageIfAllPlannedAttended = roundTo(Math.min(100, (attendedAll / totalWithFuture) * 100), 2);
+
+    if (currentPercentage >= safeDesired) {
+      canReachTargetWithPlannedClasses = true;
+      // How many can miss? Or min required?
+      // (effectiveAttended + k) / totalWithFuture >= safeDesired / 100
+      const minK = Math.max(0, Math.ceil(((safeDesired * totalWithFuture) / 100) - effectiveAttended - 1e-9));
+      classesNeededOutOfPlanned = Math.min(safeFuture, minK);
+    } else {
+      const minK = Math.ceil(((safeDesired * totalWithFuture) / 100) - effectiveAttended - 1e-9);
+      if (minK <= safeFuture) {
+        canReachTargetWithPlannedClasses = true;
+        classesNeededOutOfPlanned = Math.max(0, minK);
+      } else {
+        canReachTargetWithPlannedClasses = false;
+        classesNeededOutOfPlanned = null;
+      }
+    }
+  }
+
+  const status = evaluateAttendanceStatus(
+    currentPercentage,
+    safeDesired,
+    additionalClassesNeeded,
+    isTargetAchievable
+  );
+  const statusDetails = getStatusDetails(status, diffFromTarget);
+
+  return {
+    officialTotalSessions,
+    countablePresentSessions: effectiveAttended,
+    desiredPercentage: safeDesired,
+    plannedFutureClasses: safeFuture,
+    currentPercentage,
+    additionalClassesNeeded,
+    isTargetAchievable,
+    canReachTargetWithPlannedClasses,
+    classesNeededOutOfPlanned,
+    projectedPercentageIfAllPlannedAttended,
+    isEstimate,
+    status,
+    statusDetails,
+    explanation,
+    policyNote,
+  };
+}
+

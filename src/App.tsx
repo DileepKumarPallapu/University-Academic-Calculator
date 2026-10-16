@@ -21,6 +21,9 @@ import { AMS_FEATURE_ENABLED } from './config/features';
 import { SemesterPlannerPage } from './pages/SemesterPlannerPage';
 import { MarksForecasterPage } from './pages/MarksForecasterPage';
 import { AcademicReportsPage } from './pages/AcademicReportsPage';
+import { AcademicIntelligencePage } from './pages/AcademicIntelligencePage';
+import { WhatIfPage } from './pages/WhatIfPage';
+import { AttendancePlannerPage } from './pages/AttendancePlannerPage';
 
 export function App() {
   useEffect(() => {
@@ -43,6 +46,12 @@ export function App() {
                 <Route path="/cgpa" element={<CGPACalculatorPage />} />
                 <Route path="/attendance" element={<AttendancePage />} />
                 <Route path="/credits" element={<CreditsPlannerPage />} />
+                <Route path="/intelligence" element={<AcademicIntelligencePage />} />
+                <Route path="/academic-intelligence" element={<AcademicIntelligencePage />} />
+                <Route path="/analytics" element={<AcademicIntelligencePage />} />
+                <Route path="/what-if" element={<WhatIfPage />} />
+                <Route path="/simulator" element={<WhatIfPage />} />
+                <Route path="/attendance-planner" element={<AttendancePlannerPage />} />
                 <Route path="/planner" element={<SemesterPlannerPage />} />
                 <Route path="/forecaster" element={<MarksForecasterPage />} />
                 <Route path="/reports" element={<AcademicReportsPage />} />

@@ -17,6 +17,7 @@ export const Navbar: React.FC = () => {
     { to: '/gpa', label: 'SGPA' },
     { to: '/cgpa', label: 'CGPA' },
     { to: '/attendance', label: 'Attendance' },
+    { to: '/intelligence', label: 'Intelligence' },
     ...(AMS_FEATURE_ENABLED
       ? [{ to: '/ams-portal', label: 'AMS Portal', isComingSoon: false }]
       : [{ to: '/ams-portal', label: 'AMS Portal', isComingSoon: true }]),

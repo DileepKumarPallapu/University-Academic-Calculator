@@ -8,45 +8,44 @@ import {
 } from 'lucide-react';
 import { useProfile } from '../context/ProfileContext';
 import { safeGetItem } from '../services/catalogueStorage';
-import { getAmsDashboardData, calculateAmsAttendancePercentage } from '../services/amsStorage';
 import { getCalculationsByProfile } from '../services/db';
+import {
+  calculateCreditSummary,
+  calculateCategoryProgress,
+  COLLEGE_CHART_TEMPLATE,
+} from '../utils/creditCalculations';
+import { extractPriorSemestersSummary } from '../utils/academicIntelligence';
 
 type ReportSection = 'all' | 'attendance' | 'internals' | 'gpa' | 'credits';
 
 export const AcademicReportsPage: React.FC = () => {
   const { activeProfile } = useProfile();
-
   const [selectedSection, setSelectedSection] = useState<ReportSection>('all');
+  const [reportDate, setReportDate] = useState<string>('');
 
   // Load profile-isolated datasets
   const [attendanceData, setAttendanceData] = useState<any[]>([]);
-  const [internalsData, setInternalsData] = useState<any[]>([]);
-  const [semesterResults, setSemesterResults] = useState<any[]>([]);
   const [creditSubjects, setCreditSubjects] = useState<any[]>([]);
   const [savedCalcs, setSavedCalcs] = useState<any[]>([]);
+  const [internalDraft, setInternalDraft] = useState<any>(null);
 
   useEffect(() => {
+    setReportDate(new Date().toLocaleString());
     const profileId = activeProfile.id;
 
-    // 1. AMS Dashboard
-    const ams = getAmsDashboardData(profileId);
-    setInternalsData(ams.internalMarks || []);
-    setSemesterResults(ams.semesterResults || []);
-
-    // 2. Attendance (From Attendance page or AMS)
+    // 1. Attendance (From profile's attendance storage)
     const rawAtt = safeGetItem(`academic_attendance_subjects_${profileId}`);
     if (rawAtt) {
       try {
-        const parsed = JSON.parse(rawAtt);
-        setAttendanceData(parsed.length > 0 ? parsed : ams.attendance);
+        setAttendanceData(JSON.parse(rawAtt));
       } catch {
-        setAttendanceData(ams.attendance || []);
+        setAttendanceData([]);
       }
     } else {
-      setAttendanceData(ams.attendance || []);
+      setAttendanceData([]);
     }
 
-    // 3. Credits
+    // 2. Credits (From profile's credits storage)
     const rawCred = safeGetItem(`academic_credits_subjects_${profileId}`);
     if (rawCred) {
       try {
@@ -58,80 +57,111 @@ export const AcademicReportsPage: React.FC = () => {
       setCreditSubjects([]);
     }
 
-    // 4. Calculations
+    // 3. Saved Calculations
     getCalculationsByProfile(profileId).then((calcs) => {
       setSavedCalcs(calcs);
     });
+
+    // 4. Internal Draft (if user calculated internals)
+    const rawInt = safeGetItem(`academic_draft_internal_${profileId}`);
+    if (rawInt) {
+      try {
+        setInternalDraft(JSON.parse(rawInt));
+      } catch {
+        setInternalDraft(null);
+      }
+    }
   }, [activeProfile.id]);
 
-  // Derived GPA stats
   // Derived GPA stats
   const sgpaCalcs = useMemo(() => {
     return savedCalcs.filter((c) => c.type === 'sgpa');
   }, [savedCalcs]);
 
+  const cgpaCalcs = useMemo(() => {
+    return savedCalcs.filter((c) => c.type === 'cgpa');
+  }, [savedCalcs]);
+
+  const priorSummary = useMemo(() => {
+    return extractPriorSemestersSummary(savedCalcs, creditSubjects);
+  }, [savedCalcs, creditSubjects]);
+
   // Derived Credits stats
-  const totalEarnedCredits = useMemo(() => {
-    let earned = 0;
-    for (const c of creditSubjects) {
-      const cr = Number(c.credits) || 0;
-      if (c.status === 'Passed' || c.earnedCredits > 0) {
-        earned += c.earnedCredits !== undefined ? Number(c.earnedCredits) : cr;
-      }
-    }
-    return earned;
+  const targetCredits = activeProfile.customGraduationCredits || 160;
+  const creditSummary = useMemo(() => {
+    return calculateCreditSummary(creditSubjects, targetCredits, COLLEGE_CHART_TEMPLATE);
+  }, [creditSubjects, targetCredits]);
+
+  const categoryProgress = useMemo(() => {
+    return calculateCategoryProgress(COLLEGE_CHART_TEMPLATE, creditSubjects);
   }, [creditSubjects]);
 
-  const targetAttendance = activeProfile.targetAttendance || 75;
-  const targetCredits = activeProfile.customGraduationCredits || 160;
+  // Derived Attendance stats
+  const attendanceSummary = useMemo(() => {
+    let totalConducted = 0;
+    let totalAttended = 0;
+    for (const item of attendanceData) {
+      const cond = Number(item.conducted || item.totalSessions) || 0;
+      const att = Number(item.attended || item.presentSessions) || 0;
+      if (cond > 0) {
+        totalConducted += cond;
+        totalAttended += Math.min(cond, att);
+      }
+    }
+    const pct = totalConducted > 0 ? Math.min(100, Math.round((totalAttended / totalConducted) * 10000) / 100) : null;
+    return {
+      totalConducted,
+      totalAttended,
+      percentage: pct,
+    };
+  }, [attendanceData]);
 
-  // Print Report Handler
+  const targetAttendance = activeProfile.targetAttendance || 75;
+
   const handlePrint = () => {
     window.print();
   };
 
   return (
-    <div className="w-full max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-8 animate-appleFadeIn">
-      {/* 1. Header (No Print on print) */}
+    <div className="w-full max-w-[1100px] mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-8 animate-appleFadeIn">
+      {/* 1. Header (Excluded on print) */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--border-secondary)] pb-6 no-print">
         <div>
           <div className="flex items-center gap-2 mb-1.5">
             <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-black/5 dark:bg-white/10 text-[var(--text-secondary)]">
               {activeProfile.name} • {activeProfile.regulation}
             </span>
-            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-              Verified Academic Report
+            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-500/10 text-blue-600 dark:text-blue-400">
+              Printable Summary
             </span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[var(--text-primary)]">
-            Academic Performance Reports
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[var(--text-primary)]">
+            Academic Performance Summary
           </h1>
           <p className="text-xs sm:text-sm text-[var(--text-secondary)] mt-1">
-            Official summary of attendance, internal evaluations, GPA transcripts, and degree credit progress.
+            Generated summary of student-entered calculations, attendance records, and curriculum credits.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={handlePrint}
-            className="apple-btn-primary text-xs h-9 px-4 gap-2 font-medium shrink-0"
-          >
-            <Printer className="w-4 h-4" />
-            <span>Print / Save PDF</span>
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={handlePrint}
+          className="apple-btn-primary text-xs h-10 px-5 gap-2 font-semibold shadow-xs"
+        >
+          <Printer className="w-4 h-4" />
+          <span>Print / Save as PDF</span>
+        </button>
       </div>
 
-      {/* 2. Section Selector (No Print) */}
+      {/* 2. Section Selector (Excluded on print) */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 border-b border-[var(--border-secondary)] text-xs no-print">
         {(
           [
-            { id: 'all', label: 'All Reports' },
-            { id: 'attendance', label: 'Attendance Report' },
+            { id: 'all', label: 'All Sections' },
+            { id: 'attendance', label: 'Attendance' },
             { id: 'internals', label: 'Internal Marks' },
             { id: 'gpa', label: 'SGPA & CGPA' },
-            { id: 'credits', label: 'Credit Progress' },
+            { id: 'credits', label: 'Credit Audit' },
           ] as const
         ).map((tab) => (
           <button
@@ -149,320 +179,209 @@ export const AcademicReportsPage: React.FC = () => {
         ))}
       </div>
 
-      {/* 3. REPORT DOCUMENT CONTAINER (Designed for Screen & Print) */}
+      {/* 3. REPORT DOCUMENT CONTAINER */}
       <div className="rounded-2xl bg-[var(--surface)] border border-[var(--border-primary)] shadow-sm p-6 sm:p-10 flex flex-col gap-8 text-[var(--text-primary)] print:border-none print:shadow-none print:p-0">
-        {/* Document University Letterhead */}
-        <div className="border-b-2 border-black dark:border-white pb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        {/* Document Header */}
+        <div className="border-b-2 border-black dark:border-white pb-6 flex flex-col sm:flex-row sm:items-start justify-between gap-4">
           <div>
-            <div className="text-[10px] uppercase font-bold tracking-wider text-[var(--text-secondary)]">
-              Official Student Academic Performance Record
+            <div className="text-[10px] uppercase font-bold tracking-wider text-[var(--text-tertiary)]">
+              Student Academic Performance Summary
             </div>
             <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-[var(--text-primary)] mt-1">
               {activeProfile.collegeName || 'Vel Tech Rangarajan Dr. Sagunthala R&D Institute of Science and Technology'}
             </h2>
-            <div className="text-xs text-[var(--text-secondary)] mt-1">
-              Degree: {activeProfile.degree} in {activeProfile.department || activeProfile.branch} • Regulation: {activeProfile.regulation}
+            <div className="text-xs text-[var(--text-secondary)] mt-1.5 space-y-0.5">
+              <div>
+                <strong>Program:</strong> {activeProfile.degree || 'B.Tech'} in{' '}
+                {activeProfile.department || activeProfile.branch || 'Engineering'}
+              </div>
+              <div>
+                <strong>Regulation:</strong> {activeProfile.regulation || 'VTR21'} •{' '}
+                <strong>Degree Pathway:</strong> {activeProfile.degreePathway.toUpperCase()}
+              </div>
             </div>
           </div>
 
-          <div className="text-left sm:text-right text-xs text-[var(--text-secondary)]">
-            <div className="font-semibold text-sm text-[var(--text-primary)]">
+          <div className="text-left sm:text-right text-xs text-[var(--text-secondary)] space-y-0.5">
+            <div className="font-bold text-sm text-[var(--text-primary)]">
               {activeProfile.name}
             </div>
-            <div>Register No: {activeProfile.rollNumber || 'Not Registered'}</div>
-            <div>Current Semester: {activeProfile.currentSemester || 5}</div>
-            <div className="text-[10px] text-[var(--text-tertiary)] mt-1">
-              Generated: {new Date().toLocaleDateString()}
+            <div>
+              <strong>Roll / Register No:</strong> {activeProfile.rollNumber || 'Not Specified'}
+            </div>
+            <div>
+              <strong>Current Semester:</strong> Semester {activeProfile.currentSemester || 1}
+            </div>
+            {activeProfile.academicYear && (
+              <div>
+                <strong>Academic Year:</strong> {activeProfile.academicYear}
+              </div>
+            )}
+            <div className="text-[10px] text-[var(--text-tertiary)] pt-1 font-mono">
+              Generated: {reportDate}
             </div>
           </div>
         </div>
 
-        {/* SECTION A: ATTENDANCE REPORT */}
+        {/* SECTION A: ATTENDANCE SUMMARY */}
         {(selectedSection === 'all' || selectedSection === 'attendance') && (
           <div className="flex flex-col gap-4">
             <div className="flex items-center justify-between border-b border-[var(--border-secondary)] pb-2">
-              <h3 className="text-base font-bold text-[var(--text-primary)] flex items-center gap-2">
-                <Percent className="w-4 h-4 text-blue-500" />
-                <span>Attendance Verification Report</span>
+              <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--text-primary)] flex items-center gap-2">
+                <Percent className="w-4 h-4 text-emerald-500" />
+                <span>Attendance Summary</span>
               </h3>
-              <span className="text-xs text-[var(--text-secondary)]">
-                Target: {targetAttendance}% Minimum
-              </span>
+              <div className="flex items-center gap-3 text-xs">
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-[var(--text-secondary)]">
+                  Source: Local Attendance Calculator
+                </span>
+                <span className="font-semibold text-[var(--text-secondary)]">
+                  Requirement: {targetAttendance}%
+                </span>
+              </div>
             </div>
 
             {attendanceData.length === 0 ? (
-              <div className="p-6 rounded-xl bg-[var(--bg-tertiary)]/50 text-center text-xs text-[var(--text-secondary)]">
-                No attendance data recorded. Connect College AMS or enter records in the Attendance Planner.
+              <div className="p-4 rounded-xl bg-[var(--bg-secondary)] text-center text-xs text-[var(--text-secondary)]">
+                No attendance records saved.
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="border-b border-[var(--border-secondary)] text-[var(--text-secondary)] font-semibold uppercase tracking-wider text-[10px]">
-                      <th className="py-2.5 px-3">Subject</th>
-                      <th className="py-2.5 px-3">Total Sessions</th>
-                      <th className="py-2.5 px-3">Present</th>
-                      <th className="py-2.5 px-3">Absent</th>
-                      <th className="py-2.5 px-3">Attendance %</th>
-                      <th className="py-2.5 px-3">Status</th>
-                      <th className="py-2.5 px-3 text-right">Data Source</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[var(--border-secondary)]">
-                    {attendanceData.map((item, idx) => {
-                      const total = item.officialTotalSessions || item.totalSessions || 0;
-                      const present = item.presentSessions || item.attendedSessions || 0;
-                      const absent = item.absentSessions !== undefined ? item.absentSessions : Math.max(0, total - present);
-                      const pct = calculateAmsAttendancePercentage(total, present);
+              <div className="flex flex-col gap-3">
+                <div className="grid grid-cols-3 gap-3 p-3 rounded-xl bg-[var(--bg-secondary)] text-xs">
+                  <div>
+                    <span className="text-[10px] text-[var(--text-tertiary)] uppercase font-semibold block">
+                      Total Sessions
+                    </span>
+                    <span className="text-base font-bold text-[var(--text-primary)] font-mono">
+                      {attendanceSummary.totalConducted}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-[var(--text-tertiary)] uppercase font-semibold block">
+                      Attended Sessions
+                    </span>
+                    <span className="text-base font-bold text-emerald-600 dark:text-emerald-400 font-mono">
+                      {attendanceSummary.totalAttended}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-[var(--text-tertiary)] uppercase font-semibold block">
+                      Overall Percentage
+                    </span>
+                    <span className="text-base font-bold text-[var(--text-primary)] font-mono">
+                      {attendanceSummary.percentage !== null ? `${attendanceSummary.percentage}%` : '—'}
+                    </span>
+                  </div>
+                </div>
 
-                      return (
-                        <tr key={item.id || idx}>
-                          <td className="py-2.5 px-3 font-semibold text-[var(--text-primary)]">
-                            {item.subjectName || item.name}
-                            {item.courseCode && (
-                              <span className="font-mono text-[10px] text-[var(--text-secondary)] block">
-                                {item.courseCode}
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-2.5 px-3 tabular-nums">{total}</td>
-                          <td className="py-2.5 px-3 tabular-nums text-emerald-600 dark:text-emerald-400 font-semibold">
-                            {present}
-                          </td>
-                          <td className="py-2.5 px-3 tabular-nums text-red-600 dark:text-red-400">
-                            {absent}
-                          </td>
-                          <td className="py-2.5 px-3 font-bold tabular-nums">
-                            {pct !== null ? `${pct}%` : '—'}
-                          </td>
-                          <td className="py-2.5 px-3">
-                            <span
-                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                                pct !== null && pct >= targetAttendance
-                                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                                  : 'bg-red-500/10 text-red-600 dark:text-red-400'
-                              }`}
-                            >
-                              {pct !== null && pct >= targetAttendance ? 'Eligible' : 'Shortage'}
-                            </span>
-                          </td>
-                          <td className="py-2.5 px-3 text-right">
-                            <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-zinc-100 dark:bg-zinc-800 text-[var(--text-secondary)]">
-                              {item.source || 'Manual Entry'}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-[var(--border-secondary)] text-[var(--text-secondary)] font-semibold uppercase tracking-wider text-[10px]">
+                        <th className="py-2 px-3">Subject / Course</th>
+                        <th className="py-2 px-3">Conducted</th>
+                        <th className="py-2 px-3">Attended</th>
+                        <th className="py-2 px-3">Percentage</th>
+                        <th className="py-2 px-3">Standing</th>
+                        <th className="py-2 px-3 text-right">Data Source</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[var(--border-secondary)]">
+                      {attendanceData.map((item, idx) => {
+                        const total = Number(item.conducted || item.totalSessions) || 0;
+                        const present = Number(item.attended || item.presentSessions) || 0;
+                        const pct = total > 0 ? Math.min(100, Math.round((present / total) * 10000) / 100) : 0;
+                        const isEligible = pct >= targetAttendance;
 
-        {/* SECTION B: INTERNAL MARKS REPORT */}
-        {(selectedSection === 'all' || selectedSection === 'internals') && (
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center justify-between border-b border-[var(--border-secondary)] pb-2">
-              <h3 className="text-base font-bold text-[var(--text-primary)] flex items-center gap-2">
-                <Calculator className="w-4 h-4 text-purple-500" />
-                <span>Internal Marks & Evaluation Report</span>
-              </h3>
-            </div>
-
-            {internalsData.length === 0 ? (
-              <div className="p-6 rounded-xl bg-[var(--bg-tertiary)]/50 text-center text-xs text-[var(--text-secondary)]">
-                No internal marks synced. Connect College AMS to retrieve official internal assessment records.
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="border-b border-[var(--border-secondary)] text-[var(--text-secondary)] font-semibold uppercase tracking-wider text-[10px]">
-                      <th className="py-2.5 px-3">Subject</th>
-                      <th className="py-2.5 px-3">Assessment Type</th>
-                      <th className="py-2.5 px-3">Marks Obtained</th>
-                      <th className="py-2.5 px-3">Maximum</th>
-                      <th className="py-2.5 px-3">Percentage</th>
-                      <th className="py-2.5 px-3 text-right">Provenance</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[var(--border-secondary)]">
-                    {internalsData.map((item, idx) => {
-                      const pct = item.maxMarks > 0 ? Math.round((item.marksObtained / item.maxMarks) * 100) : 0;
-                      return (
-                        <tr key={item.id || idx}>
-                          <td className="py-2.5 px-3 font-semibold text-[var(--text-primary)]">
-                            {item.subjectName}
-                            {item.courseCode && (
-                              <span className="font-mono text-[10px] text-[var(--text-secondary)] block">
-                                {item.courseCode}
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-2.5 px-3 text-[var(--text-secondary)]">
-                            {item.assessmentType}
-                          </td>
-                          <td className="py-2.5 px-3 font-bold tabular-nums text-purple-600 dark:text-purple-400">
-                            {item.marksObtained}
-                          </td>
-                          <td className="py-2.5 px-3 tabular-nums text-[var(--text-secondary)]">
-                            {item.maxMarks}
-                          </td>
-                          <td className="py-2.5 px-3 font-bold tabular-nums">
-                            {pct}%
-                          </td>
-                          <td className="py-2.5 px-3 text-right">
-                            <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-blue-500/10 text-blue-600 dark:text-blue-400">
-                              {item.source || 'Official AMS'}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* SECTION C: SGPA / CGPA TRANSCRIPT */}
-        {(selectedSection === 'all' || selectedSection === 'gpa') && (
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center justify-between border-b border-[var(--border-secondary)] pb-2">
-              <h3 className="text-base font-bold text-[var(--text-primary)] flex items-center gap-2">
-                <Award className="w-4 h-4 text-amber-500" />
-                <span>GPA & Semester Results Summary</span>
-              </h3>
-            </div>
-
-            {semesterResults.length === 0 && sgpaCalcs.length === 0 ? (
-              <div className="p-6 rounded-xl bg-[var(--bg-tertiary)]/50 text-center text-xs text-[var(--text-secondary)]">
-                No GPA or examination results recorded. Calculate SGPA/CGPA or import from College AMS.
-              </div>
-            ) : (
-              <div className="flex flex-col gap-4">
-                {semesterResults.length > 0 && (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs border-collapse">
-                      <thead>
-                        <tr className="border-b border-[var(--border-secondary)] text-[var(--text-secondary)] font-semibold uppercase tracking-wider text-[10px]">
-                          <th className="py-2.5 px-3">Sem</th>
-                          <th className="py-2.5 px-3">Course Title</th>
-                          <th className="py-2.5 px-3">Credits</th>
-                          <th className="py-2.5 px-3">Grade</th>
-                          <th className="py-2.5 px-3">Status</th>
-                          <th className="py-2.5 px-3 text-right">Source</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-[var(--border-secondary)]">
-                        {semesterResults.map((r, idx) => (
-                          <tr key={r.id || idx}>
-                            <td className="py-2.5 px-3 tabular-nums font-semibold">Sem {r.semester}</td>
+                        return (
+                          <tr key={item.id || idx}>
                             <td className="py-2.5 px-3 font-semibold text-[var(--text-primary)]">
-                              {r.courseName}
+                              {item.name || item.subjectName}
+                              {item.code && (
+                                <span className="font-mono text-[10px] text-[var(--text-secondary)] block">
+                                  {item.code}
+                                </span>
+                              )}
                             </td>
-                            <td className="py-2.5 px-3 tabular-nums">{r.credits}</td>
-                            <td className="py-2.5 px-3 font-bold text-amber-600 dark:text-amber-400">
-                              {r.grade}
+                            <td className="py-2.5 px-3 font-mono">{total}</td>
+                            <td className="py-2.5 px-3 font-mono text-emerald-600 dark:text-emerald-400">
+                              {present}
+                            </td>
+                            <td className="py-2.5 px-3 font-mono font-bold">
+                              {total > 0 ? `${pct}%` : '—'}
                             </td>
                             <td className="py-2.5 px-3">
                               <span
-                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                                  r.status === 'Pass'
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                                  isEligible
                                     ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
                                     : 'bg-red-500/10 text-red-600 dark:text-red-400'
                                 }`}
                               >
-                                {r.status}
+                                {isEligible ? 'On Track' : 'Below Target'}
                               </span>
                             </td>
-                            <td className="py-2.5 px-3 text-right">
-                              <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-blue-500/10 text-blue-600 dark:text-blue-400">
-                                {r.source || 'Official AMS'}
-                              </span>
+                            <td className="py-2.5 px-3 text-right font-mono text-[10px] text-[var(--text-secondary)]">
+                              User Manual Entry
                             </td>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
           </div>
         )}
 
-        {/* SECTION D: CREDIT PROGRESS REPORT */}
-        {(selectedSection === 'all' || selectedSection === 'credits') && (
+        {/* SECTION B: INTERNAL MARKS */}
+        {(selectedSection === 'all' || selectedSection === 'internals') && (
           <div className="flex flex-col gap-4">
             <div className="flex items-center justify-between border-b border-[var(--border-secondary)] pb-2">
-              <h3 className="text-base font-bold text-[var(--text-primary)] flex items-center gap-2">
-                <GraduationCap className="w-4 h-4 text-emerald-500" />
-                <span>Credit Accumulation & Graduation Audit</span>
+              <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--text-primary)] flex items-center gap-2">
+                <Calculator className="w-4 h-4 text-purple-500" />
+                <span>Internal Assessment Standing</span>
               </h3>
-              <span className="text-xs text-[var(--text-secondary)]">
-                Earned: {totalEarnedCredits} / {targetCredits} Credits
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-[var(--text-secondary)]">
+                Source: Internal Marks Calculator
               </span>
             </div>
 
-            {creditSubjects.length === 0 ? (
-              <div className="p-6 rounded-xl bg-[var(--bg-tertiary)]/50 text-center text-xs text-[var(--text-secondary)]">
-                No credit records found. Manage your curriculum requirements in the Credits Planner.
+            {savedCalcs.filter((c) => c.type === 'internals').length === 0 && !internalDraft ? (
+              <div className="p-4 rounded-xl bg-[var(--bg-secondary)] text-center text-xs text-[var(--text-secondary)]">
+                No internal marks calculations saved for this profile.
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="border-b border-[var(--border-secondary)] text-[var(--text-secondary)] font-semibold uppercase tracking-wider text-[10px]">
-                      <th className="py-2.5 px-3">Course Name</th>
-                      <th className="py-2.5 px-3">Category</th>
-                      <th className="py-2.5 px-3">Type</th>
-                      <th className="py-2.5 px-3">Credits</th>
-                      <th className="py-2.5 px-3">Status</th>
-                      <th className="py-2.5 px-3 text-right">Validation</th>
+                      <th className="py-2 px-3">Calculation Title</th>
+                      <th className="py-2 px-3">Total Internal</th>
+                      <th className="py-2 px-3">Max Marks</th>
+                      <th className="py-2 px-3">Performance Tier</th>
+                      <th className="py-2 px-3 text-right">Data Source</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--border-secondary)]">
-                    {creditSubjects.map((c, idx) => (
-                      <tr key={c.id || idx}>
-                        <td className="py-2.5 px-3 font-semibold text-[var(--text-primary)]">
-                          {c.name}
-                          {c.code && (
-                            <span className="font-mono text-[10px] text-[var(--text-secondary)] block">
-                              {c.code}
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-2.5 px-3 capitalize text-[var(--text-secondary)]">
-                          {(c.category || '').replace(/_/g, ' ')}
-                        </td>
-                        <td className="py-2.5 px-3 uppercase text-[10px] font-semibold text-[var(--text-tertiary)]">
-                          {c.courseType || 'regular'}
-                        </td>
-                        <td className="py-2.5 px-3 font-bold tabular-nums">
-                          {c.earnedCredits !== undefined ? c.earnedCredits : c.credits}
-                        </td>
-                        <td className="py-2.5 px-3">
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                              c.status === 'Passed'
-                                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                                : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
-                            }`}
-                          >
-                            {c.status || 'Registered'}
-                          </span>
-                        </td>
-                        <td className="py-2.5 px-3 text-right">
-                          <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-zinc-100 dark:bg-zinc-800 text-[var(--text-secondary)]">
-                            {c.isVerified ? 'Verified Curriculum' : 'Student Audit'}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
+                    {savedCalcs
+                      .filter((c) => c.type === 'internals')
+                      .map((c) => (
+                        <tr key={c.id}>
+                          <td className="py-2.5 px-3 font-semibold text-[var(--text-primary)]">
+                            {c.title}
+                          </td>
+                          <td className="py-2.5 px-3 font-bold font-mono text-purple-600 dark:text-purple-400">
+                            {c.resultValue}
+                          </td>
+                          <td className="py-2.5 px-3 font-mono">40</td>
+                          <td className="py-2.5 px-3">{c.resultSummary || 'Evaluated'}</td>
+                          <td className="py-2.5 px-3 text-right font-mono text-[10px] text-[var(--text-secondary)]">
+                            Local Calculation
+                          </td>
+                        </tr>
+                      ))}
                   </tbody>
                 </table>
               </div>
@@ -470,13 +389,195 @@ export const AcademicReportsPage: React.FC = () => {
           </div>
         )}
 
-        {/* Official Footer Notice */}
-        <div className="pt-6 border-t border-[var(--border-secondary)] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-[10px] text-[var(--text-tertiary)]">
-          <div>
-            Data provenance notice: Records marked "Official AMS" originate from the Vel Tech portal. Records marked "Simulation" or "Manual" are user-managed.
+        {/* SECTION C: SGPA & CGPA SUMMARY */}
+        {(selectedSection === 'all' || selectedSection === 'gpa') && (
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between border-b border-[var(--border-secondary)] pb-2">
+              <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--text-primary)] flex items-center gap-2">
+                <Award className="w-4 h-4 text-blue-500" />
+                <span>Semester SGPA & Cumulative CGPA</span>
+              </h3>
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-[var(--text-secondary)]">
+                Source: GPA / CGPA Calculators
+              </span>
+            </div>
+
+            {sgpaCalcs.length === 0 && cgpaCalcs.length === 0 ? (
+              <div className="p-4 rounded-xl bg-[var(--bg-secondary)] text-center text-xs text-[var(--text-secondary)]">
+                No GPA records saved for this profile.
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                <div className="grid grid-cols-2 gap-3 p-3 rounded-xl bg-[var(--bg-secondary)] text-xs">
+                  <div>
+                    <span className="text-[10px] text-[var(--text-tertiary)] uppercase font-semibold block">
+                      Cumulative CGPA
+                    </span>
+                    <span className="text-xl font-bold text-blue-600 dark:text-blue-400 font-mono">
+                      {priorSummary.priorCgpa !== null
+                        ? priorSummary.priorCgpa.toFixed(2)
+                        : cgpaCalcs[0]
+                        ? cgpaCalcs[0].resultValue
+                        : '—'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-[var(--text-tertiary)] uppercase font-semibold block">
+                      Eligible Credits Accounted
+                    </span>
+                    <span className="text-xl font-bold text-[var(--text-primary)] font-mono">
+                      {priorSummary.priorCredits > 0 ? priorSummary.priorCredits : '—'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-[var(--border-secondary)] text-[var(--text-secondary)] font-semibold uppercase tracking-wider text-[10px]">
+                        <th className="py-2 px-3">Term / Title</th>
+                        <th className="py-2 px-3">Grade Point Average</th>
+                        <th className="py-2 px-3">Credits</th>
+                        <th className="py-2 px-3">Summary</th>
+                        <th className="py-2 px-3 text-right">Data Source</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[var(--border-secondary)]">
+                      {sgpaCalcs.map((c) => (
+                        <tr key={c.id}>
+                          <td className="py-2.5 px-3 font-semibold text-[var(--text-primary)]">
+                            {c.title}
+                          </td>
+                          <td className="py-2.5 px-3 font-bold font-mono text-blue-600 dark:text-blue-400">
+                            {c.resultValue}
+                          </td>
+                          <td className="py-2.5 px-3 font-mono">
+                            {c.inputs?.totalCredits || '—'}
+                          </td>
+                          <td className="py-2.5 px-3 text-[var(--text-secondary)]">
+                            {c.resultSummary || 'Calculated SGPA'}
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-mono text-[10px] text-[var(--text-secondary)]">
+                            Local Calculation
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
-          <div className="shrink-0 font-medium">
-            Academic Companion • Confidential Student Report
+        )}
+
+        {/* SECTION D: CREDIT ACCUMULATION BY CATEGORY */}
+        {(selectedSection === 'all' || selectedSection === 'credits') && (
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between border-b border-[var(--border-secondary)] pb-2">
+              <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--text-primary)] flex items-center gap-2">
+                <GraduationCap className="w-4 h-4 text-emerald-500" />
+                <span>Credit Progress by Curriculum Category</span>
+              </h3>
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-[var(--text-secondary)]">
+                Source: Credit Planner
+              </span>
+            </div>
+
+            {creditSubjects.length === 0 ? (
+              <div className="p-4 rounded-xl bg-[var(--bg-secondary)] text-center text-xs text-[var(--text-secondary)]">
+                No credit courses recorded for this profile.
+              </div>
+            ) : (
+              <div className="flex flex-col gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-3 rounded-xl bg-[var(--bg-secondary)] text-xs">
+                  <div>
+                    <span className="text-[10px] text-[var(--text-tertiary)] uppercase font-semibold block">
+                      Total Earned
+                    </span>
+                    <span className="text-xl font-bold text-emerald-600 dark:text-emerald-400 font-mono">
+                      {creditSummary.totalEarnedCredits} / {targetCredits}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-[var(--text-tertiary)] uppercase font-semibold block">
+                      Pending Credits
+                    </span>
+                    <span className="text-xl font-bold text-[var(--text-primary)] font-mono">
+                      {creditSummary.creditsRemaining}
+                    </span>
+                  </div>
+                  <div className="hidden sm:block">
+                    <span className="text-[10px] text-[var(--text-tertiary)] uppercase font-semibold block">
+                      Completion Rate
+                    </span>
+                    <span className="text-xl font-bold text-blue-600 dark:text-blue-400 font-mono">
+                      {creditSummary.completionPercentage}%
+                    </span>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-[var(--border-secondary)] text-[var(--text-secondary)] font-semibold uppercase tracking-wider text-[10px]">
+                        <th className="py-2 px-3">Curriculum Category</th>
+                        <th className="py-2 px-3">Earned Credits</th>
+                        <th className="py-2 px-3">Requirement</th>
+                        <th className="py-2 px-3">Status</th>
+                        <th className="py-2 px-3 text-right">Data Source</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[var(--border-secondary)]">
+                      {categoryProgress.map((item) => {
+                        if (item.earnedCredits === 0 && item.category.requiredCredits === 0) return null;
+
+                        return (
+                          <tr key={item.category.id}>
+                            <td className="py-2 px-3 font-semibold text-[var(--text-primary)]">
+                              {item.category.name}
+                            </td>
+                            <td className="py-2 px-3 font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                              {item.earnedCredits}
+                            </td>
+                            <td className="py-2 px-3 font-mono text-[var(--text-secondary)]">
+                              {item.category.requiredCredits > 0 ? item.category.requiredCredits : '—'}
+                            </td>
+                            <td className="py-2 px-3">
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                                  item.isSatisfied
+                                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                    : 'bg-zinc-100 dark:bg-zinc-800 text-[var(--text-secondary)]'
+                                }`}
+                              >
+                                {item.isSatisfied ? 'Completed' : 'In Progress'}
+                              </span>
+                            </td>
+                            <td className="py-2 px-3 text-right font-mono text-[10px] text-[var(--text-secondary)]">
+                              Curriculum Planner
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Official Disclaimer & Provenance Notice */}
+        <div className="pt-6 border-t-2 border-black/10 dark:border-white/10 flex flex-col gap-2 text-[10px] text-[var(--text-secondary)] leading-relaxed">
+          <div className="font-semibold text-[var(--text-primary)]">
+            Notice & Academic Disclaimer:
+          </div>
+          <p>
+            This document is a student-generated academic summary compiled from local device records and user manual inputs. It does not represent an official university marksheet, degree certificate, or transcript. For official academic transcripts, grade cards, or attendance attestations, contact your institution's Office of the Controller of Examinations.
+          </p>
+          <div className="flex items-center justify-between text-[9px] text-[var(--text-tertiary)] pt-2 border-t border-[var(--border-secondary)]">
+            <span>Client-Side Local Storage • Isolated Profile ID: {activeProfile.id.slice(0, 8)}...</span>
+            <span>Generated on {reportDate}</span>
           </div>
         </div>
       </div>
