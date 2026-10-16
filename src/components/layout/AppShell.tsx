@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, Suspense } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Navbar } from './Navbar';
 import { Footer } from './Footer';
 import { ToastContainer } from '../common/Toast';
 import { OfflineBadge } from '../common/OfflineBadge';
+import { PageLoadingFallback } from '../common/PageLoadingFallback';
 
 interface ToastItem {
   id: string;
@@ -38,7 +39,9 @@ export const AppShell: React.FC = () => {
         <Navbar />
 
         <main className="flex-1 max-w-[1200px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
-          <Outlet />
+          <Suspense fallback={<PageLoadingFallback />}>
+            <Outlet />
+          </Suspense>
         </main>
 
         <Footer />

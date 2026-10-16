@@ -6,28 +6,65 @@ import { AppShell } from './components/layout/AppShell';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { initDataVersioning } from './utils/safeStorage';
 
+import { lazy } from 'react';
+import { AMS_FEATURE_ENABLED } from './config/features';
+
+// Primary Core Routes (eagerly loaded for instantaneous critical-path hydration)
 import { LandingPage } from './pages/LandingPage';
 import { InternalCalculatorPage } from './pages/InternalCalculatorPage';
 import { GPACalculatorPage } from './pages/GPACalculatorPage';
 import { CGPACalculatorPage } from './pages/CGPACalculatorPage';
 import { AttendancePage } from './pages/AttendancePage';
-import { CreditsPlannerPage } from './pages/CreditsPlannerPage';
-import { ProfilePage } from './pages/ProfilePage';
-import { DataManagementPage } from './pages/DataManagementPage';
-import { AmsConnectPage } from './pages/AmsConnectPage';
-import { AmsImportPage } from './pages/AmsImportPage';
-import { AmsDevelopmentNotice } from './components/ams/AmsDevelopmentNotice';
-import { AMS_FEATURE_ENABLED } from './config/features';
-import { SemesterPlannerPage } from './pages/SemesterPlannerPage';
-import { MarksForecasterPage } from './pages/MarksForecasterPage';
-import { AcademicReportsPage } from './pages/AcademicReportsPage';
-import { AcademicIntelligencePage } from './pages/AcademicIntelligencePage';
-import { WhatIfPage } from './pages/WhatIfPage';
-import { AttendancePlannerPage } from './pages/AttendancePlannerPage';
-import { ExamPrepPage } from './pages/ExamPrepPage';
-import { MockExamCenterPage } from './pages/MockExamCenterPage';
-import { AcademicVaultPage } from './pages/AcademicVaultPage';
-import { AchievementCenterPage } from './pages/AchievementCenterPage';
+
+// Secondary Routes (lazily loaded to optimize initial bundle size)
+const CreditsPlannerPage = lazy(() =>
+  import('./pages/CreditsPlannerPage').then((m) => ({ default: m.CreditsPlannerPage }))
+);
+const ProfilePage = lazy(() =>
+  import('./pages/ProfilePage').then((m) => ({ default: m.ProfilePage }))
+);
+const DataManagementPage = lazy(() =>
+  import('./pages/DataManagementPage').then((m) => ({ default: m.DataManagementPage }))
+);
+const AmsConnectPage = lazy(() =>
+  import('./pages/AmsConnectPage').then((m) => ({ default: m.AmsConnectPage }))
+);
+const AmsImportPage = lazy(() =>
+  import('./pages/AmsImportPage').then((m) => ({ default: m.AmsImportPage }))
+);
+const AmsDevelopmentNotice = lazy(() =>
+  import('./components/ams/AmsDevelopmentNotice').then((m) => ({ default: m.AmsDevelopmentNotice }))
+);
+const SemesterPlannerPage = lazy(() =>
+  import('./pages/SemesterPlannerPage').then((m) => ({ default: m.SemesterPlannerPage }))
+);
+const MarksForecasterPage = lazy(() =>
+  import('./pages/MarksForecasterPage').then((m) => ({ default: m.MarksForecasterPage }))
+);
+const AcademicReportsPage = lazy(() =>
+  import('./pages/AcademicReportsPage').then((m) => ({ default: m.AcademicReportsPage }))
+);
+const AcademicIntelligencePage = lazy(() =>
+  import('./pages/AcademicIntelligencePage').then((m) => ({ default: m.AcademicIntelligencePage }))
+);
+const WhatIfPage = lazy(() =>
+  import('./pages/WhatIfPage').then((m) => ({ default: m.WhatIfPage }))
+);
+const AttendancePlannerPage = lazy(() =>
+  import('./pages/AttendancePlannerPage').then((m) => ({ default: m.AttendancePlannerPage }))
+);
+const ExamPrepPage = lazy(() =>
+  import('./pages/ExamPrepPage').then((m) => ({ default: m.ExamPrepPage }))
+);
+const MockExamCenterPage = lazy(() =>
+  import('./pages/MockExamCenterPage').then((m) => ({ default: m.MockExamCenterPage }))
+);
+const AcademicVaultPage = lazy(() =>
+  import('./pages/AcademicVaultPage').then((m) => ({ default: m.AcademicVaultPage }))
+);
+const AchievementCenterPage = lazy(() =>
+  import('./pages/AchievementCenterPage').then((m) => ({ default: m.AchievementCenterPage }))
+);
 
 export function App() {
   useEffect(() => {

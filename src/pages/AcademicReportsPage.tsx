@@ -15,6 +15,7 @@ import {
   COLLEGE_CHART_TEMPLATE,
 } from '../utils/creditCalculations';
 import { extractPriorSemestersSummary } from '../utils/academicIntelligence';
+import { PdfBrandingFooter } from '../components/common/PdfBrandingFooter';
 
 type ReportSection = 'all' | 'attendance' | 'internals' | 'gpa' | 'credits';
 
@@ -580,6 +581,9 @@ export const AcademicReportsPage: React.FC = () => {
             <span>Generated on {reportDate}</span>
           </div>
         </div>
+
+        {/* Standardized Pallapu Dileep Kumar PDF Branding Footer */}
+        <PdfBrandingFooter className="mt-4 pt-4 border-t border-[var(--border-secondary)]" />
       </div>
     </div>
   );

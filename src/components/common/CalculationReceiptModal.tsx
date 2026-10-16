@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Copy, Share2, Printer, Check, X } from 'lucide-react';
 import { formatFixed } from '../../utils/calculations';
+import { PdfBrandingFooter } from './PdfBrandingFooter';
 
 interface CalculationReceiptProps {
   isOpen: boolean;
@@ -80,7 +81,7 @@ export const CalculationReceiptModal: React.FC<CalculationReceiptProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 dark:bg-black/70 backdrop-blur-md animate-fade-in-up"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 dark:bg-black/70 backdrop-blur-md animate-fade-in-up printable-modal"
       role="dialog"
       aria-modal="true"
     >
@@ -145,8 +146,11 @@ export const CalculationReceiptModal: React.FC<CalculationReceiptProps> = ({
           Generated: {monthYear}
         </div>
 
+        {/* Standardized Branding Footer */}
+        <PdfBrandingFooter showSocials={false} pageLabel="Official Calculation Receipt" className="mt-2 pt-3 border-t border-[var(--border-secondary)]" />
+
         {/* Action Buttons */}
-        <div className="grid grid-cols-3 gap-2 pt-2 border-t border-[var(--border-primary)]">
+        <div className="grid grid-cols-3 gap-2 pt-2 border-t border-[var(--border-primary)] no-print">
           <button
             type="button"
             onClick={handleCopy}

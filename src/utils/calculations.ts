@@ -386,7 +386,7 @@ export function calculateAttendance(
   const currentConducted = Math.max(0, paramsOrConducted);
   const currentAttended = Math.min(currentConducted, Math.max(0, attendedArg || 0));
   const currentPercentage =
-    currentConducted > 0 ? roundTo((currentAttended / currentConducted) * 100, 2) : 100;
+    currentConducted > 0 ? roundTo(Math.min(100, (currentAttended / currentConducted) * 100), 2) : 0;
 
   const totalFuture = Math.max(0, futureSessionsArg);
   const totalProjectedConducted = currentConducted + totalFuture;
